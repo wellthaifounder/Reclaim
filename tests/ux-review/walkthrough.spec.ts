@@ -6,12 +6,18 @@ import {
   note,
   resetNotes,
   stubSession,
+  mockProfileFetch,
   timed,
   ROUTES,
 } from "./helpers";
 
 // Single serial run — observations are appended in order to one notes file.
 test.describe.configure({ mode: "serial" });
+
+// Route-coverage tests iterate ~17 protected pages, each waiting up to 8s for
+// networkidle. Default 60s isn't enough now that retired-route silent redirects
+// were removed (Wave 6, 2026-05-14) and pages actually render.
+test.setTimeout(180_000);
 
 test.beforeAll(() => {
   resetNotes();
@@ -325,35 +331,6 @@ test("route coverage: all protected pages with stubbed auth", async ({
   }
 });
 
-test("route coverage: retired/legacy routes redirect behavior", async ({
-  page,
-}) => {
-  attachConsoleCapture(page);
-  await stubSession(page, { fullName: "Maya Tester" });
-
-  for (const route of ROUTES.retired) {
-    await page.goto(route.path).catch(() => {});
-    await page
-      .waitForLoadState("networkidle", { timeout: 8000 })
-      .catch(() => {});
-    await snap(page, `retired-${route.label}`);
-    const url = page.url();
-    const heading = await page
-      .locator("h1, h2")
-      .first()
-      .innerText({ timeout: 2000 })
-      .catch(() => "(none)");
-    note(
-      "Retired routes",
-      route.path,
-      `Lands on: ${url}\nFirst heading: "${heading.slice(0, 100)}"\n→ Silent redirect with no "this moved" message: ${
-        !heading.toLowerCase().includes("removed") &&
-        !heading.toLowerCase().includes("retired")
-      }`,
-    );
-  }
-});
-
 // ────────────────────────────────────────────────────────────────────────────
 // 4. DEREK — HSA optimizer; we look at Settings density and Reports
 // ────────────────────────────────────────────────────────────────────────────
@@ -547,6 +524,194 @@ test("edge: cancel mid-wizard from upload step", async ({ page }) => {
     "Edge",
     "Cancel button on upload step",
     `Visible: ${cancelVisible}\nIf false: user must use browser back to abandon — friction.`,
+  );
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// 8. WAVE-FIX VERIFICATION — checks added 2026-05-07 follow-up review
+// ────────────────────────────────────────────────────────────────────────────
+
+test("verify Wave 3: OnboardingWizard auto-dismisses for billing intent", async ({
+  page,
+}) => {
+  attachConsoleCapture(page);
+  // Maya-billing — we want the "billing" cohort that the FF should suppress.
+  // hasCompletedOnboarding=false so the wizard would otherwise fire.
+  await mockProfileFetch(page, { intent: "billing" });
+  await stubSession(page, {
+    fullName: "Maya Billing",
+    email: "maya-billing@ux-review.local",
+    hasCompletedOnboarding: false,
+  });
+
+  // Seed an expense count of 1 so the dashboard treats this as a non-newUser
+  // (`isNewUser` requires expenseCount===0 && hasConnectedBank===false). The
+  // wizard auto-show only fires for non-new users with expenseCount<=3.
+  // We can't easily seed the expenses query without intercepting more endpoints
+  // — so just visit and observe whether the wizard text appears.
+  await page.goto("/dashboard");
+  await page.waitForLoadState("networkidle").catch(() => {});
+  await page.waitForTimeout(2000); // wizard has a 1s setTimeout
+  await snap(page, "60-billing-intent-no-wizard");
+
+  // The OnboardingWizard text from STEPS[0]: "wealth-building tool"
+  const wizardVisible = await page
+    .getByText(/triple tax advantage|wealth-building tool/i)
+    .first()
+    .isVisible()
+    .catch(() => false);
+
+  note(
+    "Wave3-verify",
+    "Billing-intent wizard suppression",
+    [
+      `userIntent='billing' (mocked via /rest/v1/profiles)`,
+      `OnboardingWizard visible after 2s wait: ${wizardVisible}`,
+      `Expected (FF.AUTO_DISMISS_ONBOARDING_FOR_BILLING=on): false`,
+      `Verdict: ${wizardVisible ? "REGRESSION — wizard fired despite billing intent" : "Resolved — wizard suppressed"}`,
+    ].join("\n"),
+  );
+});
+
+test("verify Wave 4: /ledger redirects, /bills?view=ledger renders tabs", async ({
+  page,
+}) => {
+  attachConsoleCapture(page);
+  await stubSession(page, { fullName: "Derek IA-Test" });
+
+  // Hit /ledger and observe whether the URL becomes /bills?view=ledger
+  await page.goto("/ledger");
+  await page.waitForLoadState("networkidle").catch(() => {});
+  await snap(page, "61-ledger-redirect");
+  const afterLedger = page.url();
+
+  // Now /bills directly with the view param
+  await page.goto("/bills?view=ledger");
+  await page.waitForLoadState("networkidle").catch(() => {});
+  await snap(page, "62-bills-ledger-tab");
+  const tabsVisible = await page
+    .locator("[role='tablist']")
+    .first()
+    .isVisible()
+    .catch(() => false);
+  const ledgerTabSelected = await page
+    .getByRole("tab", { name: /ledger/i })
+    .getAttribute("data-state")
+    .catch(() => null);
+
+  // Plain /bills should default to list view
+  await page.goto("/bills");
+  await page.waitForLoadState("networkidle").catch(() => {});
+  const listTabSelected = await page
+    .getByRole("tab", { name: /^list$/i })
+    .getAttribute("data-state")
+    .catch(() => null);
+  await snap(page, "63-bills-list-tab");
+
+  note(
+    "Wave4-verify",
+    "Bills/Ledger IA collapse",
+    [
+      `/ledger landed on: ${afterLedger}`,
+      `Expected: contains '/bills' and 'view=ledger'`,
+      `Tabs rendered on /bills?view=ledger: ${tabsVisible}`,
+      `Ledger tab data-state: ${ledgerTabSelected ?? "(missing)"} (expected 'active')`,
+      `List tab data-state on /bills: ${listTabSelected ?? "(missing)"} (expected 'active')`,
+      `Verdict: ${
+        afterLedger.includes("view=ledger") && tabsVisible
+          ? "Resolved"
+          : "Partial / Not resolved"
+      }`,
+    ].join("\n"),
+  );
+});
+
+test("verify Wave 3: Get-Started ribbon scoped to dashboard only", async ({
+  page,
+}) => {
+  attachConsoleCapture(page);
+  await stubSession(page, { fullName: "Maya Ribbon-Scope" });
+
+  // Pages that should NOT show the ribbon when SCOPE_GET_STARTED_TO_DASHBOARD=on
+  const targets = ["/bills", "/settings", "/reports"];
+  const ribbonByPage: Record<string, boolean> = {};
+  for (const target of targets) {
+    await page.goto(target).catch(() => {});
+    await page
+      .waitForLoadState("networkidle", { timeout: 8000 })
+      .catch(() => {});
+    await snap(page, `64-no-ribbon-${target.replace(/\//g, "-")}`);
+    ribbonByPage[target] = await page
+      .getByText(/get started/i)
+      .first()
+      .isVisible()
+      .catch(() => false);
+  }
+
+  // And on /dashboard the ribbon SHOULD still be visible (for new-user state)
+  await page.goto("/dashboard");
+  await page.waitForLoadState("networkidle").catch(() => {});
+  await snap(page, "65-ribbon-on-dashboard");
+  const dashboardRibbon = await page
+    .getByText(/get started/i)
+    .first()
+    .isVisible()
+    .catch(() => false);
+
+  note(
+    "Wave3-verify",
+    "Get-Started ribbon scope",
+    [
+      ...Object.entries(ribbonByPage).map(
+        ([p, visible]) => `${p}: ribbon visible = ${visible} (expected false)`,
+      ),
+      `/dashboard: ribbon visible = ${dashboardRibbon} (expected true for new user)`,
+      `Verdict: ${
+        Object.values(ribbonByPage).every((v) => !v)
+          ? "Resolved — ribbon hidden off-dashboard"
+          : "Partial / Not resolved — ribbon leaks to non-dashboard pages"
+      }`,
+    ].join("\n"),
+  );
+});
+
+test("verify Wave 2: stalled fetch shows degraded UI, not infinite skeleton", async ({
+  page,
+}) => {
+  attachConsoleCapture(page);
+  await stubSession(page, { fullName: "Maya Network-Fail" });
+
+  // Block all Supabase REST calls (queries) — auth still resolves from
+  // localStorage. We expect React Query to time out via withQueryTimeout
+  // and surface a "Try again" UI instead of a forever-spinner.
+  await page.route(/\/rest\/v1\//, (route) => route.abort("failed"));
+
+  await page.goto("/bills");
+  // withQueryTimeout uses 5s; allow 8s wall to be safe.
+  await page.waitForTimeout(8000);
+  await snap(page, "66-stalled-bills");
+  const tryAgainVisible = await page
+    .getByRole("button", { name: /try again/i })
+    .isVisible()
+    .catch(() => false);
+  const stillSpinning = await page
+    .locator("[role='status'][aria-busy='true']")
+    .first()
+    .isVisible()
+    .catch(() => false);
+
+  note(
+    "Wave2-verify",
+    "Stalled-fetch fallback on /bills",
+    [
+      `'Try again' button visible after 8s: ${tryAgainVisible}`,
+      `Still showing aria-busy spinner: ${stillSpinning}`,
+      `Verdict: ${
+        tryAgainVisible && !stillSpinning
+          ? "Resolved — degraded UI rendered"
+          : "Partial / Not resolved — see screenshot"
+      }`,
+    ].join("\n"),
   );
 });
 

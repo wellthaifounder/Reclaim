@@ -8,7 +8,6 @@ import {
 } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { FeatureRetired } from "@/components/FeatureRetired";
 import { SubscriptionProvider } from "@/contexts/SubscriptionContext";
 import { HSAProvider } from "@/contexts/HSAContext";
 import { OnboardingProvider } from "@/contexts/OnboardingContext";
@@ -48,13 +47,6 @@ const TripwireOffer = lazy(() => import("./pages/TripwireOffer"));
 const Checkout = lazy(() => import("./pages/Checkout"));
 const NewBillUpload = lazy(() => import("./pages/NewBillUpload"));
 const Ledger = lazy(() => import("./pages/Ledger"));
-// Bill Review & Dispute features archived - V2 feature
-// const BillReviews = lazy(() => import("./pages/BillReviews"));
-// const BillReview = lazy(() => import("./pages/BillReview"));
-// const BillDispute = lazy(() => import("./pages/BillDispute"));
-// const DisputeManagement = lazy(() => import("./pages/DisputeManagement"));
-// const DisputeDetail = lazy(() => import("./pages/DisputeDetail"));
-
 // Collections pages
 const PaymentEntry = lazy(() => import("./pages/PaymentEntry"));
 const Collections = lazy(() => import("./pages/Collections"));
@@ -178,71 +170,6 @@ const App = () => (
                             <ErrorBoundary>
                               <BillDetail />
                             </ErrorBoundary>
-                          </ProtectedRoute>
-                        }
-                      />
-
-                      {/* Bill Review & Dispute features archived — show interstitial, not silent redirect */}
-                      <Route
-                        path="/bill-reviews/:invoiceId"
-                        element={
-                          <ProtectedRoute>
-                            <FeatureRetired
-                              feature="Bill Review"
-                              returnTo="/bills"
-                            />
-                          </ProtectedRoute>
-                        }
-                      />
-                      <Route
-                        path="/disputes/:id"
-                        element={
-                          <ProtectedRoute>
-                            <FeatureRetired
-                              feature="Disputes"
-                              returnTo="/bills"
-                            />
-                          </ProtectedRoute>
-                        }
-                      />
-                      <Route
-                        path="/bills/:invoiceId/dispute"
-                        element={
-                          <ProtectedRoute>
-                            <FeatureRetired
-                              feature="Disputes"
-                              returnTo="/bills"
-                            />
-                          </ProtectedRoute>
-                        }
-                      />
-
-                      {/* Legacy URL aliases — /invoices was renamed to /bills with no feature change,
-                          so redirect silently. The retired bill-review and disputes features show
-                          the interstitial instead. */}
-                      <Route
-                        path="/invoices"
-                        element={<Navigate to="/bills" replace />}
-                      />
-                      <Route
-                        path="/bill-reviews"
-                        element={
-                          <ProtectedRoute>
-                            <FeatureRetired
-                              feature="Bill Review"
-                              returnTo="/bills"
-                            />
-                          </ProtectedRoute>
-                        }
-                      />
-                      <Route
-                        path="/disputes"
-                        element={
-                          <ProtectedRoute>
-                            <FeatureRetired
-                              feature="Disputes"
-                              returnTo="/bills"
-                            />
                           </ProtectedRoute>
                         }
                       />
@@ -385,32 +312,6 @@ const App = () => (
                         }
                       />
 
-                      {/* Legacy redirects for medical events */}
-                      <Route
-                        path="/medical-events"
-                        element={
-                          <ProtectedRoute>
-                            <Collections />
-                          </ProtectedRoute>
-                        }
-                      />
-                      <Route
-                        path="/medical-events/new"
-                        element={
-                          <ProtectedRoute>
-                            <NewCollection />
-                          </ProtectedRoute>
-                        }
-                      />
-                      <Route
-                        path="/medical-events/:id"
-                        element={
-                          <ProtectedRoute>
-                            <CollectionDetail />
-                          </ProtectedRoute>
-                        }
-                      />
-
                       {/* Supporting Routes */}
                       <Route
                         path="/documents"
@@ -433,7 +334,6 @@ const App = () => (
                         }
                       />
 
-                      {/* Reports (formerly Analytics) */}
                       <Route
                         path="/reports"
                         element={
@@ -441,14 +341,6 @@ const App = () => (
                             <ErrorBoundary>
                               <Reports />
                             </ErrorBoundary>
-                          </ProtectedRoute>
-                        }
-                      />
-                      <Route
-                        path="/analytics"
-                        element={
-                          <ProtectedRoute>
-                            <Reports />
                           </ProtectedRoute>
                         }
                       />

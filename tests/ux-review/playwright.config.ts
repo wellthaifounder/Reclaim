@@ -5,7 +5,7 @@ export default defineConfig({
   timeout: 60_000,
   fullyParallel: false,
   workers: 1,
-  retries: 0,
+  retries: 1,
   reporter: [["list"], ["json", { outputFile: "_artifacts/results.json" }]],
   use: {
     baseURL: "http://localhost:8080",

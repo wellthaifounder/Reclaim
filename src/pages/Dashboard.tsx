@@ -169,8 +169,9 @@ const Dashboard = () => {
   const fetchStats = async () => {
     try {
       const {
-        data: { user },
-      } = await supabase.auth.getUser();
+        data: { session },
+      } = await supabase.auth.getSession();
+      const user = session?.user;
       if (!user) return;
 
       const { data: invoices, error } = await supabase

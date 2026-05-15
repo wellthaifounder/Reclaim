@@ -56,8 +56,9 @@ export default function Collections() {
     queryKey: ["unorganized-invoices-count"],
     queryFn: async () => {
       const {
-        data: { user },
-      } = await supabase.auth.getUser();
+        data: { session },
+      } = await supabase.auth.getSession();
+      const user = session?.user;
       if (!user) return 0;
 
       const { count, error } = await supabase
@@ -82,8 +83,9 @@ export default function Collections() {
     queryFn: () =>
       withQueryTimeout(async (signal) => {
         const {
-          data: { user },
-        } = await supabase.auth.getUser();
+          data: { session },
+        } = await supabase.auth.getSession();
+        const user = session?.user;
         if (!user) throw new Error("Not authenticated");
 
         const { data, error } = await supabase

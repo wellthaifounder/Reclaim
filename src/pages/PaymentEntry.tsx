@@ -243,7 +243,7 @@ const PaymentEntry = () => {
           </button>
           <span>/</span>
           <button
-            onClick={() => navigate("/invoices")}
+            onClick={() => navigate("/bills")}
             className="hover:text-foreground"
           >
             Bills

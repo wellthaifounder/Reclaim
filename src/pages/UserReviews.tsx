@@ -29,12 +29,10 @@ const UserReviews = () => {
     const fetchExistingReview = async () => {
       try {
         const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        if (!user) {
-          navigate("/auth");
-          return;
-        }
+          data: { session },
+        } = await supabase.auth.getSession();
+        const user = session?.user;
+        if (!user) return;
 
         const { data, error } = await supabase
           .from("reviews")

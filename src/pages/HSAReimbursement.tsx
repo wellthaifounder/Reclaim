@@ -75,12 +75,10 @@ export default function HSAReimbursement() {
   const fetchHSAExpenses = async () => {
     try {
       const {
-        data: { user: currentUser },
-      } = await supabase.auth.getUser();
-      if (!currentUser) {
-        navigate("/auth");
-        return;
-      }
+        data: { session },
+      } = await supabase.auth.getSession();
+      const currentUser = session?.user;
+      if (!currentUser) return;
       setUser(currentUser);
 
       // Get HSA opened date

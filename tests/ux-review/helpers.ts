@@ -69,11 +69,15 @@ export interface StubProfile {
   userId?: string;
   email?: string;
   fullName?: string;
-  /** "billing" | "hsa" | "both" — drives which UI surfaces appear */
+  /** "billing" | "hsa" | "both" — drives which UI surfaces appear. Wave 5
+   * removed UserIntentDialog; user_intent now lives in profiles row only.
+   * To inject for tests, see {@link mockProfileFetch}. */
   intent?: "billing" | "hsa" | "both" | null;
   /** YYYY-MM-DD; needed for HSA-eligibility filtering */
   hsaOpenedDate?: string | null;
-  /** Localstorage flag controls whether OnboardingWizard auto-shows */
+  /** OnboardingContext stores its state under "wellth_onboarding_state" as a
+   * JSON blob keyed by feature. We mirror just the hasCompletedOnboarding
+   * field here. */
   hasCompletedOnboarding?: boolean;
 }
 
@@ -118,7 +122,11 @@ export async function stubSession(page: Page, profile: StubProfile = {}) {
       localStorage.setItem("supabase.auth.token", stored);
 
       if (hasCompletedOnboarding) {
-        localStorage.setItem("hasCompletedOnboarding", "true");
+        // OnboardingContext storage shape — see src/contexts/OnboardingContext.tsx
+        localStorage.setItem(
+          "wellth_onboarding_state",
+          JSON.stringify({ hasCompletedOnboarding: true }),
+        );
       }
     },
     {
@@ -126,6 +134,43 @@ export async function stubSession(page: Page, profile: StubProfile = {}) {
       email,
       fullName,
       hasCompletedOnboarding: profile.hasCompletedOnboarding ?? false,
+    },
+  );
+}
+
+// ── Profile mock for Wave-5 user_intent injection ───────────────────────────
+// HSAContext fetches `profiles.hsa_opened_date, user_intent` via the Supabase
+// REST endpoint `/rest/v1/profiles`. With placeholder env it 4xx's, leaving
+// userIntent=null (HSA-shaped path). To exercise the FF.AUTO_DISMISS_…_BILLING
+// branch we have to intercept the REST call and respond with a synthetic row.
+export async function mockProfileFetch(
+  page: Page,
+  profile: {
+    intent?: "billing" | "hsa" | "both";
+    hsaOpenedDate?: string | null;
+  } = {},
+) {
+  const intent = profile.intent ?? "both";
+  const hsa_opened_date = profile.hsaOpenedDate ?? null;
+
+  await page.route(
+    (url) =>
+      url.pathname.includes("/rest/v1/profiles") ||
+      // local supabase paths
+      /\/rest\/v1\/profiles/i.test(url.toString()),
+    async (route) => {
+      const req = route.request();
+      if (req.method() !== "GET") return route.fallback();
+      const body = JSON.stringify([{ user_intent: intent, hsa_opened_date }]);
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: {
+          "Content-Range": "0-0/1",
+          "Access-Control-Allow-Origin": "*",
+        },
+        body,
+      });
     },
   );
 }
@@ -164,13 +209,5 @@ export const ROUTES = {
     { path: "/settings", label: "settings" },
     { path: "/guide", label: "guide" },
     { path: "/user-reviews", label: "user-reviews" },
-  ],
-  retired: [
-    { path: "/bill-reviews", label: "retired-bill-reviews" },
-    { path: "/disputes", label: "retired-disputes" },
-    { path: "/decision-tool", label: "retired-decision-tool" },
-    { path: "/medical-events", label: "retired-medical-events" },
-    { path: "/analytics", label: "retired-analytics" },
-    { path: "/invoices", label: "retired-invoices" },
   ],
 };

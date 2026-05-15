@@ -120,12 +120,10 @@ const Settings = () => {
   const loadUserData = async () => {
     try {
       const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
-        navigate("/auth");
-        return;
-      }
+        data: { session },
+      } = await supabase.auth.getSession();
+      const user = session?.user;
+      if (!user) return;
       setEmail(user.email || "");
 
       const { data: profile } = await supabase

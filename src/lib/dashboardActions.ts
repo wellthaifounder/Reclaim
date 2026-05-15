@@ -71,7 +71,7 @@ export function getNextAction(stats: DashboardStats): DashboardAction {
     title: "You're All Caught Up!",
     description: "Great work! Review your savings or add new expenses",
     buttonText: "View Your Savings",
-    route: "/analytics",
+    route: "/reports",
     icon: TrendingUp,
     timeEstimate: undefined,
   };

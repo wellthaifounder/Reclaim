@@ -41,12 +41,9 @@ export default function BankAccounts() {
 
   const checkAuth = async () => {
     const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      navigate("/auth");
-      return;
-    }
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (!session?.user) return;
     fetchConnections();
   };
 
