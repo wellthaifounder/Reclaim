@@ -1,51 +1,25 @@
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { logError } from "@/utils/errorHandler";
+import { useAuthUser } from "@/hooks/useAuthUser";
 
 export const useIsAdmin = () => {
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const { user, isLoading: userLoading } = useAuthUser();
+  const userId = user?.id;
 
-  useEffect(() => {
-    const checkAdminStatus = async () => {
-      try {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
+  const { data: isAdmin = false, isLoading: profileLoading } = useQuery({
+    queryKey: ["is-admin", userId],
+    enabled: !!userId,
+    queryFn: async () => {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("is_admin")
+        .eq("id", userId!)
+        .single();
+      return profile?.is_admin || false;
+    },
+    staleTime: 5 * 60 * 1000,
+    meta: { suppressErrorToast: true },
+  });
 
-        if (!user) {
-          setIsAdmin(false);
-          setLoading(false);
-          return;
-        }
-
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("is_admin")
-          .eq("id", user.id)
-          .single();
-
-        setIsAdmin(profile?.is_admin || false);
-      } catch (error) {
-        logError("Error checking admin status", error);
-        setIsAdmin(false);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    checkAdminStatus();
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(() => {
-      checkAdminStatus();
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, []);
-
-  return { isAdmin, loading };
+  return { isAdmin, loading: userLoading || (!!userId && profileLoading) };
 };

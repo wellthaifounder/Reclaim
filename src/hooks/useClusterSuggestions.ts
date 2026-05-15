@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { logError } from "@/utils/errorHandler";
+import { useAuthUser } from "@/hooks/useAuthUser";
 
 export interface ClusterSuggestion {
   cluster_key: string;
@@ -13,16 +14,15 @@ export interface ClusterSuggestion {
 }
 
 export function useClusterSuggestions() {
-  return useQuery({
-    queryKey: ["cluster-suggestions"],
-    queryFn: async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
+  const { user } = useAuthUser();
+  const userId = user?.id;
 
+  return useQuery({
+    queryKey: ["cluster-suggestions", userId],
+    enabled: !!userId,
+    queryFn: async () => {
       const { data, error } = await supabase.rpc("suggest_invoice_clusters", {
-        p_user_id: user.id,
+        p_user_id: userId!,
       });
 
       if (error) {

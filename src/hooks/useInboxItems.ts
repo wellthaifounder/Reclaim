@@ -1,8 +1,14 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { logError } from "@/utils/errorHandler";
+import { logError, safeLog } from "@/utils/errorHandler";
 import { toast } from "sonner";
 import { useCallback } from "react";
+import { useAuthUser } from "@/hooks/useAuthUser";
+
+// PostgREST returns these codes when the schema is missing the relation
+// (table not migrated yet). Treat as empty inbox rather than a page-level
+// error — virtual items still render and the rest of the page stays usable.
+const SCHEMA_MISSING_CODES = new Set(["PGRST205", "42P01"]);
 
 export type InboxItemType =
   | "review_transaction"
@@ -38,14 +44,14 @@ export interface UseInboxItemsReturn {
 
 export function useInboxItems(): UseInboxItemsReturn {
   const queryClient = useQueryClient();
+  const { user } = useAuthUser();
+  const userId = user?.id;
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ["inbox-items"],
+    queryKey: ["inbox-items", userId],
+    enabled: !!userId,
     queryFn: async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
+      if (!userId) return [] as InboxItem[];
 
       // Fetch persistent inbox items
       const { data: dbItems, error: dbError } = await supabase
@@ -53,14 +59,25 @@ export function useInboxItems(): UseInboxItemsReturn {
         .select(
           "id, user_id, item_type, source_entity_id, source_entity_type, title, subtitle, amount, suggested_action, priority_score, status, created_at, acted_at, expires_at",
         )
-        .eq("user_id", user.id)
+        .eq("user_id", userId)
         .eq("status", "pending")
         .order("priority_score", { ascending: false })
         .limit(100);
 
+      // If the inbox_items table isn't deployed yet, degrade to virtual-only
+      // instead of breaking the page. Other errors still propagate.
+      let safeDbItems = dbItems;
       if (dbError) {
-        logError("Inbox items query failed", dbError);
-        throw dbError;
+        if (SCHEMA_MISSING_CODES.has(dbError.code ?? "")) {
+          safeLog(
+            "inbox_items table missing — degrading to virtual items only",
+            dbError,
+          );
+          safeDbItems = [];
+        } else {
+          logError("Inbox items query failed", dbError);
+          throw dbError;
+        }
       }
 
       // Fetch computed virtual items in parallel
@@ -68,7 +85,7 @@ export function useInboxItems(): UseInboxItemsReturn {
         supabase
           .from("invoices")
           .select("id, vendor, amount, date")
-          .eq("user_id", user.id)
+          .eq("user_id", userId)
           .eq("status", "unpaid")
           .lt(
             "date",
@@ -81,7 +98,7 @@ export function useInboxItems(): UseInboxItemsReturn {
         supabase
           .from("invoices")
           .select("id, vendor, amount")
-          .eq("user_id", user.id)
+          .eq("user_id", userId)
           .eq("is_hsa_eligible", true)
           .eq("is_reimbursed", false)
           .limit(1),
@@ -118,7 +135,7 @@ export function useInboxItems(): UseInboxItemsReturn {
         const { data: hsaTotals } = await supabase
           .from("invoices")
           .select("amount")
-          .eq("user_id", user.id)
+          .eq("user_id", userId)
           .eq("is_hsa_eligible", true)
           .eq("is_reimbursed", false);
 
@@ -151,7 +168,7 @@ export function useInboxItems(): UseInboxItemsReturn {
       // Merge and sort by priority
       const allItems: InboxItem[] = [
         ...virtualItems,
-        ...(dbItems || []).map((item) => ({
+        ...(safeDbItems || []).map((item) => ({
           ...item,
           amount: item.amount ? Number(item.amount) : null,
           suggested_action: item.suggested_action as Record<

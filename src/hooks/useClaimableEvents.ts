@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { logError } from "@/utils/errorHandler";
+import { useAuthUser } from "@/hooks/useAuthUser";
 
 export interface ClaimableCareEvent {
   collection_id: string;
@@ -14,18 +15,17 @@ export interface ClaimableCareEvent {
 }
 
 export function useClaimableEvents(threshold = 50) {
-  return useQuery({
-    queryKey: ["claimable-care-events", threshold],
-    queryFn: async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
+  const { user } = useAuthUser();
+  const userId = user?.id;
 
+  return useQuery({
+    queryKey: ["claimable-care-events", threshold, userId],
+    enabled: !!userId,
+    queryFn: async () => {
       const { data, error } = await supabase.rpc(
         "detect_claimable_care_events",
         {
-          p_user_id: user.id,
+          p_user_id: userId!,
           p_threshold: threshold,
         },
       );

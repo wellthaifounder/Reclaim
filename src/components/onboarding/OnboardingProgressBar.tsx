@@ -1,11 +1,12 @@
 import { useEffect, useRef } from "react";
 import { Progress } from "@/components/ui/progress";
-import { CheckCircle2, Upload, Sparkles, Link2 } from "lucide-react";
+import { CheckCircle2, Upload, Link2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useHSA } from "@/contexts/HSAContext";
 import { analytics } from "@/lib/analytics";
+import { useAuthUser } from "@/hooks/useAuthUser";
 
 interface OnboardingProgressBarProps {
   compact?: boolean;
@@ -13,7 +14,6 @@ interface OnboardingProgressBarProps {
 
 const STEP_ROUTES: Record<string, string> = {
   bill: "/bills/new",
-  review: "/reports",
   setup: "/settings",
 };
 
@@ -22,20 +22,18 @@ export function OnboardingProgressBar({
 }: OnboardingProgressBarProps) {
   const { hasHSA } = useHSA();
   const navigate = useNavigate();
+  const { user } = useAuthUser();
+  const userId = user?.id;
 
   // Check if user has uploaded any bills
   const { data: billsData } = useQuery({
-    queryKey: ["onboarding-bills"],
+    queryKey: ["onboarding-bills", userId],
+    enabled: !!userId,
     queryFn: async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return null;
-
       const { data, error } = await supabase
         .from("invoices")
         .select("id, created_at")
-        .eq("user_id", user.id)
+        .eq("user_id", userId!)
         .order("created_at", { ascending: true })
         .limit(1);
 
@@ -44,40 +42,15 @@ export function OnboardingProgressBar({
     },
   });
 
-  // Check if user has any bill reviews (analyzed bills)
-  const { data: reviewsData } = useQuery({
-    queryKey: ["onboarding-reviews"],
-    queryFn: async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return null;
-
-      const { data, error } = await supabase
-        .from("bill_reviews")
-        .select("id, analyzed_at")
-        .order("analyzed_at", { ascending: true })
-        .limit(1);
-
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!billsData && billsData.length > 0,
-  });
-
   // Check if user has connected bank accounts
   const { data: bankData } = useQuery({
-    queryKey: ["onboarding-banks"],
+    queryKey: ["onboarding-banks", userId],
+    enabled: !!userId,
     queryFn: async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return null;
-
       const { data, error } = await supabase
         .from("plaid_connections")
         .select("id")
-        .eq("user_id", user.id)
+        .eq("user_id", userId!)
         .limit(1);
 
       if (error) throw error;
@@ -87,13 +60,11 @@ export function OnboardingProgressBar({
 
   // Calculate progress
   const hasBill = (billsData && billsData.length > 0) || false;
-  const hasReview = (reviewsData && reviewsData.length > 0) || false;
   const hasBank = (bankData && bankData.length > 0) || false;
   const hasSetup = hasHSA || hasBank;
 
   const steps = [
     { key: "bill", label: "Upload Bill", icon: Upload, complete: hasBill },
-    { key: "review", label: "See Value", icon: Sparkles, complete: hasReview },
     {
       key: "setup",
       label: "Connect Accounts",
@@ -156,8 +127,7 @@ export function OnboardingProgressBar({
           <div className="flex items-center gap-3 flex-1">
             <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">
               {completedSteps === 0 && "Get Started"}
-              {completedSteps === 1 && "Almost There!"}
-              {completedSteps === 2 && "One More Step"}
+              {completedSteps === 1 && "One More Step"}
             </span>
 
             <div className="hidden md:flex items-center gap-2">

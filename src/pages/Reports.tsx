@@ -475,43 +475,50 @@ const Reports = () => {
                       <CardDescription>Your bills over time</CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <div
-                        role="img"
-                        aria-label="Line chart showing monthly bill trends over time. Displays total invoiced amounts for each month to help track spending patterns."
-                      >
-                        <ResponsiveContainer width="100%" height={300}>
-                          <LineChart data={monthlyData}>
-                            <CartesianGrid
-                              strokeDasharray="3 3"
-                              stroke="hsl(var(--border))"
-                            />
-                            <XAxis
-                              dataKey="month"
-                              stroke="hsl(var(--muted-foreground))"
-                              aria-label="Month"
-                            />
-                            <YAxis
-                              stroke="hsl(var(--muted-foreground))"
-                              aria-label="Amount in dollars"
-                            />
-                            <Tooltip
-                              contentStyle={{
-                                backgroundColor: "hsl(var(--card))",
-                                border: "1px solid hsl(var(--border))",
-                                borderRadius: "var(--radius)",
-                              }}
-                            />
-                            <Legend />
-                            <Line
-                              type="monotone"
-                              dataKey="total"
-                              stroke="hsl(var(--primary))"
-                              strokeWidth={2}
-                              name="Total Invoiced"
-                            />
-                          </LineChart>
-                        </ResponsiveContainer>
-                      </div>
+                      {monthlyData.length === 0 ? (
+                        <div className="flex items-center justify-center h-[300px] text-sm text-muted-foreground text-center px-4">
+                          Add a few bills to see how your spending trends month
+                          over month.
+                        </div>
+                      ) : (
+                        <div
+                          role="img"
+                          aria-label="Line chart showing monthly bill trends over time. Displays total invoiced amounts for each month to help track spending patterns."
+                        >
+                          <ResponsiveContainer width="100%" height={300}>
+                            <LineChart data={monthlyData}>
+                              <CartesianGrid
+                                strokeDasharray="3 3"
+                                stroke="hsl(var(--border))"
+                              />
+                              <XAxis
+                                dataKey="month"
+                                stroke="hsl(var(--muted-foreground))"
+                                aria-label="Month"
+                              />
+                              <YAxis
+                                stroke="hsl(var(--muted-foreground))"
+                                aria-label="Amount in dollars"
+                              />
+                              <Tooltip
+                                contentStyle={{
+                                  backgroundColor: "hsl(var(--card))",
+                                  border: "1px solid hsl(var(--border))",
+                                  borderRadius: "var(--radius)",
+                                }}
+                              />
+                              <Legend />
+                              <Line
+                                type="monotone"
+                                dataKey="total"
+                                stroke="hsl(var(--primary))"
+                                strokeWidth={2}
+                                name="Total Invoiced"
+                              />
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
 
@@ -523,44 +530,51 @@ const Reports = () => {
                       </CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <div
-                        role="img"
-                        aria-label="Bar chart showing invoice amounts grouped by medical category. Each bar represents total spending in categories like Doctor Visits, Prescriptions, and Dental care."
-                      >
-                        <ResponsiveContainer width="100%" height={300}>
-                          <BarChart data={categoryData}>
-                            <CartesianGrid
-                              strokeDasharray="3 3"
-                              stroke="hsl(var(--border))"
-                            />
-                            <XAxis
-                              dataKey="category"
-                              stroke="hsl(var(--muted-foreground))"
-                              aria-label="Medical category"
-                            />
-                            <YAxis
-                              stroke="hsl(var(--muted-foreground))"
-                              aria-label="Amount in dollars"
-                            />
-                            <Tooltip
-                              contentStyle={{
-                                backgroundColor: "hsl(var(--card))",
-                                border: "1px solid hsl(var(--border))",
-                                borderRadius: "var(--radius)",
-                              }}
-                            />
-                            <Legend />
-                            <Bar dataKey="total" name="Amount">
-                              {categoryData.map((entry, index) => (
-                                <Cell
-                                  key={`cell-${index}`}
-                                  fill={COLORS[index % COLORS.length]}
-                                />
-                              ))}
-                            </Bar>
-                          </BarChart>
-                        </ResponsiveContainer>
-                      </div>
+                      {categoryData.length === 0 ? (
+                        <div className="flex items-center justify-center h-[300px] text-sm text-muted-foreground text-center px-4">
+                          Add bills with categories to see your spending
+                          breakdown.
+                        </div>
+                      ) : (
+                        <div
+                          role="img"
+                          aria-label="Bar chart showing invoice amounts grouped by medical category. Each bar represents total spending in categories like Doctor Visits, Prescriptions, and Dental care."
+                        >
+                          <ResponsiveContainer width="100%" height={300}>
+                            <BarChart data={categoryData}>
+                              <CartesianGrid
+                                strokeDasharray="3 3"
+                                stroke="hsl(var(--border))"
+                              />
+                              <XAxis
+                                dataKey="category"
+                                stroke="hsl(var(--muted-foreground))"
+                                aria-label="Medical category"
+                              />
+                              <YAxis
+                                stroke="hsl(var(--muted-foreground))"
+                                aria-label="Amount in dollars"
+                              />
+                              <Tooltip
+                                contentStyle={{
+                                  backgroundColor: "hsl(var(--card))",
+                                  border: "1px solid hsl(var(--border))",
+                                  borderRadius: "var(--radius)",
+                                }}
+                              />
+                              <Legend />
+                              <Bar dataKey="total" name="Amount">
+                                {categoryData.map((entry, index) => (
+                                  <Cell
+                                    key={`cell-${index}`}
+                                    fill={COLORS[index % COLORS.length]}
+                                  />
+                                ))}
+                              </Bar>
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 </div>
@@ -571,36 +585,43 @@ const Reports = () => {
                     <CardDescription>Where your money goes</CardDescription>
                   </CardHeader>
                   <CardContent className="flex justify-center">
-                    <ResponsiveContainer width="100%" height={400}>
-                      <RechartsPie>
-                        <Pie
-                          data={categoryData}
-                          cx="50%"
-                          cy="50%"
-                          labelLine={false}
-                          label={({ category, percent }) =>
-                            `${category}: ${(percent * 100).toFixed(0)}%`
-                          }
-                          outerRadius={120}
-                          fill="hsl(var(--primary))"
-                          dataKey="total"
-                        >
-                          {categoryData.map((entry, index) => (
-                            <Cell
-                              key={`cell-${index}`}
-                              fill={COLORS[index % COLORS.length]}
-                            />
-                          ))}
-                        </Pie>
-                        <Tooltip
-                          contentStyle={{
-                            backgroundColor: "hsl(var(--card))",
-                            border: "1px solid hsl(var(--border))",
-                            borderRadius: "var(--radius)",
-                          }}
-                        />
-                      </RechartsPie>
-                    </ResponsiveContainer>
+                    {categoryData.length === 0 ? (
+                      <div className="flex items-center justify-center h-[400px] text-sm text-muted-foreground text-center px-4">
+                        Once you add bills, the donut chart shows how much of
+                        your spending falls into each category.
+                      </div>
+                    ) : (
+                      <ResponsiveContainer width="100%" height={400}>
+                        <RechartsPie>
+                          <Pie
+                            data={categoryData}
+                            cx="50%"
+                            cy="50%"
+                            labelLine={false}
+                            label={({ category, percent }) =>
+                              `${category}: ${(percent * 100).toFixed(0)}%`
+                            }
+                            outerRadius={120}
+                            fill="hsl(var(--primary))"
+                            dataKey="total"
+                          >
+                            {categoryData.map((entry, index) => (
+                              <Cell
+                                key={`cell-${index}`}
+                                fill={COLORS[index % COLORS.length]}
+                              />
+                            ))}
+                          </Pie>
+                          <Tooltip
+                            contentStyle={{
+                              backgroundColor: "hsl(var(--card))",
+                              border: "1px solid hsl(var(--border))",
+                              borderRadius: "var(--radius)",
+                            }}
+                          />
+                        </RechartsPie>
+                      </ResponsiveContainer>
+                    )}
                   </CardContent>
                 </Card>
               </TabsContent>

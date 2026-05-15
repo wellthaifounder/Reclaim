@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuthUser } from "@/hooks/useAuthUser";
 
 export interface InsurancePlan {
   carrier: string;
@@ -12,18 +13,17 @@ export interface InsurancePlan {
 }
 
 export function useInsurancePlan() {
-  const { data: profile, isLoading } = useQuery({
-    queryKey: ["insurance-plan"],
-    queryFn: async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return null;
+  const { user } = useAuthUser();
+  const userId = user?.id;
 
+  const { data: profile, isLoading } = useQuery({
+    queryKey: ["insurance-plan", userId],
+    enabled: !!userId,
+    queryFn: async () => {
       const { data, error } = await supabase
         .from("profiles")
         .select("insurance_plan")
-        .eq("id", user.id)
+        .eq("id", userId!)
         .single();
 
       if (error) {

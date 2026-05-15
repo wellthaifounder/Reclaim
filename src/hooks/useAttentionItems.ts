@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { logError } from "@/utils/errorHandler";
+import { useAuthUser } from "@/hooks/useAuthUser";
 
 export interface AttentionSummary {
   totalCount: number;
@@ -12,14 +13,13 @@ export interface AttentionSummary {
 }
 
 export function useAttentionItems(): AttentionSummary {
-  const { data, isLoading } = useQuery({
-    queryKey: ["attention-items"],
-    queryFn: async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
+  const { user } = useAuthUser();
+  const userId = user?.id;
 
+  const { data, isLoading } = useQuery({
+    queryKey: ["attention-items", userId],
+    enabled: !!userId,
+    queryFn: async () => {
       // Run all counts in parallel
       const [
         unreviewedResult,
@@ -31,14 +31,14 @@ export function useAttentionItems(): AttentionSummary {
         supabase
           .from("transactions")
           .select("id", { count: "exact", head: true })
-          .eq("user_id", user.id)
+          .eq("user_id", userId!)
           .eq("needs_review", true),
 
         // 2. Unlinked medical transactions
         supabase
           .from("transactions")
           .select("id", { count: "exact", head: true })
-          .eq("user_id", user.id)
+          .eq("user_id", userId!)
           .eq("is_medical", true)
           .eq("reconciliation_status", "unlinked"),
 
@@ -46,7 +46,7 @@ export function useAttentionItems(): AttentionSummary {
         supabase
           .from("invoices")
           .select("id", { count: "exact", head: true })
-          .eq("user_id", user.id)
+          .eq("user_id", userId!)
           .eq("status", "unpaid")
           .lt(
             "date",
@@ -59,7 +59,7 @@ export function useAttentionItems(): AttentionSummary {
         supabase
           .from("invoices")
           .select("amount")
-          .eq("user_id", user.id)
+          .eq("user_id", userId!)
           .eq("is_hsa_eligible", true)
           .eq("is_reimbursed", false),
       ]);

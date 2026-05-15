@@ -16,6 +16,10 @@ const TIER_LABELS: Record<string, string> = {
   premium: "Premium",
 };
 
+const FEATURE_LABELS: Record<string, string> = {
+  ai_insights: "AI Insights",
+};
+
 export const FeatureGate: React.FC<FeatureGateProps> = ({
   requiredTier,
   feature,
@@ -39,7 +43,9 @@ export const FeatureGate: React.FC<FeatureGateProps> = ({
           <div className="flex items-center gap-3 min-w-0">
             <Sparkles className="h-5 w-5 text-primary shrink-0" />
             <div className="min-w-0">
-              <p className="text-sm font-medium truncate">{feature}</p>
+              <p className="text-sm font-medium truncate">
+                {FEATURE_LABELS[feature] ?? feature}
+              </p>
               <p className="text-xs text-muted-foreground">
                 {description || `Upgrade to ${tierLabel} to unlock full access`}
               </p>

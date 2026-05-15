@@ -3,9 +3,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { HSAAccount } from "@/lib/hsaAccountUtils";
 import { logError } from "@/utils/errorHandler";
+import { useAuthUser } from "@/hooks/useAuthUser";
 
 export function useHSAAccounts() {
   const queryClient = useQueryClient();
+  const { user } = useAuthUser();
+  const userId = user?.id;
 
   // Fetch all HSA accounts for the current user
   const {
@@ -13,17 +16,13 @@ export function useHSAAccounts() {
     isLoading,
     error,
   } = useQuery({
-    queryKey: ["hsa-accounts"],
+    queryKey: ["hsa-accounts", userId],
+    enabled: !!userId,
     queryFn: async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
-
       const { data, error } = await supabase
         .from("hsa_accounts")
         .select("*")
-        .eq("user_id", user.id)
+        .eq("user_id", userId!)
         .order("opened_date", { ascending: false });
 
       if (error) throw error;

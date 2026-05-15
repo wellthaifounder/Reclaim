@@ -60,6 +60,7 @@ const UserReviews = lazy(() => import("./pages/UserReviews"));
 const AdminReviews = lazy(() => import("./pages/AdminReviews"));
 const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
 const Guide = lazy(() => import("./pages/Guide"));
+const WellbieRedirect = lazy(() => import("./pages/WellbieRedirect"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 // Loading fallback
@@ -193,6 +194,13 @@ const App = () => (
                           </ProtectedRoute>
                         }
                       />
+                      {/* Legacy alias — stale bookmarks/marketing links may still point here */}
+                      <Route
+                        path="/hsa-calculator"
+                        element={<Navigate to="/savings-calculator" replace />}
+                      />
+                      {/* Wellbie is a modal, not a page — this route opens the chat and bounces to the dashboard */}
+                      <Route path="/wellbie" element={<WellbieRedirect />} />
 
                       {/* HSA Routes */}
                       <Route

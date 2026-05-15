@@ -42,31 +42,43 @@ export function FeatureTooltip({
       if (!el) return;
       const rect = el.getBoundingClientRect();
       const offset = 8;
+      const padding = 8;
+      const cardWidth = 320; // w-80
+      const halfWidth = cardWidth / 2;
+      const vw = window.innerWidth;
+      const clamp = (v: number, min: number, max: number) =>
+        Math.min(Math.max(v, min), Math.max(min, max));
+      let top = 0;
+      let left = 0;
       switch (position) {
         case "top":
-          setCoords({
-            top: rect.top - offset,
-            left: rect.left + rect.width / 2,
-          });
+          top = rect.top - offset;
+          // -translate-x-1/2 centers on `left`; keep card edges inside viewport.
+          left = clamp(
+            rect.left + rect.width / 2,
+            padding + halfWidth,
+            vw - padding - halfWidth,
+          );
           break;
         case "left":
-          setCoords({
-            top: rect.top + rect.height / 2,
-            left: rect.left - offset,
-          });
+          top = rect.top + rect.height / 2;
+          // -translate-x-full anchors card's right edge at `left`.
+          left = clamp(rect.left - offset, padding + cardWidth, vw - padding);
           break;
         case "right":
-          setCoords({
-            top: rect.top + rect.height / 2,
-            left: rect.right + offset,
-          });
+          top = rect.top + rect.height / 2;
+          // No x-translate; card's left edge at `left`.
+          left = clamp(rect.right + offset, padding, vw - padding - cardWidth);
           break;
         default:
-          setCoords({
-            top: rect.bottom + offset,
-            left: rect.left + rect.width / 2,
-          });
+          top = rect.bottom + offset;
+          left = clamp(
+            rect.left + rect.width / 2,
+            padding + halfWidth,
+            vw - padding - halfWidth,
+          );
       }
+      setCoords({ top, left });
     };
     updatePosition();
     const onScroll = () => updatePosition();

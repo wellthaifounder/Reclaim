@@ -1,4 +1,10 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { safeLog, logError } from "@/utils/errorHandler";
@@ -29,34 +35,47 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [subscriptionEnd, setSubscriptionEnd] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  // Coalesce concurrent refresh calls — auth state events can fire several
+  // times in rapid succession during initial load, causing duplicate
+  // check-subscription invocations (each one is a CORS preflight + POST).
+  const inFlightRef = useRef<Promise<void> | null>(null);
 
   const refreshSubscription = async () => {
-    try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session) {
+    if (inFlightRef.current) return inFlightRef.current;
+    const promise = (async () => {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (!session) {
+          setTier("free");
+          setIsSubscribed(false);
+          setSubscriptionEnd(null);
+          setLoading(false);
+          return;
+        }
+
+        const { data, error } =
+          await supabase.functions.invoke("check-subscription");
+
+        if (error) throw error;
+
+        setTier(data.tier || "free");
+        setIsSubscribed(data.subscribed || false);
+        setSubscriptionEnd(data.subscription_end || null);
+      } catch (error) {
+        safeLog("Error checking subscription", error);
         setTier("free");
         setIsSubscribed(false);
-        setSubscriptionEnd(null);
+      } finally {
         setLoading(false);
-        return;
       }
-
-      const { data, error } =
-        await supabase.functions.invoke("check-subscription");
-
-      if (error) throw error;
-
-      setTier(data.tier || "free");
-      setIsSubscribed(data.subscribed || false);
-      setSubscriptionEnd(data.subscription_end || null);
-    } catch (error) {
-      safeLog("Error checking subscription", error);
-      setTier("free");
-      setIsSubscribed(false);
+    })();
+    inFlightRef.current = promise;
+    try {
+      await promise;
     } finally {
-      setLoading(false);
+      inFlightRef.current = null;
     }
   };
 
@@ -109,7 +128,10 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      // INITIAL_SESSION fires on mount alongside the explicit refresh above —
+      // skip it to avoid a duplicate check-subscription call.
+      if (event === "INITIAL_SESSION") return;
       if (session) {
         setTimeout(() => refreshSubscription(), 0);
       } else {

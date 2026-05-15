@@ -12,9 +12,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { Target, Plus, Trash2, Edit, Check, X } from "lucide-react";
+import { Target, Plus, Trash2, Check, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useAuthUser } from "@/hooks/useAuthUser";
 import {
   Select,
   SelectContent,
@@ -51,8 +52,9 @@ const GOAL_TYPES = {
 
 export const GoalSetting = ({ currentStats }: GoalSettingProps) => {
   const queryClient = useQueryClient();
+  const { user } = useAuthUser();
+  const userId = user?.id;
   const [showAddGoal, setShowAddGoal] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
 
   const [newGoal, setNewGoal] = useState({
     goal_type: "annual_savings",
@@ -60,8 +62,13 @@ export const GoalSetting = ({ currentStats }: GoalSettingProps) => {
     deadline: "",
   });
 
-  const { data: goals = [], isLoading: loading } = useQuery({
-    queryKey: ["savings_goals"],
+  const {
+    data: goals = [],
+    isLoading,
+    isError,
+  } = useQuery({
+    queryKey: ["savings_goals", userId],
+    enabled: !!userId,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("savings_goals")
@@ -72,6 +79,7 @@ export const GoalSetting = ({ currentStats }: GoalSettingProps) => {
       return data as Goal[];
     },
     staleTime: 5 * 60 * 1000,
+    meta: { suppressErrorToast: true },
   });
 
   const calculateCurrentAmount = (goal: Goal) => {
@@ -144,6 +152,23 @@ export const GoalSetting = ({ currentStats }: GoalSettingProps) => {
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
           </div>
         </CardContent>
+      </Card>
+    );
+  }
+
+  if (isError) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Target className="h-5 w-5" />
+            Savings Goals
+          </CardTitle>
+          <CardDescription>
+            We couldn't load your savings goals right now. Try refreshing the
+            page.
+          </CardDescription>
+        </CardHeader>
       </Card>
     );
   }

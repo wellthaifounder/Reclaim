@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { getEligibleHSAAccounts } from "@/lib/hsaAccountUtils";
 import type { HSAAccount } from "@/lib/hsaAccountUtils";
 import { logError } from "@/utils/errorHandler";
+import { useAuthUser } from "@/hooks/useAuthUser";
 
 type HSAEligibilityResult = {
   isEligible: boolean;
@@ -18,8 +19,12 @@ type HSAEligibilityResult = {
 export function useHSAEligibility(
   billDate: string | Date | null,
 ): HSAEligibilityResult & { isLoading: boolean } {
+  const { user } = useAuthUser();
+  const userId = user?.id;
+
   const { data, isLoading } = useQuery({
-    queryKey: ["hsa-eligibility", billDate],
+    queryKey: ["hsa-eligibility", billDate, userId],
+    enabled: !!billDate && !!userId,
     queryFn: async () => {
       if (!billDate) {
         return {
@@ -30,10 +35,7 @@ export function useHSAEligibility(
         };
       }
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
+      if (!userId) {
         return {
           isEligible: false,
           eligibleAccounts: [],
@@ -46,7 +48,7 @@ export function useHSAEligibility(
       const { data: accounts, error: accountsError } = await supabase
         .from("hsa_accounts")
         .select("*")
-        .eq("user_id", user.id);
+        .eq("user_id", userId);
 
       if (accountsError) {
         logError("Error fetching HSA accounts", accountsError);
@@ -87,7 +89,7 @@ export function useHSAEligibility(
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("hsa_opened_date")
-        .eq("id", user.id)
+        .eq("id", userId)
         .maybeSingle();
 
       if (profileError) {
@@ -117,7 +119,7 @@ export function useHSAEligibility(
         // Create a virtual account for legacy data
         const legacyAccount: HSAAccount = {
           id: "legacy",
-          user_id: user.id,
+          user_id: userId,
           account_name: "Primary HSA (Legacy)",
           opened_date: profile.hsa_opened_date,
           closed_date: null,
@@ -141,7 +143,6 @@ export function useHSAEligibility(
         message: `Bill date is before HSA opened date (${hsaOpenedDateObj.toLocaleDateString()})`,
       };
     },
-    enabled: !!billDate,
   });
 
   return {
