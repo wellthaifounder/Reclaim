@@ -3,6 +3,12 @@ project_id = "fzmdfhdfvayaalhogskm"
 [functions.process-receipt-ocr]
 verify_jwt = true
 
+# Reclaim Phase 3: user-authenticated wrapper around the Gemini-based
+# Pub 502 classifier. Default verify_jwt is correct here — the function
+# uses the caller's JWT to RLS-scope the invoice lookup.
+[functions.classify-expense]
+verify_jwt = true
+
 [functions.create-tripwire-checkout]
 verify_jwt = false
 
@@ -20,6 +26,13 @@ verify_jwt = true
 
 [functions.plaid-sync-transactions]
 verify_jwt = true
+
+# Plaid posts to this endpoint server-to-server with no end-user JWT. The
+# function performs its own ES256 webhook-signature verification using
+# Plaid's published JWK (see _shared/plaidWebhookVerification.ts). Do not
+# flip verify_jwt back to true — that would 401 all real Plaid webhooks.
+[functions.plaid-webhook]
+verify_jwt = false
 
 [functions.sync-npi-data]
 verify_jwt = true

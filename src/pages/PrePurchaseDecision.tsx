@@ -143,8 +143,11 @@ const PrePurchaseDecision = () => {
 
       if (error) throw error;
 
+      // Reclaim Phase 2 W4: the /expenses/new route is now wired to the
+      // simplified ExpenseEntry, which reads `savedDecision` from route
+      // state and prefills amount + category. Restore the toast action.
       toast.success(
-        "Decision saved! You can apply it when entering this expense.",
+        "Decision saved. You can apply it when entering this expense.",
         {
           action: {
             label: "Enter Expense Now",
@@ -427,6 +430,7 @@ const PrePurchaseDecision = () => {
                   <Save className="h-4 w-4 mr-2" />
                   {saving ? "Saving..." : "Save This Decision"}
                 </Button>
+                {/* Reclaim Phase 2 W4: re-wired now that /expenses/new exists. */}
                 <Button
                   onClick={() =>
                     navigate("/expenses/new", {

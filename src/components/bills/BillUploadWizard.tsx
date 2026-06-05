@@ -87,6 +87,25 @@ interface FileEntry {
   objectUrl: string;
 }
 
+type PatientChoice = "Self" | "Spouse" | "Other";
+
+// Reclaim Phase 2: shape returned by process-receipt-ocr.
+interface OcrResult {
+  amount: number | null;
+  vendor: string | null;
+  date: string | null;
+  category: string | null;
+  isHSAEligible: boolean;
+  confidence: number;
+  invoiceNumber: string | null;
+  insurance: string | null;
+  serviceDate: string | null;
+  billDate: string | null;
+  metadataConfidence: number;
+  warnings: string[];
+  rawResponse: string;
+}
+
 interface BillDraft {
   file: File;
   objectUrl: string;
@@ -101,6 +120,8 @@ interface BillDraft {
   newCollectionTitle: string;
   isCreatingNewCollection: boolean;
   notes: string;
+  patientChoice: PatientChoice;
+  patientName: string;
 }
 
 type Step = "upload" | "details" | "review" | "saving" | "complete" | "error";
@@ -198,8 +219,15 @@ export function BillUploadWizard({
     Record<number, "loading" | "done" | "error" | "skipped">
   >({});
   const [ocrFields, setOcrFields] = useState<
-    Record<number, Array<"vendor" | "amount" | "date" | "category">>
+    Record<
+      number,
+      Array<"vendor" | "amount" | "date" | "category" | "invoiceNumber">
+    >
   >({});
+  // Reclaim Phase 2: keep the full OCR extraction so we can persist it to
+  // receipt_ocr_data on save and so each OCR'd invoice can start in
+  // PENDING_REVIEW rather than CAPTURED.
+  const [ocrResults, setOcrResults] = useState<Record<number, OcrResult>>({});
 
   // Sync collection section visibility when navigating between drafts
   const prevIndexRef = useRef(-1);
@@ -288,15 +316,11 @@ export function BillUploadWizard({
         setOcrStatus((prev) => ({ ...prev, [index]: "error" }));
         return;
       }
-      const extracted = data.data as {
-        amount: number | null;
-        vendor: string | null;
-        date: string | null;
-        category: string | null;
-        confidence: number;
-      };
+      const extracted = data.data as OcrResult;
       const today = new Date().toISOString().split("T")[0];
-      const filled: Array<"vendor" | "amount" | "date" | "category"> = [];
+      const filled: Array<
+        "vendor" | "amount" | "date" | "category" | "invoiceNumber"
+      > = [];
       setDrafts((prev) =>
         prev.map((d, i) => {
           if (i !== index) return d;
@@ -309,8 +333,12 @@ export function BillUploadWizard({
             updates.amount = extracted.amount.toFixed(2);
             filled.push("amount");
           }
-          if (extracted.date && d.date === today) {
-            updates.date = extracted.date;
+          // Prefer the service date for Reclaim Substantiation Records (IRS Pub
+          // 502 asks for date of service, not bill date). Fall back to the
+          // generic `date` field if Gemini couldn't isolate one.
+          const ocrDate = extracted.serviceDate || extracted.date;
+          if (ocrDate && d.date === today) {
+            updates.date = ocrDate;
             filled.push("date");
           }
           if (
@@ -321,10 +349,15 @@ export function BillUploadWizard({
             updates.category = extracted.category;
             filled.push("category");
           }
+          if (extracted.invoiceNumber && !d.invoiceNumber) {
+            updates.invoiceNumber = extracted.invoiceNumber;
+            filled.push("invoiceNumber");
+          }
           return { ...d, ...updates };
         }),
       );
       setOcrFields((prev) => ({ ...prev, [index]: filled }));
+      setOcrResults((prev) => ({ ...prev, [index]: extracted }));
       setOcrStatus((prev) => ({ ...prev, [index]: "done" }));
     } catch {
       setOcrStatus((prev) => ({ ...prev, [index]: "error" }));
@@ -349,6 +382,8 @@ export function BillUploadWizard({
       newCollectionTitle: "",
       isCreatingNewCollection: false,
       notes: "",
+      patientChoice: "Self" as PatientChoice,
+      patientName: "Self",
     }));
     setDrafts(newDrafts);
     setCurrentIndex(0);
@@ -356,6 +391,7 @@ export function BillUploadWizard({
     setShowCollectionSection(false);
     setOcrStatus({});
     setOcrFields({});
+    setOcrResults({});
     setStep("details");
     // Kick off OCR for all image files immediately — results pre-populate fields
     newDrafts.forEach((d, i) => runOCR(i, d.file));
@@ -487,6 +523,16 @@ export function BillUploadWizard({
         const amount = d.amount !== "" ? parseFloat(d.amount) : 0;
         const date = d.date || new Date().toISOString().split("T")[0];
         const isHsaEligible = HSA_ELIGIBLE_CATEGORIES.includes(d.category);
+        const patientName =
+          d.patientChoice === "Other"
+            ? d.patientName.trim() || "Self"
+            : d.patientChoice;
+        // Reclaim Phase 2: when OCR ran successfully, the invoice starts in
+        // PENDING_REVIEW so it shows up in the dashboard's review bucket and
+        // the user is prompted to confirm eligibility. Manual/PDF uploads
+        // (no OCR) default to CAPTURED via the column default.
+        const ocrExtraction = ocrResults[i];
+        const lifecycleStatus = ocrExtraction ? "pending_review" : "captured";
         const { data: invoice, error: invoiceErr } = await supabase
           .from("invoices")
           .insert({
@@ -499,6 +545,8 @@ export function BillUploadWizard({
             collection_id: collectionId || null,
             notes: d.notes.trim() || null,
             is_hsa_eligible: isHsaEligible,
+            patient_name: patientName,
+            lifecycle_status: lifecycleStatus,
           })
           .select()
           .single();
@@ -513,15 +561,48 @@ export function BillUploadWizard({
         if (uploadErr) throw uploadErr;
 
         // 4. Insert receipt record
-        const { error: receiptErr } = await supabase.from("receipts").insert({
-          invoice_id: invoice.id,
-          user_id: user.id,
-          file_path: filePath,
-          file_type: d.file.type,
-          document_type: d.documentType,
-          description: d.documentName.trim() || null,
-        });
+        const { data: receipt, error: receiptErr } = await supabase
+          .from("receipts")
+          .insert({
+            invoice_id: invoice.id,
+            user_id: user.id,
+            file_path: filePath,
+            file_type: d.file.type,
+            document_type: d.documentType,
+            description: d.documentName.trim() || null,
+          })
+          .select("id")
+          .single();
         if (receiptErr) throw receiptErr;
+
+        // 5. Persist OCR extraction to receipt_ocr_data when present.
+        // Best-effort: failure here should not abort the save — the invoice
+        // and receipt are already committed and the OCR data is metadata.
+        if (ocrExtraction && receipt) {
+          const { error: ocrPersistErr } = await supabase
+            .from("receipt_ocr_data")
+            .insert({
+              receipt_id: receipt.id,
+              extracted_amount: ocrExtraction.amount,
+              extracted_vendor: ocrExtraction.vendor,
+              extracted_date: ocrExtraction.date,
+              extracted_category: ocrExtraction.category,
+              confidence_score: ocrExtraction.confidence,
+              extracted_invoice_number: ocrExtraction.invoiceNumber,
+              extracted_insurance: ocrExtraction.insurance,
+              extracted_service_date: ocrExtraction.serviceDate,
+              extracted_bill_date: ocrExtraction.billDate,
+              metadata_confidence: ocrExtraction.metadataConfidence,
+              extraction_warnings: ocrExtraction.warnings,
+              raw_response: ocrExtraction.rawResponse,
+            });
+          if (ocrPersistErr) {
+            console.warn(
+              "[BillUploadWizard] receipt_ocr_data insert failed; continuing.",
+              ocrPersistErr.message,
+            );
+          }
+        }
 
         results.push({ id: invoice.id, vendor, amount: d.amount || "0" });
       }
@@ -529,6 +610,21 @@ export function BillUploadWizard({
       setSavedInvoices(results);
       if (onComplete && results.length > 0) onComplete(results[0].id);
       setStep("complete");
+
+      // Reclaim Phase 3: fire classify-expense for each saved invoice.
+      // Intentionally fire-and-forget — the UI moves to "complete" while
+      // classifications run in parallel; results land in the user's review
+      // queue when they next visit /review.
+      for (const r of results) {
+        supabase.functions
+          .invoke("classify-expense", { body: { invoice_id: r.id } })
+          .catch((err) =>
+            console.warn(
+              "[BillUploadWizard] classify-expense invocation failed:",
+              err?.message,
+            ),
+          );
+      }
     } catch (error) {
       const msg =
         error instanceof Error
@@ -556,6 +652,7 @@ export function BillUploadWizard({
     setErrorMessage("");
     setOcrStatus({});
     setOcrFields({});
+    setOcrResults({});
   };
 
   const isImageFile = (file: File) => file.type.startsWith("image/");
@@ -579,7 +676,13 @@ export function BillUploadWizard({
                 : "border-muted-foreground/25 hover:border-primary/50",
             )}
           >
-            <input {...getInputProps()} />
+            {/* Reclaim: camera-first on mobile — opens device camera by default while
+                still letting the user pick from the gallery via the camera UI. */}
+            <input
+              {...getInputProps({
+                capture: isMobile ? "environment" : undefined,
+              })}
+            />
             <Upload
               className={cn(
                 "h-10 w-10 mx-auto mb-3",
@@ -850,6 +953,48 @@ export function BillUploadWizard({
                 />
               </div>
 
+              {/* Patient — required on Reclaim Substantiation Records (IRS Pub 502) */}
+              <div className="space-y-1.5">
+                <Label htmlFor={`patient-${currentIndex}`}>Patient</Label>
+                <Select
+                  value={draft.patientChoice}
+                  onValueChange={(v) => {
+                    const choice = v as PatientChoice;
+                    updateDraft(currentIndex, {
+                      patientChoice: choice,
+                      patientName:
+                        choice === "Other"
+                          ? draft.patientChoice === "Other"
+                            ? draft.patientName
+                            : ""
+                          : choice,
+                    });
+                  }}
+                >
+                  <SelectTrigger id={`patient-${currentIndex}`}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Self">Self</SelectItem>
+                    <SelectItem value="Spouse">Spouse</SelectItem>
+                    <SelectItem value="Other">Other…</SelectItem>
+                  </SelectContent>
+                </Select>
+                {draft.patientChoice === "Other" && (
+                  <Input
+                    id={`patient-name-${currentIndex}`}
+                    autoFocus
+                    placeholder="Dependent's name (e.g. Maya, Mom)"
+                    value={draft.patientName}
+                    onChange={(e) =>
+                      updateDraft(currentIndex, {
+                        patientName: e.target.value,
+                      })
+                    }
+                  />
+                )}
+              </div>
+
               {/* Amount + Date */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
@@ -1071,8 +1216,17 @@ export function BillUploadWizard({
                 </CollapsibleTrigger>
                 <CollapsibleContent className="space-y-3 pt-2">
                   <div className="space-y-1.5">
-                    <Label htmlFor={`invoiceNumber-${currentIndex}`}>
+                    <Label
+                      htmlFor={`invoiceNumber-${currentIndex}`}
+                      className="flex items-center gap-1.5"
+                    >
                       Bill / Invoice #
+                      {ocrFields[currentIndex]?.includes("invoiceNumber") && (
+                        <span className="inline-flex items-center gap-0.5 text-[10px] font-normal text-violet-600">
+                          <Sparkles className="h-2.5 w-2.5" />
+                          AI
+                        </span>
+                      )}
                     </Label>
                     <Input
                       id={`invoiceNumber-${currentIndex}`}
@@ -1195,6 +1349,12 @@ export function BillUploadWizard({
                               ).toLocaleDateString()
                             : "No date"}{" "}
                           · {d.category}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Patient:{" "}
+                          {d.patientChoice === "Other"
+                            ? d.patientName.trim() || "Self"
+                            : d.patientChoice}
                         </p>
                       </div>
                       <button

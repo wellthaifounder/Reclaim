@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { usePlaidLink } from "react-plaid-link";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,7 @@ interface PlaidLinkProps {
 }
 
 export function PlaidLink({ onSuccess }: PlaidLinkProps) {
+  const navigate = useNavigate();
   const [linkToken, setLinkToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -48,8 +50,24 @@ export function PlaidLink({ onSuccess }: PlaidLinkProps) {
 
       if (error) throw error;
 
-      toast.success("Bank account connected successfully!");
+      // Reclaim Phase 2 W3: route into the historical-import flow. The
+      // /onboarding/import page kicks off the 18-month sync and renders
+      // the activation moment ("We found N transactions..."). The optional
+      // onSuccess prop still fires for callers that want a side-effect
+      // (refresh a list, etc.) but the user's next view is the import page.
       onSuccess?.();
+      if (data?.connection_id) {
+        navigate("/onboarding/import", {
+          state: {
+            connectionId: data.connection_id,
+            institutionName: data.institution_name,
+          },
+        });
+      } else {
+        // Defensive: an older exchange-token deploy that doesn't return
+        // connection_id falls back to the previous toast-only path.
+        toast.success("Bank account connected successfully!");
+      }
     } catch (error) {
       logError("Error exchanging token", error);
       toast.error("Failed to connect bank account");

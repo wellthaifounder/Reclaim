@@ -172,16 +172,17 @@ serve(async (req) => {
 
 ## Secrets & Key Management
 
-| Secret                          | Where it lives                 | Notes                                            |
-| ------------------------------- | ------------------------------ | ------------------------------------------------ |
-| `VITE_SUPABASE_URL`             | Vercel env vars                | Public — safe to expose                          |
-| `VITE_SUPABASE_PUBLISHABLE_KEY` | Vercel env vars                | Anon key — safe to expose                        |
-| `VITE_STRIPE_PUBLISHABLE_KEY`   | Vercel env vars                | Publishable key — safe to expose                 |
-| `STRIPE_SECRET_KEY`             | Supabase Edge Function Secrets | Never in frontend or Vercel                      |
-| `PLAID_CLIENT_ID`               | Supabase Edge Function Secrets | Never in frontend                                |
-| `PLAID_SECRET`                  | Supabase Edge Function Secrets | Never in frontend                                |
-| `PLAID_ENCRYPTION_KEY`          | Supabase Edge Function Secrets | Base64-encoded 32-byte key; rotate on compromise |
-| `SUPABASE_SERVICE_ROLE_KEY`     | Auto-injected by Supabase      | Never commit; never expose to frontend           |
+| Secret                          | Where it lives                 | Notes                                                                                  |
+| ------------------------------- | ------------------------------ | -------------------------------------------------------------------------------------- |
+| `VITE_SUPABASE_URL`             | Vercel env vars                | Public — safe to expose                                                                |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | Vercel env vars                | Anon key — safe to expose                                                              |
+| `VITE_STRIPE_PUBLISHABLE_KEY`   | Vercel env vars                | Publishable key — safe to expose                                                       |
+| `STRIPE_SECRET_KEY`             | Supabase Edge Function Secrets | Never in frontend or Vercel                                                            |
+| `PLAID_CLIENT_ID`               | Supabase Edge Function Secrets | Never in frontend                                                                      |
+| `PLAID_SECRET`                  | Supabase Edge Function Secrets | Never in frontend                                                                      |
+| `PLAID_ENCRYPTION_KEY`          | Supabase Edge Function Secrets | Base64-encoded 32-byte key; rotate on compromise                                       |
+| `GEMINI_API_KEY`                | Supabase Edge Function Secrets | Google AI Studio key for OCR. Phase 6: migrate to Vertex AI service-account auth (BAA) |
+| `SUPABASE_SERVICE_ROLE_KEY`     | Auto-injected by Supabase      | Never commit; never expose to frontend                                                 |
 
 **Rotation schedule:** Rotate all API keys every 90 days. Rotate immediately on suspected compromise.
 
@@ -355,12 +356,13 @@ Check subscription with `useSubscription()` hook from `src/contexts/Subscription
 
 ---
 
-## AI Integration (Gemini via Lovable Gateway)
+## AI Integration (Gemini via Google AI direct)
 
-- Model: `gemini-2.5-flash` (via `ai.gateway.lovable.dev`)
-- Used for: Receipt OCR, Wellbie chat
+- Model: `gemini-2.5-flash` (via `generativelanguage.googleapis.com`)
+- Used for: Receipt OCR (`process-receipt-ocr`), Wellbie chat (deferred to v1.1 per brief)
 - Always redact PHI before sending to AI — use `sanitizePHI()` from `src/utils/errorHandler.ts`
-- AI key (`LOVABLE_API_KEY`) lives in Supabase Edge Function Secrets only
+- AI key (`GEMINI_API_KEY`) lives in Supabase Edge Function Secrets only
+- **BAA path:** the direct Google AI Studio endpoint is _not_ BAA-eligible. Phase 6 production cutover migrates this to **Vertex AI** (Google Cloud BAA-covered). Same prompts, same response shape — only the endpoint and auth header change.
 
 ---
 

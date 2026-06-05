@@ -1,6 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { decryptPlaidToken } from "../_shared/encryption.ts";
+import {
+  classifyTransaction,
+  type PlaidTxnLike,
+} from "../_shared/medicalClassifier.ts";
 import Resend from "https://esm.sh/resend@2.0.0";
 
 const allowedOrigins = [
@@ -36,121 +40,8 @@ const getPlaidUrl = (): string => {
   return urls[env] || urls["sandbox"];
 };
 
-// Comprehensive medical expense keywords for auto-categorization
-const MEDICAL_KEYWORDS = [
-  // Pharmacies
-  "cvs",
-  "walgreens",
-  "rite aid",
-  "walmart pharmacy",
-  "kroger pharmacy",
-  "costco pharmacy",
-  "target pharmacy",
-  "publix pharmacy",
-  "safeway pharmacy",
-  // Healthcare providers
-  "kaiser",
-  "sutter",
-  "dignity health",
-  "adventist health",
-  "scripps",
-  "sharp",
-  "hoag",
-  "cedars-sinai",
-  "ucla health",
-  "stanford health",
-  // Labs
-  "quest diagnostics",
-  "labcorp",
-  "biomat",
-  "grifols",
-  // Vision
-  "visionworks",
-  "lenscrafters",
-  "pearle vision",
-  "eyeglass world",
-  // Dental
-  "aspen dental",
-  "gentle dental",
-  "bright now dental",
-  // Medical supplies
-  "medline",
-  "fsa store",
-  "hsa store",
-  "direct medical",
-  // Telehealth
-  "teladoc",
-  "doctor on demand",
-  "amwell",
-  "mdlive",
-  // Mental health
-  "talkspace",
-  "betterhelp",
-  "cerebral",
-  "headspace care",
-  // Common terms
-  "pharmacy",
-  "medical",
-  "hospital",
-  "clinic",
-  "doctor",
-  "dentist",
-  "dental",
-  "orthodont",
-  "vision",
-  "optometry",
-  "physical therapy",
-  "urgent care",
-  "lab",
-  "radiology",
-  "imaging",
-  "prescription",
-  "rx",
-  "health",
-  "blue cross",
-  "aetna",
-  "cigna",
-  "united health",
-  "humana",
-  "dr ",
-  "dds",
-  "dmd",
-  "chiropractic",
-  "pediatric",
-  "dermatology",
-  "cardiology",
-  "orthopedic",
-  "veterinary",
-];
-
-const MEDICAL_CATEGORIES = [
-  "healthcare",
-  "pharmacy",
-  "medical",
-  "dentist",
-  "optometrist",
-  "veterinary",
-  "healthcare services",
-  "pharmacies",
-  "medical services",
-];
-
-function isMedicalTransaction(name: string, category: string[]): boolean {
-  const searchText = name.toLowerCase();
-  const categoryText = category.join(" ").toLowerCase();
-
-  // Check vendor name
-  const hasVendorMatch = MEDICAL_KEYWORDS.some((keyword) =>
-    searchText.includes(keyword),
-  );
-
-  // Check category
-  const hasCategoryMatch = MEDICAL_CATEGORIES.some((medCat) =>
-    categoryText.includes(medCat),
-  );
-
-  return hasVendorMatch || hasCategoryMatch;
-}
+// Reclaim Phase 2: medical classification moved to ../_shared/medicalClassifier.ts
+// so the webhook and this manual-sync path stay in lockstep.
 
 serve(async (req) => {
   const corsHeaders = getCorsHeaders(req.headers.get("origin"));
@@ -163,7 +54,12 @@ serve(async (req) => {
 
   try {
     const requestId = crypto.randomUUID();
-    const { connection_id, start_date, end_date } = await req.json();
+    // Reclaim Phase 2 W3: `is_initial` triggers the 18-month historical
+    // pull driven by `HistoricalImport.tsx` right after Plaid Link. The
+    // existing manual-sync path (BankAccounts.tsx) omits the flag and
+    // continues to use the 30-day default window.
+    const { connection_id, start_date, end_date, is_initial } =
+      await req.json();
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -208,8 +104,22 @@ serve(async (req) => {
       connection.encrypted_access_token,
     );
 
-    // Fetch transactions from Plaid
-    console.log(`[${requestId}] Fetching transactions from ${plaidBaseUrl}`);
+    // Fetch transactions from Plaid.
+    // Reclaim Phase 2 W3: initial sync pulls 18 months (the midpoint of the
+    // brief's 12–24 month range, §4). Subsequent syncs (manual refresh,
+    // routine catch-up) keep the 30-day default to bound Plaid response size.
+    const HISTORICAL_DAYS = 18 * 30; // ~540
+    const DEFAULT_DAYS = 30;
+    const windowDays = is_initial ? HISTORICAL_DAYS : DEFAULT_DAYS;
+    const resolvedStartDate =
+      start_date ||
+      new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .split("T")[0];
+    const resolvedEndDate = end_date || new Date().toISOString().split("T")[0];
+    console.log(
+      `[${requestId}] Fetching transactions from ${plaidBaseUrl} (${resolvedStartDate} → ${resolvedEndDate}${is_initial ? ", initial" : ""})`,
+    );
     const transactionsResponse = await fetch(
       `${plaidBaseUrl}/transactions/get`,
       {
@@ -221,12 +131,8 @@ serve(async (req) => {
           client_id: plaidClientId,
           secret: plaidSecretKey,
           access_token,
-          start_date:
-            start_date ||
-            new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
-              .toISOString()
-              .split("T")[0],
-          end_date: end_date || new Date().toISOString().split("T")[0],
+          start_date: resolvedStartDate,
+          end_date: resolvedEndDate,
         }),
       },
     );
@@ -265,35 +171,39 @@ serve(async (req) => {
       .select("canonical_vendor, alias")
       .eq("user_id", user.id);
 
-    // Process and store transactions
-    const transactionsToInsert = transactionsData.transactions.map(
-      (txn: any) => {
+    // Process and store transactions. Classification uses the shared
+    // module so this path agrees exactly with plaid-webhook.
+    // We keep the classification result alongside each row so the
+    // post-insert step (auto-link → auto-capture) can read the IRS category
+    // and confidence without re-classifying.
+    const classifications: Array<{
+      plaid_transaction_id: string;
+      reason: string;
+      irsCategory?: string;
+      mccCode?: string;
+      needsReview: boolean;
+    }> = [];
+    const transactionsToInsert = await Promise.all(
+      transactionsData.transactions.map(async (txn: any) => {
         const vendorName = txn.merchant_name || txn.name;
-
-        // Check user's learned preferences first
-        let isMedical = false;
-        let needsReview = false;
-        if (userPreferences) {
-          const preference = userPreferences.find((p) =>
-            vendorName.toLowerCase().includes(p.vendor_pattern.toLowerCase()),
-          );
-          if (preference) {
-            isMedical = preference.is_medical;
-            // Confirmed by user preference — no review needed
-          }
-        }
-
-        // Fall back to keyword detection — flag for user review since it's not user-confirmed
-        if (!isMedical) {
-          const keywordMatch = isMedicalTransaction(
-            txn.name,
-            txn.category || [],
-          );
-          if (keywordMatch) {
-            isMedical = true;
-            needsReview = true; // Requires user confirmation to prevent false positives
-          }
-        }
+        const txnLike: PlaidTxnLike = {
+          name: txn.name,
+          merchant_name: txn.merchant_name,
+          category: txn.category ?? null,
+          mcc: txn.mcc ?? null,
+        };
+        const c = await classifyTransaction(
+          supabase,
+          txnLike,
+          userPreferences ?? [],
+        );
+        classifications.push({
+          plaid_transaction_id: txn.transaction_id,
+          reason: c.reason,
+          irsCategory: c.irsCategory,
+          mccCode: c.mccCode,
+          needsReview: c.needsReview,
+        });
 
         return {
           user_id: user.id,
@@ -302,14 +212,17 @@ serve(async (req) => {
           vendor: vendorName,
           description: txn.name,
           amount: Math.abs(txn.amount),
-          category: isMedical ? "medical" : txn.category?.[0] || "Other",
-          is_medical: isMedical,
-          is_hsa_eligible: isMedical && !needsReview, // Only auto-eligible if confirmed via preference
-          needs_review: needsReview,
-          reconciliation_status: isMedical ? "linked" : "unlinked",
+          category: c.isMedical ? "medical" : txn.category?.[0] || "Other",
+          is_medical: c.isMedical,
+          is_hsa_eligible: c.isMedical && !c.needsReview,
+          needs_review: c.needsReview,
+          // Raw transactions start unlinked. Auto-link / auto-capture upgrade
+          // this to 'linked_to_invoice' below. The DB check constraint
+          // only allows: unlinked | linked_to_invoice | ignored.
+          reconciliation_status: "unlinked",
           source: "plaid",
         };
-      },
+      }),
     );
 
     // Insert transactions (ignore duplicates)
@@ -482,6 +395,89 @@ serve(async (req) => {
         );
       }
 
+      // ── Reclaim Phase 2: auto-capture ─────────────────────────────────
+      // Medical transactions that weren't auto-linked to an existing invoice
+      // seed a new CAPTURED invoice and back-link the transaction. This is
+      // the entry-point of the Reclaim state machine (PRODUCT_BRIEF.md §6).
+      let capturedCount = 0;
+      const unlinkedMedical = (inserted ?? []).filter(
+        (t: any) =>
+          t.is_medical && t.reconciliation_status !== "linked_to_invoice",
+      );
+      for (const txn of unlinkedMedical) {
+        const c = classifications.find(
+          (x) => x.plaid_transaction_id === txn.plaid_transaction_id,
+        );
+        // Reclaim Phase 2 W3: source_plaid_transaction_id participates in
+        // a partial UNIQUE index so the webhook and this initial sync
+        // can't race-create duplicate invoices for the same Plaid txn.
+        const { data: invoice, error: invErr } = await supabase
+          .from("invoices")
+          .insert({
+            user_id: user.id,
+            vendor: txn.vendor || txn.description,
+            amount: txn.amount,
+            date: txn.transaction_date,
+            category: c?.irsCategory || "Medical",
+            is_hsa_eligible: !c?.needsReview,
+            // Reclaim Phase 3: stamp the Pub 502 rule + classification
+            // metadata at capture time. With a high-confidence MCC match
+            // we route straight to PENDING_REVIEW; without it we leave
+            // the row in CAPTURED so the user (or a future background
+            // job) can run AI classification.
+            lifecycle_status: c?.pub502RuleId ? "pending_review" : "captured",
+            eligibility_basis_rule_id: c?.pub502RuleId ?? null,
+            classification_confidence: c?.pub502RuleId ? 0.95 : null,
+            classification_reasoning: c?.pub502RuleId
+              ? `Auto-classified from MCC ${c.mccCode} (${c.irsCategory ?? "medical"}). Confirm during review.`
+              : null,
+            classified_at: c?.pub502RuleId ? new Date().toISOString() : null,
+            source_plaid_transaction_id: txn.plaid_transaction_id,
+            notes: c
+              ? `Auto-captured from Plaid (${c.reason}${
+                  c.mccCode ? ` MCC ${c.mccCode}` : ""
+                }).`
+              : "Auto-captured from Plaid.",
+          })
+          .select("id")
+          .single();
+        if (invErr) {
+          // PostgreSQL unique_violation = 23505. When the webhook beat us
+          // to it, the invoice already exists for this Plaid txn — find
+          // it and link the transaction row to it rather than warning.
+          if (invErr.code === "23505") {
+            const { data: existing } = await supabase
+              .from("invoices")
+              .select("id")
+              .eq("source_plaid_transaction_id", txn.plaid_transaction_id)
+              .maybeSingle();
+            if (existing) {
+              await supabase
+                .from("transactions")
+                .update({
+                  invoice_id: existing.id,
+                  reconciliation_status: "linked_to_invoice",
+                })
+                .eq("id", txn.id);
+            }
+            continue;
+          }
+          console.warn(
+            `[${requestId}] Auto-capture failed for txn ${txn.id}:`,
+            invErr.message,
+          );
+          continue;
+        }
+        const { error: updateErr } = await supabase
+          .from("transactions")
+          .update({
+            invoice_id: invoice.id,
+            reconciliation_status: "linked_to_invoice",
+          })
+          .eq("id", txn.id);
+        if (!updateErr) capturedCount++;
+      }
+
       // Log matching run for observability
       await supabase.from("matching_run_log").insert({
         user_id: user.id,
@@ -493,21 +489,39 @@ serve(async (req) => {
         duration_ms: Date.now() - matchStartTime,
       });
 
-      // Update last sync time
+      // Update last sync time + record initial-sync completion when
+      // applicable. The first-sync fields drive the wow-moment screen
+      // (HistoricalImport.tsx) and only get written once per connection;
+      // re-running an initial sync after the first one is treated as a
+      // refresh and doesn't overwrite the original counts.
+      const medicalDetected =
+        inserted?.filter((t: any) => t.is_medical).length || 0;
+      const connectionUpdate: Record<string, unknown> = {
+        last_synced_at: new Date().toISOString(),
+      };
+      if (is_initial) {
+        connectionUpdate.first_sync_completed_at = new Date().toISOString();
+        connectionUpdate.initial_medical_count = medicalDetected;
+        connectionUpdate.initial_total_count =
+          transactionsData.transactions.length;
+      }
       await supabase
         .from("plaid_connections")
-        .update({ last_synced_at: new Date().toISOString() })
+        .update(connectionUpdate)
         .eq("id", connection_id);
 
       return new Response(
         JSON.stringify({
           success: true,
+          is_initial: !!is_initial,
           total: transactionsData.transactions.length,
           inserted: inserted?.length || 0,
-          medical_detected:
-            inserted?.filter((t: any) => t.is_medical).length || 0,
+          medical_detected: medicalDetected,
           auto_linked: autoLinkedCount,
           suggested_matches: suggestedCount,
+          captured: capturedCount,
+          window_days: windowDays,
+          institution_name: connection.institution_name,
         }),
         {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -515,12 +529,33 @@ serve(async (req) => {
       );
     }
 
+    // Empty result branch: even with zero transactions, an initial sync
+    // should still mark the connection complete so the user isn't asked
+    // to wait again on retry.
+    if (is_initial) {
+      await supabase
+        .from("plaid_connections")
+        .update({
+          last_synced_at: new Date().toISOString(),
+          first_sync_completed_at: new Date().toISOString(),
+          initial_medical_count: 0,
+          initial_total_count: 0,
+        })
+        .eq("id", connection_id);
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
+        is_initial: !!is_initial,
         total: 0,
         inserted: 0,
         medical_detected: 0,
+        auto_linked: 0,
+        suggested_matches: 0,
+        captured: 0,
+        window_days: windowDays,
+        institution_name: connection.institution_name,
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },

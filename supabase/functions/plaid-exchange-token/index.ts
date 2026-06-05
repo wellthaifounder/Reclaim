@@ -122,23 +122,31 @@ serve(async (req) => {
     const encryptedToken = await encryptPlaidToken(access_token);
 
     // Store connection in database with encrypted token
-    const { error: insertError } = await supabase
+    const institutionName = accountsData.item?.institution_id || "Unknown";
+    const { data: connectionRow, error: insertError } = await supabase
       .from("plaid_connections")
       .insert({
         user_id: user.id,
         encrypted_access_token: encryptedToken,
         item_id,
-        institution_name: accountsData.item?.institution_id || "Unknown",
-      });
+        institution_name: institutionName,
+      })
+      .select("id")
+      .single();
 
-    if (insertError) {
+    if (insertError || !connectionRow) {
       console.error("Database insert error:", insertError);
       throw new Error("Failed to store connection");
     }
 
+    // Reclaim Phase 2 W3: return connection_id + institution_name so the
+    // frontend can immediately trigger the 18-month historical pull and
+    // render the activation-moment screen.
     return new Response(
       JSON.stringify({
         success: true,
+        connection_id: connectionRow.id,
+        institution_name: institutionName,
         accounts: accountsData.accounts,
       }),
       {

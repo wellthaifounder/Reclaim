@@ -81,64 +81,79 @@ serve(async (req) => {
 
     const { imageBase64 } = validation.data;
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    // Reclaim: direct Google AI Studio (Gemini API). This endpoint is *not*
+    // BAA-eligible. Phase 6 production cutover will swap this to Vertex AI
+    // (GCP BAA-covered). The prompt and response parsing stay identical; only
+    // the endpoint URL and auth header change at that point.
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+    if (!GEMINI_API_KEY) {
+      throw new Error("GEMINI_API_KEY is not configured");
     }
+
+    // Gemini's inline_data wants raw base64 + the mime type as separate
+    // fields, not a data URL. The Zod regex above guarantees the prefix is
+    // present and well-formed, so this split is safe.
+    const [dataUrlHeader, rawBase64] = imageBase64.split(",", 2);
+    const mimeMatch = dataUrlHeader.match(/^data:(image\/[a-z]+);base64$/);
+    const mimeType = mimeMatch ? mimeMatch[1] : "image/jpeg";
 
     console.log("Processing receipt with OCR...");
 
-    const response = await fetch(
-      "https://ai.gateway.lovable.dev/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
-          messages: [
-            {
-              role: "user",
-              content: [
-                {
-                  type: "text",
-                  text: `Extract the following information from this receipt image and return ONLY valid JSON with this exact structure:
+    const PROMPT = `Extract Reclaim Substantiation-Record fields from this receipt and return ONLY valid JSON:
 {
   "amount": <number or null>,
   "vendor": "<string or null>",
   "date": "<YYYY-MM-DD or null>",
   "category": "<one of: Medical, Dental, Vision, Pharmacy, Prescription, Therapy, Chiropractic, Food & Dining, Groceries, Transportation, Other or null>",
   "isHSAEligible": <boolean>,
-  "confidence": <number 0-1>
+  "confidence": <number 0-1>,
+  "invoiceNumber": "<string or null>",
+  "insurance": "<string or null>",
+  "serviceDate": "<YYYY-MM-DD or null>",
+  "billDate": "<YYYY-MM-DD or null>",
+  "metadataConfidence": <number 0-1>,
+  "warnings": [<string>]
 }
 
 Rules:
-- Return ONLY the JSON object, no other text
-- Use null for any field you cannot extract
-- For category, choose the best match from the available categories
-- Set isHSAEligible to true ONLY for medical, dental, vision, prescription, pharmacy, therapy, or chiropractic expenses
-- Set isHSAEligible to false for food, groceries, gas, retail, or non-healthcare expenses
-- confidence should be 0-1 representing how confident you are in the extraction
-- Analyze vendor name and any visible text to determine HSA eligibility`,
-                },
-                {
-                  type: "image_url",
-                  image_url: {
-                    url: imageBase64,
-                  },
-                },
+- Return ONLY the JSON object, no other text. Use null for any field you cannot extract.
+- category: choose the best match from the list above
+- isHSAEligible: true ONLY for medical, dental, vision, prescription, pharmacy, therapy, or chiropractic; false for food, groceries, gas, retail
+- confidence (0-1): overall extraction confidence for the core fields (amount/vendor/date/category)
+- invoiceNumber: account number, statement ID, or invoice/bill number printed on the document
+- insurance: payer/insurance company name if visible (e.g. "Blue Cross", "Aetna")
+- serviceDate: date the medical service was rendered. If a date range, use the latest date in the range
+- billDate: date the bill or statement was issued (often labeled "Statement Date" or "Date of Bill")
+- metadataConfidence (0-1): confidence in the structured-metadata fields (invoiceNumber/insurance/serviceDate/billDate)
+- warnings: short human-readable strings flagging issues, e.g. "amount illegible", "no service date found", "low confidence on vendor". Empty array if none.
+- If serviceDate is unclear but billDate is visible, prefer to leave serviceDate null and add a warning rather than guessing.`;
+
+    const response = await fetch(
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+      {
+        method: "POST",
+        headers: {
+          "x-goog-api-key": GEMINI_API_KEY,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                { text: PROMPT },
+                { inline_data: { mime_type: mimeType, data: rawBase64 } },
               ],
             },
           ],
+          // Gemini's native JSON mode — eliminates markdown-fence stripping.
+          generationConfig: { responseMimeType: "application/json" },
         }),
       },
     );
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("AI gateway error:", response.status, errorText);
+      console.error("Gemini API error:", response.status, errorText);
 
       if (response.status === 429) {
         return new Response(
@@ -152,39 +167,34 @@ Rules:
         );
       }
 
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({
-            error: "AI credits exhausted. Please add credits to continue.",
-          }),
-          {
-            status: 402,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          },
-        );
-      }
-
-      throw new Error(`AI gateway error: ${response.status}`);
+      // 400 INVALID_ARGUMENT, 403 PERMISSION_DENIED (bad/missing key), 5xx —
+      // all collapse to the generic 500 client response. Server-side log
+      // above captures the specific Gemini error code/message for debugging.
+      throw new Error(`Gemini API error: ${response.status}`);
     }
 
     const data = await response.json();
-    console.log("AI response:", data);
+    console.log("Gemini response:", JSON.stringify(data).slice(0, 500));
 
-    const content = data.choices?.[0]?.message?.content;
+    const content = data.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!content) {
-      throw new Error("No content in AI response");
+      throw new Error("No content in Gemini response");
     }
 
-    // Parse the JSON from the response
+    // Parse the JSON from the response. responseMimeType=application/json
+    // guarantees pure JSON, but a defensive try/catch stays as a guard
+    // against future model regressions.
     let extractedData;
     try {
-      // Remove markdown code blocks if present
-      const jsonStr = content.replace(/```json\n?|\n?```/g, "").trim();
-      extractedData = JSON.parse(jsonStr);
+      extractedData = JSON.parse(content);
     } catch (e) {
-      console.error("Failed to parse AI response as JSON:", content);
+      console.error("Failed to parse Gemini response as JSON:", content);
       throw new Error("Failed to parse OCR results");
     }
+
+    const warnings = Array.isArray(extractedData.warnings)
+      ? extractedData.warnings.filter((w: unknown) => typeof w === "string")
+      : [];
 
     return new Response(
       JSON.stringify({
@@ -196,6 +206,17 @@ Rules:
           category: extractedData.category,
           isHSAEligible: extractedData.isHSAEligible || false,
           confidence: extractedData.confidence || 0.5,
+          // Reclaim metadata extraction (Phase 2)
+          invoiceNumber: extractedData.invoiceNumber ?? null,
+          insurance: extractedData.insurance ?? null,
+          serviceDate: extractedData.serviceDate ?? null,
+          billDate: extractedData.billDate ?? null,
+          metadataConfidence:
+            typeof extractedData.metadataConfidence === "number"
+              ? extractedData.metadataConfidence
+              : 0,
+          warnings,
+          rawResponse: content,
         },
       }),
       {

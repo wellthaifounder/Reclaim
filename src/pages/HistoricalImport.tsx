@@ -1,0 +1,291 @@
+// Reclaim Phase 2 W3 — Historical-import activation moment.
+//
+// Renders the "wow moment" the brief calls brand-defining: after a user
+// connects their first Plaid item, we pull 18 months of transactions, run
+// them through the medical classifier, auto-capture invoices for high-
+// confidence medical merchants, and surface the count on screen.
+//
+// Three states, one component:
+//   - loading : sync in flight (15–60s depending on bank); rotating status copy
+//   - result  : counts back; big number + CTA to review the captured queue
+//   - error   : sync failed; graceful fallback so the user isn't stranded
+//
+// We also handle a refresh of this page mid-flow: if route state was lost
+// (hard refresh, deep-link), we fall back to reading the most recent
+// plaid_connection for the user and showing whatever counts are persisted.
+
+import { useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  Loader2,
+  Sparkles,
+  CheckCircle2,
+  AlertCircle,
+  ArrowRight,
+} from "lucide-react";
+import { logError } from "@/utils/errorHandler";
+
+interface SyncResult {
+  medical_detected: number;
+  total: number;
+  inserted: number;
+  captured: number;
+  auto_linked: number;
+  window_days: number;
+  institution_name: string;
+}
+
+interface RouteState {
+  connectionId?: string;
+  institutionName?: string;
+}
+
+const LOADING_COPY = [
+  { text: "Securely connecting to your bank…", min_ms: 0 },
+  { text: "Pulling up to 18 months of transactions…", min_ms: 3_000 },
+  { text: "Scanning for medical merchants and pharmacies…", min_ms: 9_000 },
+  { text: "Checking each against IRS Pub 502…", min_ms: 18_000 },
+  { text: "Almost done — assembling your reclaim list…", min_ms: 30_000 },
+];
+
+export default function HistoricalImport() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const routeState = (location.state ?? {}) as RouteState;
+
+  const [phase, setPhase] = useState<"loading" | "result" | "error">("loading");
+  const [result, setResult] = useState<SyncResult | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string>("");
+  const [startedAt] = useState(() => Date.now());
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 1_500);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function run() {
+      try {
+        let connectionId = routeState.connectionId;
+
+        // Hard-refresh recovery: route state is gone — find the most
+        // recent connection for the current user and try to use that.
+        if (!connectionId) {
+          const {
+            data: { user },
+          } = await supabase.auth.getUser();
+          if (!user) {
+            navigate("/auth", { replace: true });
+            return;
+          }
+          const { data: latest } = await supabase
+            .from("plaid_connections")
+            .select(
+              "id, institution_name, first_sync_completed_at, initial_medical_count, initial_total_count",
+            )
+            .eq("user_id", user.id)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (!latest) {
+            navigate("/bank-accounts", { replace: true });
+            return;
+          }
+
+          // If we already completed the first sync for this connection,
+          // skip the spinner and render the persisted counts directly.
+          if (latest.first_sync_completed_at != null) {
+            if (cancelled) return;
+            setResult({
+              medical_detected: latest.initial_medical_count ?? 0,
+              total: latest.initial_total_count ?? 0,
+              inserted: latest.initial_total_count ?? 0,
+              captured: latest.initial_medical_count ?? 0,
+              auto_linked: 0,
+              window_days: 540,
+              institution_name: latest.institution_name ?? "your bank",
+            });
+            setPhase("result");
+            return;
+          }
+          connectionId = latest.id;
+        }
+
+        const { data, error } = await supabase.functions.invoke(
+          "plaid-sync-transactions",
+          {
+            body: { connection_id: connectionId, is_initial: true },
+          },
+        );
+        if (error) throw error;
+        if (cancelled) return;
+
+        setResult({
+          medical_detected: data?.medical_detected ?? 0,
+          total: data?.total ?? 0,
+          inserted: data?.inserted ?? 0,
+          captured: data?.captured ?? 0,
+          auto_linked: data?.auto_linked ?? 0,
+          window_days: data?.window_days ?? 540,
+          institution_name:
+            data?.institution_name ?? routeState.institutionName ?? "your bank",
+        });
+        setPhase("result");
+      } catch (err) {
+        logError("HistoricalImport sync failed", err);
+        if (cancelled) return;
+        setErrorMsg(
+          err instanceof Error
+            ? err.message
+            : "We couldn't finish the import. You can still add bills manually.",
+        );
+        setPhase("error");
+      }
+    }
+
+    run();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Loading state ────────────────────────────────────────────────────────
+  if (phase === "loading") {
+    const elapsed = Date.now() - startedAt;
+    const currentCopy =
+      [...LOADING_COPY].reverse().find((c) => elapsed >= c.min_ms) ??
+      LOADING_COPY[0];
+
+    return (
+      <AuthenticatedLayout>
+        <div className="max-w-xl mx-auto px-4 py-16 text-center">
+          <div className="relative inline-block">
+            <Loader2 className="h-16 w-16 mx-auto mb-6 animate-spin text-primary" />
+            <Sparkles className="h-5 w-5 absolute -top-1 -right-1 text-violet-500 animate-pulse" />
+          </div>
+          <h1 className="text-2xl font-semibold mb-3">
+            Reclaiming your healthcare history
+          </h1>
+          <p className="text-muted-foreground mb-8">
+            From{" "}
+            <span className="font-medium text-foreground">
+              {routeState.institutionName || "your bank"}
+            </span>
+            . This takes 15–60 seconds.
+          </p>
+          <p
+            className="text-sm text-muted-foreground italic"
+            key={currentCopy.text}
+          >
+            {currentCopy.text}
+          </p>
+        </div>
+      </AuthenticatedLayout>
+    );
+  }
+
+  // ── Error state ──────────────────────────────────────────────────────────
+  if (phase === "error") {
+    return (
+      <AuthenticatedLayout>
+        <div className="max-w-xl mx-auto px-4 py-16 text-center">
+          <AlertCircle className="h-12 w-12 mx-auto mb-4 text-amber-500" />
+          <h1 className="text-2xl font-semibold mb-2">
+            We couldn't finish the import
+          </h1>
+          <p className="text-muted-foreground mb-6">{errorMsg}</p>
+          <div className="flex gap-3 justify-center">
+            <Button
+              variant="outline"
+              onClick={() => navigate("/bank-accounts")}
+            >
+              Manage Bank Accounts
+            </Button>
+            <Button onClick={() => navigate("/bills")}>
+              Continue to Bills
+            </Button>
+          </div>
+        </div>
+      </AuthenticatedLayout>
+    );
+  }
+
+  // ── Result state (the wow moment) ────────────────────────────────────────
+  const r = result!;
+  const months = Math.round(r.window_days / 30);
+
+  return (
+    <AuthenticatedLayout>
+      <div className="max-w-xl mx-auto px-4 py-12">
+        <Card className="border-primary/20">
+          <CardContent className="p-8 text-center space-y-6">
+            <div className="inline-flex items-center justify-center h-16 w-16 rounded-full bg-primary/10">
+              <CheckCircle2 className="h-9 w-9 text-primary" />
+            </div>
+
+            <div>
+              <p className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                Reclaim found
+              </p>
+              <p className="text-6xl font-bold tabular-nums">
+                {r.medical_detected}
+              </p>
+              <p className="text-base text-muted-foreground mt-2">
+                potential HSA-eligible{" "}
+                {r.medical_detected === 1 ? "transaction" : "transactions"}
+                <br />
+                from the last {months} months at{" "}
+                <span className="font-medium text-foreground">
+                  {r.institution_name}
+                </span>
+                .
+              </p>
+            </div>
+
+            {r.total > 0 && (
+              <p className="text-xs text-muted-foreground">
+                Reviewed {r.total.toLocaleString()} total{" "}
+                {r.total === 1 ? "transaction" : "transactions"} · {r.captured}{" "}
+                ready for your review
+              </p>
+            )}
+
+            <div className="flex flex-col gap-2 pt-2">
+              <Button
+                size="lg"
+                onClick={() => navigate("/bills")}
+                className="w-full"
+              >
+                Review them now
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+              <Button
+                size="lg"
+                variant="ghost"
+                onClick={() => navigate("/dashboard")}
+                className="w-full"
+              >
+                I'll review later
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <p className="text-xs text-muted-foreground text-center mt-6 max-w-md mx-auto">
+          We won't auto-mark any of these as eligible. You confirm each one —
+          that confirmation timestamp is what makes your Substantiation Record
+          audit-defensible.
+        </p>
+      </div>
+    </AuthenticatedLayout>
+  );
+}

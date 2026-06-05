@@ -38,6 +38,9 @@ const ReimbursementRequests = lazy(
 const ReimbursementDetails = lazy(() => import("./pages/ReimbursementDetails"));
 const HSAReimbursement = lazy(() => import("./pages/HSAReimbursement"));
 const BankAccounts = lazy(() => import("./pages/BankAccounts"));
+const HistoricalImport = lazy(() => import("./pages/HistoricalImport"));
+const ExpenseEntry = lazy(() => import("./pages/ExpenseEntry"));
+const Review = lazy(() => import("./pages/Review"));
 const Documents = lazy(() => import("./pages/Documents"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Install = lazy(() => import("./pages/Install"));
@@ -283,6 +286,39 @@ const App = () => (
                           <ProtectedRoute>
                             <ErrorBoundary>
                               <BankAccounts />
+                            </ErrorBoundary>
+                          </ProtectedRoute>
+                        }
+                      />
+                      {/* Reclaim Phase 2 W3: historical-import wow moment */}
+                      <Route
+                        path="/onboarding/import"
+                        element={
+                          <ProtectedRoute>
+                            <ErrorBoundary>
+                              <HistoricalImport />
+                            </ErrorBoundary>
+                          </ProtectedRoute>
+                        }
+                      />
+                      {/* Reclaim Phase 2 W4: manual expense entry fallback */}
+                      <Route
+                        path="/expenses/new"
+                        element={
+                          <ProtectedRoute>
+                            <ErrorBoundary>
+                              <ExpenseEntry />
+                            </ErrorBoundary>
+                          </ProtectedRoute>
+                        }
+                      />
+                      {/* Reclaim Phase 3: classification review + audit-trail capture */}
+                      <Route
+                        path="/review"
+                        element={
+                          <ProtectedRoute>
+                            <ErrorBoundary>
+                              <Review />
                             </ErrorBoundary>
                           </ProtectedRoute>
                         }

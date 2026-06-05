@@ -66,6 +66,20 @@ serve(async (req) => {
       `[${requestId}] Creating Plaid link token using ${plaidBaseUrl}`,
     );
 
+    // Reclaim Phase 2: bind the webhook URL per item at Link-token creation.
+    // The Plaid Dashboard "default webhook" UI only lists events for products
+    // approved on this account (currently Transfer/Wallet/Bank Income — not
+    // Transactions, which we use). Setting the webhook here is independent of
+    // dashboard config and works in sandbox today; it will work in production
+    // once Transactions production access is granted in Phase 6.
+    //
+    // We derive the project ref from SUPABASE_URL and build the new
+    // `<ref>.functions.supabase.co/<name>` hostname rather than the legacy
+    // `<ref>.supabase.co/functions/v1/<name>` pattern — the latter does not
+    // resolve as a public hostname for this project (verified 2026-05-24).
+    const projectRef = supabaseUrl.replace(/^https?:\/\//, "").split(".")[0];
+    const webhookUrl = `https://${projectRef}.functions.supabase.co/plaid-webhook`;
+
     // Create Plaid link token
     const response = await fetch(`${plaidBaseUrl}/link/token/create`, {
       method: "POST",
@@ -82,6 +96,7 @@ serve(async (req) => {
         products: ["transactions"],
         country_codes: ["US"],
         language: "en",
+        webhook: webhookUrl,
       }),
     });
 
