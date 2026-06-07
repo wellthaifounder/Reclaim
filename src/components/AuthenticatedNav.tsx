@@ -8,15 +8,15 @@ import {
   Calculator,
   Receipt,
   FileText,
-  BarChart3,
   Menu,
   Settings,
-  Home,
   Wallet,
   TrendingUp,
-  Upload,
   FolderHeart,
   ClipboardList,
+  LayoutDashboard,
+  Building2,
+  HelpCircle,
 } from "lucide-react";
 import { WellbieAvatar } from "@/components/WellbieAvatar";
 import { toast } from "sonner";
@@ -28,7 +28,6 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
-import { useHSA } from "@/contexts/HSAContext";
 import { OnboardingProgressBar } from "@/components/onboarding/OnboardingProgressBar";
 import { FF } from "@/lib/featureFlags";
 
@@ -44,8 +43,6 @@ export const AuthenticatedNav = ({
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const { hasHSA } = useHSA();
-
   const handleSignOut = async () => {
     const { error } = await supabase.auth.signOut();
     if (error) {
@@ -60,39 +57,40 @@ export const AuthenticatedNav = ({
     setMobileMenuOpen(false);
   };
 
-  // Primary nav — matches sidebar and bottom tabs exactly
+  // Reclaim Phase 5 W1 — primary nav matches AppSidebar + BottomTabNavigation:
+  //   Dashboard · Expenses · Expense Groups · Substantiation
   const mainNavItems = [
-    { icon: Home, label: "Home", path: "/dashboard" },
-    { icon: Receipt, label: "Bills", path: "/bills", badge: pendingReviews },
-    { icon: FolderHeart, label: "Care Events", path: "/collections" },
-    { icon: TrendingUp, label: "Reports", path: "/reports" },
+    { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
+    {
+      icon: Receipt,
+      label: "Expenses",
+      path: "/expenses",
+      badge: pendingReviews,
+    },
+    { icon: FolderHeart, label: "Expense Groups", path: "/expense-groups" },
+    { icon: FileText, label: "Substantiation", path: "/substantiation" },
   ];
 
-  // Mobile hamburger sections — mirror the sidebar groups
-  const coreItems = [
-    { icon: Home, label: "Home", path: "/dashboard" },
-    { icon: Receipt, label: "Bills", path: "/bills", badge: pendingReviews },
-    { icon: FolderHeart, label: "Care Events", path: "/collections" },
-  ];
+  // Mobile hamburger sections — mirror sidebar groups.
+  const coreItems = mainNavItems;
 
-  const hsaItems = [
+  const moreItems = [
     {
       icon: Wallet,
       label: "Transactions",
       path: "/transactions",
       badge: unreviewedTransactions,
     },
+    { icon: Building2, label: "Bank Accounts", path: "/bank-accounts" },
     {
       icon: ClipboardList,
-      label: "Reimbursement Requests",
+      label: "HSA Claims",
       path: "/reimbursement-requests",
     },
     { icon: Calculator, label: "HSA Calculator", path: "/savings-calculator" },
-  ];
-
-  const insightsItems = [
     { icon: TrendingUp, label: "Reports", path: "/reports" },
     { icon: FileText, label: "Documents", path: "/documents" },
+    { icon: HelpCircle, label: "HSA Guide", path: "/guide" },
   ];
 
   const isActivePath = (path: string) => {
@@ -209,9 +207,8 @@ export const AuthenticatedNav = ({
                     aria-label="Mobile navigation menu"
                   >
                     {[
-                      { heading: "Core", items: coreItems },
-                      { heading: "HSA & Money", items: hsaItems },
-                      { heading: "Reports", items: insightsItems },
+                      { heading: "Reclaim", items: coreItems },
+                      { heading: "More", items: moreItems },
                     ].map(({ heading, items }) => (
                       <div key={heading} className="space-y-2">
                         <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide px-2">

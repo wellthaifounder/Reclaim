@@ -184,9 +184,9 @@ export default function Collections() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold">Care Events</h1>
+            <h1 className="text-3xl font-bold">Expense Groups</h1>
             <p className="text-muted-foreground">
-              Group related bills, documents, and payments by episode of care
+              Group related expenses, documents, and payments by episode of care
             </p>
           </div>
           <Button

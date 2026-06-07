@@ -142,6 +142,20 @@ const App = () => (
                         }
                       />
 
+                      {/* Reclaim Phase 5 W1: brief §9 renames Bills →
+                          Expenses. /expenses is now canonical; /bills stays
+                          mounted as an alias (not a redirect) for legacy
+                          links + bookmarks until Phase 6 cleanup. */}
+                      <Route
+                        path="/expenses"
+                        element={
+                          <ProtectedRoute>
+                            <ErrorBoundary>
+                              <Bills />
+                            </ErrorBoundary>
+                          </ProtectedRoute>
+                        }
+                      />
                       {/* Unified Bills Management Routes */}
                       <Route
                         path="/bills"
@@ -336,6 +350,19 @@ const App = () => (
                         }
                       />
 
+                      {/* Reclaim Phase 5 W1: brief §9 renames Care Events /
+                          Collections → Expense Groups. /expense-groups is
+                          now canonical; /collections stays as alias. */}
+                      <Route
+                        path="/expense-groups"
+                        element={
+                          <ProtectedRoute>
+                            <ErrorBoundary>
+                              <Collections />
+                            </ErrorBoundary>
+                          </ProtectedRoute>
+                        }
+                      />
                       {/* Collections Routes */}
                       <Route
                         path="/collections"

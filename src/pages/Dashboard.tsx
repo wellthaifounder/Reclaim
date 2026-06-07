@@ -1,471 +1,362 @@
-import { useState, useEffect } from "react";
-// Bill review feature archived
-// import { BillReviewCard } from "@/components/bills/BillReviewCard";
+// Reclaim Phase 5 W1 — Dashboard rewrite to the state-machine action queue.
+//
+// Replaces the Wellth-era widget-grid dashboard with the action queue from
+// brief §8: one primary number (available to reclaim) and four buckets the
+// user can step through to complete the reimbursement loop.
+//
+// Buckets, in narrative order:
+//   1. NEEDS RECEIPT     → attach a document to expenses that need one
+//   2. PENDING REVIEW    → confirm AI classifications
+//   3. READY TO SUBMIT   → bundle ELIGIBLE expenses into a Substantiation
+//                          Record (relabeled "Shoebox Balance" for users
+//                          on the shoebox strategy, with no CTA)
+//   4. SUBMITTED         → waiting on a matching HSA deposit
+//
+// Empty state ("you're all caught up — $X reclaimed this year") never
+// shows a void; the reclaimed-YTD figure always provides a sense of
+// progress.
+
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { analytics } from "@/lib/analytics";
-import { logError } from "@/utils/errorHandler";
-import { Button } from "@/components/ui/button";
-import { BarChart3 } from "lucide-react";
-import type { User } from "@supabase/supabase-js";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
-import { ActionCard } from "@/components/dashboard/ActionCard";
-import { WellbieTip } from "@/components/dashboard/WellbieTip";
-import { EmptyStateOnboarding } from "@/components/dashboard/EmptyStateOnboarding";
-import { MissingHSADateBanner } from "@/components/dashboard/MissingHSADateBanner";
-import { DashboardSkeleton } from "@/components/skeletons/DashboardSkeleton";
-import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { useHSA } from "@/contexts/HSAContext";
-import { useOnboarding } from "@/contexts/OnboardingContext";
-import { OnboardingWizard } from "@/components/onboarding/OnboardingWizard";
-import { QuickActionBar } from "@/components/dashboard/QuickActionBar";
-import { TotalValueCard } from "@/components/dashboard/TotalValueCard";
-import { HSAHealthCheck } from "@/components/dashboard/HSAHealthCheck";
-import { AttentionBanner } from "@/components/dashboard/AttentionBanner";
-import { useAttentionItems } from "@/hooks/useAttentionItems";
-import { FF } from "@/lib/featureFlags";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Receipt,
+  Eye,
+  CheckCircle2,
+  Clock,
+  ArrowRight,
+  Sparkles,
+  PiggyBank,
+} from "lucide-react";
+import { logError } from "@/utils/errorHandler";
 
-const Dashboard = () => {
-  const navigate = useNavigate();
-  const { hasHSA, hsaOpenedDate, userIntent } = useHSA();
-  const attention = useAttentionItems();
+interface BucketCounts {
+  count: number;
+  total: number;
+}
 
-  // Show HSA features if user selected HSA intent or actually has an HSA
-  const showHSAFeatures =
-    userIntent === "hsa" || userIntent === "both" || hasHSA;
-  const onboarding = useOnboarding();
-  const [user, setUser] = useState<User | null>(null);
-  const [showWelcome, setShowWelcome] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [projectedSavings, setProjectedSavings] = useState<number | null>(null);
-  const [stats, setStats] = useState({
-    totalExpenses: 0,
-    taxSavings: 0,
-    rewardsEarned: 0,
-    expenseCount: 0,
-    unreviewedTransactions: 0,
-    hsaClaimableAmount: 0,
-    disputeSavings: 0,
+interface DashboardData {
+  needsReceipt: BucketCounts;
+  pendingReview: BucketCounts;
+  eligible: BucketCounts;
+  submitted: BucketCounts;
+  reclaimedYtd: number;
+  isShoebox: boolean;
+}
+
+const ZERO: BucketCounts = { count: 0, total: 0 };
+const EMPTY_DATA: DashboardData = {
+  needsReceipt: ZERO,
+  pendingReview: ZERO,
+  eligible: ZERO,
+  submitted: ZERO,
+  reclaimedYtd: 0,
+  isShoebox: false,
+};
+
+const CURRENT_YEAR = new Date().getFullYear();
+
+function fmtMoney(n: number): string {
+  return n.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 2,
   });
-  interface RecentExpense {
-    id: string;
-    vendor: string;
-    amount: number;
-    is_hsa_eligible: boolean;
-    invoice_date: string | null;
-    date: string;
-    reimbursement_strategy?: string;
-  }
-  const [recentExpenses, setRecentExpenses] = useState<RecentExpense[]>([]);
-  const [hasConnectedBank, setHasConnectedBank] = useState(false);
-  // Bill review feature archived - removed pendingReviews and disputeStats
+}
+
+export default function Dashboard() {
+  const navigate = useNavigate();
+  const [data, setData] = useState<DashboardData>(EMPTY_DATA);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Auth is guaranteed by ProtectedRoute — just load the current user and data.
-    // The loading gate must always release: previously `setLoading(false)` only
-    // ran inside `if (session)`, so a stalled or session-less getSession kept the
-    // skeleton on screen indefinitely. The 3s safety timeout caps this even if
-    // getSession itself never resolves.
-    const safetyTimeout = setTimeout(() => setLoading(false), 3000);
-    supabase.auth
-      .getSession()
-      .then(({ data: { session } }) => {
-        if (session) setUser(session.user);
-      })
-      .finally(() => {
-        clearTimeout(safetyTimeout);
-        setLoading(false);
-      });
+    let cancelled = false;
+    // 3s safety timeout so we never strand the user on a skeleton if a
+    // Supabase call hangs. Matches the previous Dashboard's pattern.
+    const timeout = setTimeout(() => {
+      if (!cancelled) setLoading(false);
+    }, 3000);
 
-    fetchStats();
-    fetchTransactionStats();
-    checkBankConnection();
-    analytics.pageView("/dashboard");
-
-    // Handle session expiration while on this page
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === "SIGNED_OUT" || !session) {
-        navigate("/auth");
-      } else {
-        setUser(session.user);
-      }
-    });
-
-    return () => {
-      clearTimeout(safetyTimeout);
-      subscription.unsubscribe();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Load calculator data if available (for new users)
-  // Source of truth: sessionStorage on the very first visit; thereafter the
-  // projection is persisted to profiles.calculator_projection so it survives
-  // tab close until the user uploads their first bill (at which point the
-  // empty state graduates to the populated dashboard).
-  useEffect(() => {
-    const loadCalculatorData = async () => {
-      // Only load if user has 0 expenses and we have a user
-      if (stats.expenseCount > 0 || !user) return;
-
-      const sessionRaw = sessionStorage.getItem("calculatorData");
-
-      if (sessionRaw) {
-        // First visit — read from sessionStorage and persist to profile.
-        try {
-          const calculatorData = JSON.parse(sessionRaw);
-
-          if (calculatorData.estimatedSavings) {
-            setProjectedSavings(calculatorData.estimatedSavings);
-          }
-
-          const updates: Record<string, unknown> = {
-            calculator_projection: calculatorData,
-          };
-          if (calculatorData.hasHSA) {
-            updates.has_hsa = true;
-          }
-          const { error } = await supabase
-            .from("profiles")
-            .update(updates)
-            .eq("id", user.id);
-          if (error) logError("Error persisting calculator projection", error);
-
-          sessionStorage.removeItem("calculatorData");
-          sessionStorage.removeItem("estimatedSavings");
-        } catch (error) {
-          logError("Error loading calculator data", error);
-        }
-        return;
-      }
-
-      // Returning visit — fall back to profile.
+    async function load() {
       try {
-        const { data: profile, error } = await supabase
-          .from("profiles")
-          .select("calculator_projection")
-          .eq("id", user.id)
-          .maybeSingle();
-        if (error) {
-          logError("Error reading calculator_projection from profile", error);
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user) {
+          navigate("/auth", { replace: true });
           return;
         }
-        const projection = profile?.calculator_projection as {
-          estimatedSavings?: number;
-        } | null;
-        if (projection?.estimatedSavings) {
-          setProjectedSavings(projection.estimatedSavings);
-        }
-      } catch (error) {
-        logError("Error loading calculator_projection", error);
-      }
-    };
 
-    loadCalculatorData();
-  }, [stats.expenseCount, user]);
+        const [{ data: invoiceRows }, { data: profileRow }] = await Promise.all(
+          [
+            supabase
+              .from("invoices")
+              .select("lifecycle_status, amount, date, reimbursed_at")
+              .eq("user_id", user.id),
+            supabase
+              .from("profiles")
+              .select("reimbursement_strategy_preference")
+              .eq("id", user.id)
+              .maybeSingle(),
+          ],
+        );
 
-  const fetchStats = async () => {
-    try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const user = session?.user;
-      if (!user) return;
+        const fresh: DashboardData = { ...EMPTY_DATA };
+        fresh.isShoebox =
+          profileRow?.reimbursement_strategy_preference === "shoebox";
 
-      const { data: invoices, error } = await supabase
-        .from("invoices")
-        .select("id, amount, is_hsa_eligible, invoice_date, date")
-        .order("date", { ascending: false });
-
-      if (error) throw error;
-
-      const totalInvoiced =
-        invoices?.reduce((sum, inv) => sum + Number(inv.amount), 0) || 0;
-      const hsaEligible =
-        invoices
-          ?.filter((inv) => inv.is_hsa_eligible)
-          .reduce((sum, inv) => sum + Number(inv.amount), 0) || 0;
-
-      // Calculate HSA claimable amount (HSA-eligible expenses that haven't been reimbursed)
-      const { data: reimbursedInvoices } = await supabase
-        .from("reimbursement_items")
-        .select("invoice_id");
-
-      const reimbursedIds = new Set(
-        reimbursedInvoices?.map((r) => r.invoice_id) || [],
-      );
-      const hsaClaimable =
-        invoices
-          ?.filter((inv) => {
-            if (!inv.is_hsa_eligible || reimbursedIds.has(inv.id)) return false;
-            if (hsaOpenedDate) {
-              const rawDate = inv.invoice_date || inv.date;
-              if (!rawDate) return false;
-              const invoiceDate = new Date(rawDate);
-              const hsaDate = new Date(hsaOpenedDate);
-              return !isNaN(invoiceDate.getTime()) && invoiceDate >= hsaDate;
+        for (const row of invoiceRows ?? []) {
+          const amount = Number(row.amount) || 0;
+          switch (row.lifecycle_status) {
+            case "needs_receipt":
+              fresh.needsReceipt.count++;
+              fresh.needsReceipt.total += amount;
+              break;
+            case "pending_review":
+              fresh.pendingReview.count++;
+              fresh.pendingReview.total += amount;
+              break;
+            case "eligible":
+              fresh.eligible.count++;
+              fresh.eligible.total += amount;
+              break;
+            case "submitted":
+              fresh.submitted.count++;
+              fresh.submitted.total += amount;
+              break;
+            case "reimbursed": {
+              const ts = row.reimbursed_at;
+              if (ts && new Date(ts as string).getFullYear() === CURRENT_YEAR) {
+                fresh.reclaimedYtd += amount;
+              }
+              break;
             }
-            return true;
-          })
-          .reduce((sum, inv) => sum + Number(inv.amount), 0) || 0;
+          }
+        }
 
-      const taxSavings = hsaEligible * 0.3;
-      const rewardsEarned = hsaEligible * 0.02; // Est. rewards on HSA-eligible spend only
-
-      setStats((prev) => ({
-        ...prev,
-        totalExpenses: totalInvoiced,
-        taxSavings,
-        rewardsEarned,
-        expenseCount: invoices?.length || 0,
-        hsaClaimableAmount: hsaClaimable,
-        disputeSavings: 0,
-      }));
-
-      setRecentExpenses(invoices?.slice(0, 5) || []);
-    } catch (error) {
-      logError("Failed to fetch stats", error);
+        if (!cancelled) setData(fresh);
+      } catch (err) {
+        logError("Dashboard.load", err);
+      } finally {
+        if (!cancelled) setLoading(false);
+        clearTimeout(timeout);
+      }
     }
-  };
 
-  const checkBankConnection = async () => {
-    try {
-      const { data: accounts, error } = await supabase
-        .from("plaid_connections")
-        .select("id")
-        .limit(1);
+    load();
+    return () => {
+      cancelled = true;
+      clearTimeout(timeout);
+    };
+  }, [navigate]);
 
-      if (error) throw error;
-      setHasConnectedBank((accounts?.length || 0) > 0);
-    } catch (error) {
-      logError("Failed to check bank connection", error);
-    }
-  };
-
-  const fetchTransactionStats = async () => {
-    try {
-      const { data: transactions, error } = await supabase
-        .from("transactions")
-        .select("needs_review")
-        .eq("needs_review", true);
-
-      if (error) throw error;
-      setStats((prev) => ({
-        ...prev,
-        unreviewedTransactions: transactions?.length || 0,
-      }));
-    } catch (error) {
-      logError("Failed to fetch transaction stats", error);
-    }
-  };
-
-  // Bill review feature archived - removed fetchBillReviews and fetchDisputeStats
-
-  const isNewUser =
-    stats.expenseCount === 0 &&
-    recentExpenses.length === 0 &&
-    !hasConnectedBank;
-  const firstName =
-    user?.user_metadata?.full_name?.split(" ")[0] ||
-    user?.email?.split("@")[0] ||
-    "there";
-
-  // Show welcome dialog for first-time users - MUST be before early returns.
-  // Wave 3 experiment: when FF.AUTO_DISMISS_ONBOARDING_FOR_BILLING is on,
-  // skip the auto-show for users who picked userIntent === 'billing' — the
-  // HSA-mechanics carousel is dead weight for them. HSA / both still see it.
-  useEffect(() => {
-    const skipForBillingIntent =
-      FF.AUTO_DISMISS_ONBOARDING_FOR_BILLING && userIntent === "billing";
-
-    if (
-      !loading &&
-      !isNewUser &&
-      stats.expenseCount <= 3 &&
-      !onboarding.hasCompletedOnboarding &&
-      !skipForBillingIntent
-    ) {
-      const timer = setTimeout(() => setShowWelcome(true), 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [
-    loading,
-    isNewUser,
-    stats.expenseCount,
-    onboarding.hasCompletedOnboarding,
-    userIntent,
-  ]);
+  // Available to reclaim = ELIGIBLE + NEEDS_RECEIPT (per brief §8).
+  const availableToReclaim = data.eligible.total + data.needsReceipt.total;
+  const allClear =
+    !loading &&
+    data.needsReceipt.count === 0 &&
+    data.pendingReview.count === 0 &&
+    data.eligible.count === 0 &&
+    data.submitted.count === 0;
 
   if (loading) {
     return (
-      <AuthenticatedLayout unreviewedTransactions={0}>
-        <div role="status" aria-live="polite" aria-busy="true">
-          <span className="sr-only">Loading your dashboard…</span>
-          <DashboardSkeleton />
+      <AuthenticatedLayout>
+        <div className="max-w-2xl mx-auto px-4 py-8 space-y-4">
+          <Skeleton className="h-32 w-full" />
+          <Skeleton className="h-20 w-full" />
+          <Skeleton className="h-20 w-full" />
+          <Skeleton className="h-20 w-full" />
+          <Skeleton className="h-20 w-full" />
         </div>
       </AuthenticatedLayout>
     );
   }
 
   return (
-    <ErrorBoundary
-      fallbackTitle="Dashboard Error"
-      fallbackDescription="We encountered an error loading your dashboard. Your data is safe. Please try again."
-      onReset={() => window.location.reload()}
-    >
-      <AuthenticatedLayout
-        unreviewedTransactions={stats.unreviewedTransactions}
-      >
-        <div
-          id="main-content"
-          className="container mx-auto max-w-7xl px-4 py-4 md:py-6 pb-8 md:pb-12 space-y-6"
-        >
-          {!hsaOpenedDate && stats.expenseCount > 0 && (
-            <MissingHSADateBanner onDateSet={fetchStats} />
-          )}
+    <AuthenticatedLayout>
+      <div className="max-w-2xl mx-auto px-4 py-6 sm:py-8 space-y-4">
+        {/* Primary number — sum of ELIGIBLE + NEEDS_RECEIPT */}
+        <Card className="border-primary/30">
+          <CardContent className="p-5 sm:p-6">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-1.5">
+              {data.isShoebox
+                ? "Shoebox balance + receipts pending"
+                : "Available to reclaim"}
+            </p>
+            <p className="text-4xl sm:text-5xl font-bold tabular-nums">
+              {fmtMoney(availableToReclaim)}
+            </p>
+            <p className="text-xs text-muted-foreground mt-2">
+              {data.eligible.count + data.needsReceipt.count} expense
+              {data.eligible.count + data.needsReceipt.count === 1
+                ? ""
+                : "s"}{" "}
+              across the action queue
+            </p>
+          </CardContent>
+        </Card>
 
-          {!isNewUser && <AttentionBanner attention={attention} />}
-
-          {isNewUser ? (
-            <EmptyStateOnboarding projectedSavings={projectedSavings} />
-          ) : (
-            <>
-              <OnboardingWizard
-                open={showWelcome}
-                onOpenChange={(open) => {
-                  if (!open) setShowWelcome(false);
-                }}
-              />
-
-              {/* Simplified Single-Page Dashboard */}
-              <div className="space-y-4">
-                {/* Welcome Header */}
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                  <div>
-                    <h1 className="text-3xl font-bold">
-                      Welcome back, {firstName}! 👋
-                    </h1>
-                    <p className="text-muted-foreground mt-1">
-                      Here's what needs your attention
-                    </p>
-                  </div>
-                  <Button
-                    onClick={() => navigate("/reports")}
-                    variant="outline"
-                    className="gap-2"
-                  >
-                    <BarChart3 className="h-4 w-4" />
-                    View Reports
-                  </Button>
-                </div>
-
-                {/* Hero Metrics */}
-                <TotalValueCard
-                  taxSavings={stats.taxSavings}
-                  disputeSavings={stats.disputeSavings}
-                  rewardsEarned={stats.rewardsEarned}
-                  paymentOptimizations={0}
-                  hasHSA={hasHSA}
-                  hsaClaimableAmount={stats.hsaClaimableAmount}
-                  totalTracked={stats.totalExpenses}
-                  billCount={stats.expenseCount}
-                />
-
-                {/* Quick Actions */}
-                <QuickActionBar
-                  hasHSA={hasHSA}
-                  hsaClaimable={stats.hsaClaimableAmount}
-                  unreviewedTransactions={stats.unreviewedTransactions}
-                />
-
-                {/* HSA Health Check - Adaptive Widget */}
-                {showHSAFeatures && (
-                  <HSAHealthCheck
-                    hasHSA={hasHSA}
-                    unreimbursedExpenses={stats.hsaClaimableAmount}
-                  />
-                )}
-
-                {/* Recent Bills */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                  <div className="lg:col-span-2 space-y-4">
-                    {recentExpenses.length > 0 && (
-                      <ActionCard
-                        icon="🏥"
-                        title="Recent Medical Bills"
-                        count={recentExpenses.length}
-                        actions={
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => navigate("/bills")}
-                          >
-                            View All
-                          </Button>
-                        }
-                        buttonText="Show recent bills"
-                      >
-                        <div className="space-y-3">
-                          {recentExpenses.slice(0, 3).map((expense) => (
-                            <div
-                              key={expense.id}
-                              className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer"
-                              onClick={() => navigate(`/bills/${expense.id}`)}
-                            >
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2">
-                                  <p className="font-medium">
-                                    {expense.vendor}
-                                  </p>
-                                  {(() => {
-                                    const rawDate =
-                                      expense.invoice_date || expense.date;
-                                    const eligibleAfter =
-                                      expense.is_hsa_eligible &&
-                                      (!hsaOpenedDate ||
-                                        (rawDate &&
-                                          new Date(rawDate) >=
-                                            new Date(hsaOpenedDate)));
-                                    return eligibleAfter ? (
-                                      <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
-                                        HSA-eligible ✓
-                                      </span>
-                                    ) : null;
-                                  })()}
-                                </div>
-                                <p className="text-sm text-muted-foreground">
-                                  {new Date(expense.date).toLocaleDateString()}
-                                </p>
-                              </div>
-                              <p className="font-semibold">
-                                ${Number(expense.amount).toFixed(2)}
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-                      </ActionCard>
-                    )}
-
-                    {/* Bill review feature archived - removed pending reviews section */}
-                  </div>
-
-                  {/* Side Cards */}
-                  <div className="space-y-4">
-                    <WellbieTip
-                      unreviewedCount={stats.unreviewedTransactions}
-                      hasExpenses={stats.expenseCount > 0}
-                    />
-                  </div>
-                </div>
+        {/* All-caught-up empty state */}
+        {allClear ? (
+          <Card>
+            <CardContent className="p-8 text-center space-y-3">
+              <CheckCircle2 className="h-10 w-10 mx-auto text-emerald-500" />
+              <h2 className="text-xl font-semibold">You're all caught up</h2>
+              <p className="text-sm text-muted-foreground">
+                {data.reclaimedYtd > 0
+                  ? `${fmtMoney(data.reclaimedYtd)} reclaimed this year.`
+                  : "Add your first expense to start reclaiming."}
+              </p>
+              <div className="flex justify-center gap-2 pt-2">
+                <Button variant="outline" onClick={() => navigate("/expenses")}>
+                  See all expenses
+                </Button>
+                <Button onClick={() => navigate("/bills/new")}>
+                  Add an expense
+                </Button>
               </div>
-            </>
-          )}
-        </div>
-      </AuthenticatedLayout>
-    </ErrorBoundary>
+            </CardContent>
+          </Card>
+        ) : (
+          <>
+            {/* NEEDS RECEIPT */}
+            <BucketCard
+              icon={Receipt}
+              tone="amber"
+              label="Needs receipt"
+              count={data.needsReceipt.count}
+              total={data.needsReceipt.total}
+              copy="Attach receipts before you forget"
+              ctaLabel="Attach"
+              onClick={() => navigate("/review")}
+            />
+
+            {/* PENDING REVIEW */}
+            <BucketCard
+              icon={Eye}
+              tone="violet"
+              label="Pending review"
+              count={data.pendingReview.count}
+              total={data.pendingReview.total}
+              copy="Confirm these are HSA-eligible"
+              ctaLabel="Review"
+              onClick={() => navigate("/review")}
+            />
+
+            {/* READY TO SUBMIT  /  Shoebox Balance */}
+            <BucketCard
+              icon={data.isShoebox ? PiggyBank : CheckCircle2}
+              tone="emerald"
+              label={data.isShoebox ? "Shoebox balance" : "Ready to submit"}
+              count={data.eligible.count}
+              total={data.eligible.total}
+              copy={
+                data.isShoebox
+                  ? "Saved for future reimbursement"
+                  : "Generate your Substantiation Record"
+              }
+              ctaLabel={data.isShoebox ? "" : "Submit"}
+              onClick={
+                data.isShoebox ? undefined : () => navigate("/substantiation")
+              }
+            />
+
+            {/* SUBMITTED */}
+            <BucketCard
+              icon={Clock}
+              tone="slate"
+              label="Submitted"
+              count={data.submitted.count}
+              total={data.submitted.total}
+              copy="Waiting for HSA deposit"
+              ctaLabel="Track"
+              onClick={() => navigate("/substantiation")}
+            />
+
+            {/* Reclaimed YTD footer */}
+            {data.reclaimedYtd > 0 && (
+              <p className="text-xs text-center text-muted-foreground pt-2">
+                <Sparkles className="inline h-3 w-3 mr-1 text-emerald-600" />
+                {fmtMoney(data.reclaimedYtd)} reclaimed this year
+              </p>
+            )}
+          </>
+        )}
+      </div>
+    </AuthenticatedLayout>
   );
+}
+
+// ── Bucket card ─────────────────────────────────────────────────────────
+
+const TONE_STYLES: Record<
+  "amber" | "violet" | "emerald" | "slate",
+  { icon: string; bg: string }
+> = {
+  amber: { icon: "text-amber-700", bg: "bg-amber-50" },
+  violet: { icon: "text-violet-700", bg: "bg-violet-50" },
+  emerald: { icon: "text-emerald-700", bg: "bg-emerald-50" },
+  slate: { icon: "text-slate-700", bg: "bg-slate-100" },
 };
 
-export default Dashboard;
+interface BucketCardProps {
+  icon: React.ComponentType<{ className?: string }>;
+  tone: "amber" | "violet" | "emerald" | "slate";
+  label: string;
+  count: number;
+  total: number;
+  copy: string;
+  ctaLabel: string;
+  onClick?: () => void;
+}
+
+function BucketCard({
+  icon: Icon,
+  tone,
+  label,
+  count,
+  total,
+  copy,
+  ctaLabel,
+  onClick,
+}: BucketCardProps) {
+  // Empty buckets render dimmed and not actionable so the queue's signal
+  // stays strong (only "real" work draws the eye).
+  const dimmed = count === 0;
+  const styles = TONE_STYLES[tone];
+  const interactive = !!onClick && !dimmed && !!ctaLabel;
+  return (
+    <Card className={dimmed ? "opacity-60" : ""}>
+      <CardContent className="p-4 sm:p-5 flex items-center gap-4">
+        <div
+          className={`rounded-full ${styles.bg} p-2.5 shrink-0`}
+          aria-hidden="true"
+        >
+          <Icon className={`h-5 w-5 ${styles.icon}`} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-baseline gap-2 flex-wrap">
+            <p className="font-semibold text-sm sm:text-base">{label}</p>
+            <p className="text-xs text-muted-foreground tabular-nums">
+              {count} expense{count === 1 ? "" : "s"} · {fmtMoney(total)}
+            </p>
+          </div>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
+            {copy}
+          </p>
+        </div>
+        {interactive && (
+          <Button size="sm" onClick={onClick} className="shrink-0">
+            {ctaLabel}
+            <ArrowRight className="h-3.5 w-3.5 ml-1" />
+          </Button>
+        )}
+      </CardContent>
+    </Card>
+  );
+}

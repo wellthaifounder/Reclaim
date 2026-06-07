@@ -314,9 +314,9 @@ const Bills = () => {
         {/* Header */}
         <div className="flex items-center justify-between sticky top-0 z-10 bg-background py-2 -mt-2">
           <div>
-            <h1 className="text-3xl font-bold mb-1">Bills</h1>
+            <h1 className="text-3xl font-bold mb-1">Expenses</h1>
             <p className="text-muted-foreground text-sm">
-              Upload, track, and manage your medical bills and expenses
+              Upload, track, and manage your medical expenses
             </p>
           </div>
           <Button onClick={() => navigate("/bills/new")}>
@@ -413,7 +413,7 @@ const Bills = () => {
           <Card>
             <CardHeader>
               <div className="flex justify-between items-center">
-                <CardTitle>All Bills</CardTitle>
+                <CardTitle>All Expenses</CardTitle>
                 <Button onClick={() => navigate("/bills/new")}>
                   <Plus className="h-4 w-4 mr-2" />
                   Add Bill

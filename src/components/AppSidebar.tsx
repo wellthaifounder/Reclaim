@@ -8,13 +8,13 @@ import {
   Settings,
   MessageSquare,
   Shield,
-  Home,
   ChevronDown,
   ChevronRight,
   FolderHeart,
   ClipboardList,
-  BookOpen,
   HelpCircle,
+  LayoutDashboard,
+  Building2,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { NavLink } from "@/components/NavLink";
@@ -39,7 +39,6 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { FF } from "@/lib/featureFlags";
 
 interface AppSidebarProps {
   unreviewedTransactions?: number;
@@ -53,36 +52,45 @@ interface MenuItem {
   hsaOnly?: boolean;
 }
 
-// Wave 4 IA-collapse experiment: when FF.BILLS_LEDGER_IA_COLLAPSE is on, the
-// standalone Ledger nav item disappears. Bills owns the ledger view via its
-// `?view=ledger` tab; the standalone /ledger URL still 301s there.
-const coreMenuItems: MenuItem[] = [
-  { icon: Home, label: "Home", path: "/dashboard", badgeKey: null },
-  { icon: Receipt, label: "Bills", path: "/bills", badgeKey: null },
-  ...(FF.BILLS_LEDGER_IA_COLLAPSE
-    ? []
-    : [
-        {
-          icon: BookOpen,
-          label: "Ledger",
-          path: "/ledger",
-          badgeKey: null,
-        },
-      ]),
+// Reclaim Phase 5 W1 — primary IA per brief §9.
+//   Dashboard · Expenses · Expense Groups · Substantiation
+// Everything Wellth-era (Transactions, HSA Claims, HSA Calculator, Reports,
+// Documents, Bank Accounts, HSA Guide, Ledger) lives behind the "More" group
+// below until Phase 6 dead-code sweep decides what stays.
+const primaryMenuItems: MenuItem[] = [
+  {
+    icon: LayoutDashboard,
+    label: "Dashboard",
+    path: "/dashboard",
+    badgeKey: null,
+  },
+  { icon: Receipt, label: "Expenses", path: "/expenses", badgeKey: null },
   {
     icon: FolderHeart,
-    label: "Care Events",
-    path: "/collections",
+    label: "Expense Groups",
+    path: "/expense-groups",
+    badgeKey: null,
+  },
+  {
+    icon: FileText,
+    label: "Substantiation",
+    path: "/substantiation",
     badgeKey: null,
   },
 ];
 
-const hsaMenuItems: MenuItem[] = [
+const moreMenuItems: MenuItem[] = [
   {
     icon: Wallet,
     label: "Transactions",
     path: "/transactions",
     badgeKey: "unreviewedTransactions",
+  },
+  {
+    icon: Building2,
+    label: "Bank Accounts",
+    path: "/bank-accounts",
+    badgeKey: null,
   },
   {
     icon: ClipboardList,
@@ -96,11 +104,7 @@ const hsaMenuItems: MenuItem[] = [
     path: "/savings-calculator",
     badgeKey: null,
   },
-];
-
-const insightsMenuItems: MenuItem[] = [
   { icon: TrendingUp, label: "Reports", path: "/reports", badgeKey: null },
-  { icon: FileText, label: "Documents", path: "/documents", badgeKey: null },
   { icon: HelpCircle, label: "HSA Guide", path: "/guide", badgeKey: null },
 ];
 
@@ -115,11 +119,12 @@ export function AppSidebar({ unreviewedTransactions = 0 }: AppSidebarProps) {
   const showHSAFeatures =
     userIntent === "hsa" || userIntent === "both" || hasHSA;
 
-  // State for collapsible sections - default all open
+  // Reclaim Phase 5 W1: primary nav (4 tabs) open by default; "More" group
+  // collapsed by default so the Wellth-era tools don't compete visually with
+  // the Reclaim flow.
   const [openSections, setOpenSections] = useState({
-    core: true,
-    hsa: true,
-    insights: true,
+    primary: true,
+    more: false,
     account: true,
   });
 
@@ -196,9 +201,8 @@ export function AppSidebar({ unreviewedTransactions = 0 }: AppSidebarProps) {
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
       <SidebarContent className="overflow-y-auto">
-        {renderMenuSection(coreMenuItems, "Core", "core")}
-        {renderMenuSection(hsaMenuItems, "HSA & Money", "hsa")}
-        {renderMenuSection(insightsMenuItems, "Reports", "insights")}
+        {renderMenuSection(primaryMenuItems, "Reclaim", "primary")}
+        {renderMenuSection(moreMenuItems, "More", "more")}
 
         <Collapsible
           open={openSections.account}

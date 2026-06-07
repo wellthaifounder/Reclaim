@@ -1,53 +1,33 @@
+// Reclaim Phase 5 W1 — 4-tab mobile bottom navigation.
+//
+// Replaces the Wellth-era 4-tab IA (Home / Ledger / Care Events|HSA /
+// Account) with the brief §9 Reclaim primary nav:
+//   Dashboard · Expenses · Expense Groups · Substantiation
+//
+// Wellbie chat stays as its own action button — invoked via window event
+// so the layout component owns the chat instance (no double-mounting).
+// HSA-specific surfaces (HSA Calculator, HSA Claims, Reports, Transactions,
+// Documents, Bank Accounts) all live behind the sidebar's "More" group on
+// desktop and the hamburger sheet on mobile — no per-user branching on the
+// primary bottom nav anymore.
+
 import { NavLink } from "@/components/NavLink";
 import {
-  Home,
+  LayoutDashboard,
   Receipt,
-  BookOpen,
   FolderHeart,
-  Settings,
-  DollarSign,
+  FileText,
   MessageCircle,
 } from "lucide-react";
-import { FF } from "@/lib/featureFlags";
 
-interface BottomTabNavigationProps {
-  unreviewedTransactions?: number;
-  showHSAFeatures?: boolean;
-}
+const TABS = [
+  { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
+  { icon: Receipt, label: "Expenses", path: "/expenses" },
+  { icon: FolderHeart, label: "Groups", path: "/expense-groups" },
+  { icon: FileText, label: "Records", path: "/substantiation" },
+];
 
-export const BottomTabNavigation = ({
-  showHSAFeatures = false,
-}: BottomTabNavigationProps) => {
-  // Wave 4 IA-collapse experiment: when the flag is on, the Ledger tab points
-  // at /bills?view=ledger so the bottom nav and the IA stay consistent.
-  const ledgerPath = FF.BILLS_LEDGER_IA_COLLAPSE
-    ? "/bills?view=ledger"
-    : "/ledger";
-
-  const tabs = showHSAFeatures
-    ? [
-        { icon: Home, label: "Home", path: "/dashboard", badge: 0 },
-        { icon: BookOpen, label: "Ledger", path: ledgerPath, badge: 0 },
-        {
-          icon: DollarSign,
-          label: "HSA",
-          path: "/reimbursement-requests",
-          badge: 0,
-        },
-        { icon: Settings, label: "Account", path: "/settings", badge: 0 },
-      ]
-    : [
-        { icon: Home, label: "Home", path: "/dashboard", badge: 0 },
-        { icon: BookOpen, label: "Ledger", path: ledgerPath, badge: 0 },
-        {
-          icon: FolderHeart,
-          label: "Care Events",
-          path: "/collections",
-          badge: 0,
-        },
-        { icon: Settings, label: "Account", path: "/settings", badge: 0 },
-      ];
-
+export const BottomTabNavigation = () => {
   const handleOpenWellbie = () => {
     window.dispatchEvent(new Event("openWellbieChat"));
   };
@@ -58,22 +38,15 @@ export const BottomTabNavigation = ({
       aria-label="Bottom navigation"
     >
       <div className="flex items-center justify-around h-16 px-2">
-        {tabs.map((tab) => (
+        {TABS.map((tab) => (
           <NavLink
             key={tab.path}
             to={tab.path}
             end={tab.path === "/dashboard"}
-            className="flex flex-col items-center justify-center flex-1 h-full gap-1 rounded-lg transition-colors hover:bg-accent/50 relative"
+            className="flex flex-col items-center justify-center flex-1 h-full gap-1 rounded-lg transition-colors hover:bg-accent/50"
             activeClassName="text-primary"
           >
-            <div className="relative">
-              <tab.icon className="h-5 w-5" aria-hidden="true" />
-              {tab.badge > 0 && (
-                <span className="absolute -top-1 -right-2 bg-primary text-primary-foreground text-[10px] font-bold min-w-[16px] h-4 flex items-center justify-center rounded-full px-1">
-                  {tab.badge}
-                </span>
-              )}
-            </div>
+            <tab.icon className="h-5 w-5" aria-hidden="true" />
             <span className="text-xs">{tab.label}</span>
           </NavLink>
         ))}
