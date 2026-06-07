@@ -26,6 +26,7 @@ import {
   classifyTransaction,
   type PlaidTxnLike,
 } from "../_shared/medicalClassifier.ts";
+import { findReimbursementMatches } from "../_shared/depositMatcher.ts";
 import { verifyPlaidWebhook } from "../_shared/plaidWebhookVerification.ts";
 
 const PLAID_ENV =
@@ -245,6 +246,19 @@ serve(async (req) => {
         continue;
       }
       stored++;
+
+      // Reclaim Phase 4 W3: credit detection. If this txn is a deposit
+      // (Plaid convention: amount < 0), check for open Substantiation
+      // Records the user has whose total matches. Surfaced candidates
+      // appear on /substantiation for the user to confirm or dismiss.
+      if (txn.amount < 0) {
+        await findReimbursementMatches({
+          supabase,
+          userId: connection.user_id,
+          transactionRowId: txnRow.id,
+          rawTxnAmount: txn.amount,
+        });
+      }
 
       // Phase 2: medical transactions that aren't already linked to an
       // invoice seed a new CAPTURED invoice and back-link.

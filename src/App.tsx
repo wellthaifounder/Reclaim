@@ -41,6 +41,7 @@ const BankAccounts = lazy(() => import("./pages/BankAccounts"));
 const HistoricalImport = lazy(() => import("./pages/HistoricalImport"));
 const ExpenseEntry = lazy(() => import("./pages/ExpenseEntry"));
 const Review = lazy(() => import("./pages/Review"));
+const Substantiation = lazy(() => import("./pages/Substantiation"));
 const Documents = lazy(() => import("./pages/Documents"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Install = lazy(() => import("./pages/Install"));
@@ -319,6 +320,17 @@ const App = () => (
                           <ProtectedRoute>
                             <ErrorBoundary>
                               <Review />
+                            </ErrorBoundary>
+                          </ProtectedRoute>
+                        }
+                      />
+                      {/* Reclaim Phase 4 W1+W2: Substantiation Record generation + SUBMITTED state */}
+                      <Route
+                        path="/substantiation"
+                        element={
+                          <ProtectedRoute>
+                            <ErrorBoundary>
+                              <Substantiation />
                             </ErrorBoundary>
                           </ProtectedRoute>
                         }

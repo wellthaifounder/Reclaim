@@ -5,6 +5,7 @@ import {
   classifyTransaction,
   type PlaidTxnLike,
 } from "../_shared/medicalClassifier.ts";
+import { findReimbursementMatches } from "../_shared/depositMatcher.ts";
 import Resend from "https://esm.sh/resend@2.0.0";
 
 const allowedOrigins = [
@@ -476,6 +477,33 @@ serve(async (req) => {
           })
           .eq("id", txn.id);
         if (!updateErr) capturedCount++;
+      }
+
+      // Reclaim Phase 4 W3: deposit → Substantiation Record matching. Loop
+      // over the raw Plaid txns (which preserve sign — credits are negative)
+      // and surface candidates against any open records the user has.
+      let depositCandidates = 0;
+      for (const rawTxn of transactionsData.transactions as Array<{
+        transaction_id: string;
+        amount: number;
+      }>) {
+        if (rawTxn.amount >= 0) continue;
+        const stored = (inserted ?? []).find(
+          (t: any) => t.plaid_transaction_id === rawTxn.transaction_id,
+        );
+        if (!stored) continue;
+        const { matched } = await findReimbursementMatches({
+          supabase,
+          userId: user.id,
+          transactionRowId: stored.id,
+          rawTxnAmount: rawTxn.amount,
+        });
+        depositCandidates += matched;
+      }
+      if (depositCandidates > 0) {
+        console.log(
+          `[${requestId}] Surfaced ${depositCandidates} reimbursement candidate(s).`,
+        );
       }
 
       // Log matching run for observability

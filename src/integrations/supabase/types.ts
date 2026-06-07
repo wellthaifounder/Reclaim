@@ -412,9 +412,12 @@ export type Database = {
           payment_plan_notes: string | null
           payment_plan_total_amount: number | null
           planned_reimbursement_date: string | null
+          reimbursed_at: string | null
           reimbursement_reminder_date: string | null
           reimbursement_strategy: string | null
           source_plaid_transaction_id: string | null
+          submitted_at: string | null
+          submitted_record_id: string | null
           total_amount: number | null
           updated_at: string
           user_id: string
@@ -455,9 +458,12 @@ export type Database = {
           payment_plan_notes?: string | null
           payment_plan_total_amount?: number | null
           planned_reimbursement_date?: string | null
+          reimbursed_at?: string | null
           reimbursement_reminder_date?: string | null
           reimbursement_strategy?: string | null
           source_plaid_transaction_id?: string | null
+          submitted_at?: string | null
+          submitted_record_id?: string | null
           total_amount?: number | null
           updated_at?: string
           user_id: string
@@ -498,9 +504,12 @@ export type Database = {
           payment_plan_notes?: string | null
           payment_plan_total_amount?: number | null
           planned_reimbursement_date?: string | null
+          reimbursed_at?: string | null
           reimbursement_reminder_date?: string | null
           reimbursement_strategy?: string | null
           source_plaid_transaction_id?: string | null
+          submitted_at?: string | null
+          submitted_record_id?: string | null
           total_amount?: number | null
           updated_at?: string
           user_id?: string
@@ -541,6 +550,13 @@ export type Database = {
             columns: ["collection_id"]
             isOneToOne: false
             referencedRelation: "collections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_submitted_record_id_fkey"
+            columns: ["submitted_record_id"]
+            isOneToOne: false
+            referencedRelation: "substantiation_records"
             referencedColumns: ["id"]
           },
         ]
@@ -1531,6 +1547,60 @@ export type Database = {
           },
         ]
       }
+      reimbursement_match_candidates: {
+        Row: {
+          created_at: string
+          id: string
+          match_amount: number
+          match_confidence: number
+          match_reason: string | null
+          resolved_at: string | null
+          status: string
+          substantiation_record_id: string
+          transaction_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          match_amount: number
+          match_confidence: number
+          match_reason?: string | null
+          resolved_at?: string | null
+          status?: string
+          substantiation_record_id: string
+          transaction_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          match_amount?: number
+          match_confidence?: number
+          match_reason?: string | null
+          resolved_at?: string | null
+          status?: string
+          substantiation_record_id?: string
+          transaction_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reimbursement_match_candidates_substantiation_record_id_fkey"
+            columns: ["substantiation_record_id"]
+            isOneToOne: false
+            referencedRelation: "substantiation_records"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reimbursement_match_candidates_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       reimbursement_requests: {
         Row: {
           created_at: string
@@ -1685,6 +1755,135 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      substantiation_record_items: {
+        Row: {
+          amount_at_submission: number
+          category_at_submission: string | null
+          confirmed_at_at_submission: string
+          created_at: string
+          date_at_submission: string
+          eligibility_basis_rule_id_at_submission: string | null
+          id: string
+          invoice_id: string
+          patient_name_at_submission: string | null
+          substantiation_record_id: string
+          vendor_at_submission: string
+        }
+        Insert: {
+          amount_at_submission: number
+          category_at_submission?: string | null
+          confirmed_at_at_submission: string
+          created_at?: string
+          date_at_submission: string
+          eligibility_basis_rule_id_at_submission?: string | null
+          id?: string
+          invoice_id: string
+          patient_name_at_submission?: string | null
+          substantiation_record_id: string
+          vendor_at_submission: string
+        }
+        Update: {
+          amount_at_submission?: number
+          category_at_submission?: string | null
+          confirmed_at_at_submission?: string
+          created_at?: string
+          date_at_submission?: string
+          eligibility_basis_rule_id_at_submission?: string | null
+          id?: string
+          invoice_id?: string
+          patient_name_at_submission?: string | null
+          substantiation_record_id?: string
+          vendor_at_submission?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "substantiation_record_items_eligibility_basis_rule_id_at_s_fkey"
+            columns: ["eligibility_basis_rule_id_at_submission"]
+            isOneToOne: false
+            referencedRelation: "pub_502_rules"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "substantiation_record_items_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "substantiation_record_items_substantiation_record_id_fkey"
+            columns: ["substantiation_record_id"]
+            isOneToOne: false
+            referencedRelation: "substantiation_records"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      substantiation_records: {
+        Row: {
+          created_at: string
+          csv_storage_path: string | null
+          expense_count: number
+          formats_generated: string[]
+          generated_at: string
+          id: string
+          notes: string | null
+          pdf_storage_path: string | null
+          record_number: string
+          reimbursed_at: string | null
+          reimbursed_transaction_id: string | null
+          status: string
+          tax_year: number
+          total_amount: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          csv_storage_path?: string | null
+          expense_count: number
+          formats_generated?: string[]
+          generated_at?: string
+          id?: string
+          notes?: string | null
+          pdf_storage_path?: string | null
+          record_number: string
+          reimbursed_at?: string | null
+          reimbursed_transaction_id?: string | null
+          status?: string
+          tax_year: number
+          total_amount: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          csv_storage_path?: string | null
+          expense_count?: number
+          formats_generated?: string[]
+          generated_at?: string
+          id?: string
+          notes?: string | null
+          pdf_storage_path?: string | null
+          record_number?: string
+          reimbursed_at?: string | null
+          reimbursed_transaction_id?: string | null
+          status?: string
+          tax_year?: number
+          total_amount?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "substantiation_records_reimbursed_transaction_id_fkey"
+            columns: ["reimbursed_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       transaction_invoice_suggestions: {
         Row: {
