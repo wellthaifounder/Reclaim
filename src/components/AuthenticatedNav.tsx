@@ -17,6 +17,7 @@ import {
   LayoutDashboard,
   Building2,
   HelpCircle,
+  Upload,
 } from "lucide-react";
 import { WellbieAvatar } from "@/components/WellbieAvatar";
 import { toast } from "sonner";
