@@ -105,6 +105,7 @@ const moreMenuItems: MenuItem[] = [
     badgeKey: null,
   },
   { icon: TrendingUp, label: "Reports", path: "/reports", badgeKey: null },
+  { icon: FileText, label: "Documents", path: "/documents", badgeKey: null },
   { icon: HelpCircle, label: "HSA Guide", path: "/guide", badgeKey: null },
 ];
 

@@ -113,7 +113,7 @@ export default function Collections() {
       }),
     meta: {
       errorMessage:
-        "We had trouble loading your care events. Please try again.",
+        "We had trouble loading your expense groups. Please try again.",
     },
   });
 
@@ -154,7 +154,7 @@ export default function Collections() {
           aria-live="polite"
           aria-busy="true"
         >
-          <span className="sr-only">Loading your care events…</span>
+          <span className="sr-only">Loading your expense groups…</span>
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
       </AuthenticatedLayout>
@@ -167,7 +167,7 @@ export default function Collections() {
         <div className="container mx-auto px-4 py-8 max-w-6xl">
           <div className="rounded-lg border bg-card p-12 text-center space-y-3">
             <p className="text-muted-foreground">
-              We had trouble loading your care events.
+              We had trouble loading your expense groups.
             </p>
             <Button variant="outline" onClick={() => refetch()}>
               Try again
@@ -294,7 +294,7 @@ export default function Collections() {
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search care events..."
+              placeholder="Search expense groups..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-9"

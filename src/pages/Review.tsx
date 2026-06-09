@@ -257,7 +257,7 @@ export default function Review() {
               </p>
               <div className="flex justify-center gap-2 pt-2">
                 <Button variant="outline" onClick={() => navigate("/bills")}>
-                  See all bills
+                  See all expenses
                 </Button>
                 <Button onClick={() => navigate("/dashboard")}>
                   Dashboard

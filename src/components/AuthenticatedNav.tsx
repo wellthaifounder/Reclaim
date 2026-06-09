@@ -58,9 +58,23 @@ export const AuthenticatedNav = ({
     setMobileMenuOpen(false);
   };
 
-  // Reclaim Phase 5 W1 — primary nav matches AppSidebar + BottomTabNavigation:
-  //   Dashboard · Expenses · Expense Groups · Substantiation
+  // Reclaim Phase 5 W1 — primary nav. Top-bar uses the BottomTabNavigation's
+  // short labels (Groups / Records) so all 4 fit at lg breakpoints without
+  // truncating. The sidebar + mobile hamburger keep the longer names.
   const mainNavItems = [
+    { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
+    {
+      icon: Receipt,
+      label: "Expenses",
+      path: "/expenses",
+      badge: pendingReviews,
+    },
+    { icon: FolderHeart, label: "Groups", path: "/expense-groups" },
+    { icon: FileText, label: "Records", path: "/substantiation" },
+  ];
+
+  // Mobile hamburger sheet — has drawer space for full names.
+  const coreItems = [
     { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
     {
       icon: Receipt,
@@ -71,9 +85,6 @@ export const AuthenticatedNav = ({
     { icon: FolderHeart, label: "Expense Groups", path: "/expense-groups" },
     { icon: FileText, label: "Substantiation", path: "/substantiation" },
   ];
-
-  // Mobile hamburger sections — mirror sidebar groups.
-  const coreItems = mainNavItems;
 
   const moreItems = [
     {
@@ -127,7 +138,7 @@ export const AuthenticatedNav = ({
                     key={item.path}
                     onClick={() => navigate(item.path)}
                     className={cn(
-                      "relative flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md transition-colors",
+                      "relative flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md transition-colors whitespace-nowrap",
                       isActivePath(item.path)
                         ? "text-primary bg-accent"
                         : "text-muted-foreground hover:text-foreground hover:bg-accent/50",
@@ -137,7 +148,10 @@ export const AuthenticatedNav = ({
                   >
                     <item.icon className="h-4 w-4" aria-hidden="true" />
                     <span>{item.label}</span>
-                    {item.badge && item.badge > 0 && (
+                    {/* Guard with `> 0` so a literal 0 doesn't render via React's
+                        truthiness rules (the badge prop is `number | undefined`;
+                        `0 && …` evaluates to `0` and renders as the digit). */}
+                    {item.badge !== undefined && item.badge > 0 && (
                       <span className="bg-yellow-500 text-white text-xs px-1.5 py-0.5 rounded-full min-w-[20px] text-center">
                         {item.badge}
                       </span>

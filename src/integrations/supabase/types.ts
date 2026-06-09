@@ -70,6 +70,7 @@ export type Database = {
           hsa_eligible_amount: number | null
           icon: string | null
           id: string
+          status: Database["public"]["Enums"]["collection_status"]
           title: string
           total_billed: number | null
           total_paid: number | null
@@ -84,6 +85,7 @@ export type Database = {
           hsa_eligible_amount?: number | null
           icon?: string | null
           id?: string
+          status?: Database["public"]["Enums"]["collection_status"]
           title: string
           total_billed?: number | null
           total_paid?: number | null
@@ -98,6 +100,7 @@ export type Database = {
           hsa_eligible_amount?: number | null
           icon?: string | null
           id?: string
+          status?: Database["public"]["Enums"]["collection_status"]
           title?: string
           total_billed?: number | null
           total_paid?: number | null
@@ -416,6 +419,7 @@ export type Database = {
           reimbursement_reminder_date: string | null
           reimbursement_strategy: string | null
           source_plaid_transaction_id: string | null
+          status: Database["public"]["Enums"]["invoice_status"]
           submitted_at: string | null
           submitted_record_id: string | null
           total_amount: number | null
@@ -462,6 +466,7 @@ export type Database = {
           reimbursement_reminder_date?: string | null
           reimbursement_strategy?: string | null
           source_plaid_transaction_id?: string | null
+          status?: Database["public"]["Enums"]["invoice_status"]
           submitted_at?: string | null
           submitted_record_id?: string | null
           total_amount?: number | null
@@ -508,6 +513,7 @@ export type Database = {
           reimbursement_reminder_date?: string | null
           reimbursement_strategy?: string | null
           source_plaid_transaction_id?: string | null
+          status?: Database["public"]["Enums"]["invoice_status"]
           submitted_at?: string | null
           submitted_record_id?: string | null
           total_amount?: number | null
@@ -581,6 +587,42 @@ export type Database = {
           created_at?: string
           id?: string
           name?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      matching_run_log: {
+        Row: {
+          auto_linked_count: number
+          duration_ms: number | null
+          exception_count: number
+          id: string
+          run_at: string
+          suggested_count: number
+          transactions_processed: number
+          trigger_source: string
+          user_id: string
+        }
+        Insert: {
+          auto_linked_count?: number
+          duration_ms?: number | null
+          exception_count?: number
+          id?: string
+          run_at?: string
+          suggested_count?: number
+          transactions_processed?: number
+          trigger_source: string
+          user_id: string
+        }
+        Update: {
+          auto_linked_count?: number
+          duration_ms?: number | null
+          exception_count?: number
+          id?: string
+          run_at?: string
+          suggested_count?: number
+          transactions_processed?: number
+          trigger_source?: string
           user_id?: string
         }
         Relationships: []
@@ -703,11 +745,14 @@ export type Database = {
       payment_transactions: {
         Row: {
           amount: number
+          auto_linked: boolean
+          auto_linked_at: string | null
           created_at: string
           hsa_account_id: string | null
           id: string
           invoice_id: string
           is_reimbursed: boolean
+          match_confidence: number | null
           notes: string | null
           payment_date: string
           payment_method_id: string | null
@@ -721,11 +766,14 @@ export type Database = {
         }
         Insert: {
           amount: number
+          auto_linked?: boolean
+          auto_linked_at?: string | null
           created_at?: string
           hsa_account_id?: string | null
           id?: string
           invoice_id: string
           is_reimbursed?: boolean
+          match_confidence?: number | null
           notes?: string | null
           payment_date: string
           payment_method_id?: string | null
@@ -739,11 +787,14 @@ export type Database = {
         }
         Update: {
           amount?: number
+          auto_linked?: boolean
+          auto_linked_at?: string | null
           created_at?: string
           hsa_account_id?: string | null
           id?: string
           invoice_id?: string
           is_reimbursed?: boolean
+          match_confidence?: number | null
           notes?: string | null
           payment_date?: string
           payment_method_id?: string | null
@@ -2129,6 +2180,33 @@ export type Database = {
         }
         Relationships: []
       }
+      vendor_aliases: {
+        Row: {
+          alias: string
+          canonical_vendor: string
+          created_at: string
+          id: string
+          source: string
+          user_id: string
+        }
+        Insert: {
+          alias: string
+          canonical_vendor: string
+          created_at?: string
+          id?: string
+          source?: string
+          user_id: string
+        }
+        Update: {
+          alias?: string
+          canonical_vendor?: string
+          created_at?: string
+          id?: string
+          source?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       wellbie_attachments: {
         Row: {
           analysis_result: Json | null
@@ -2275,12 +2353,33 @@ export type Database = {
         Args: { review_is_flagged: boolean; review_user_id: string }
         Returns: boolean
       }
+      compute_collection_status: {
+        Args: { p_collection_id: string }
+        Returns: Database["public"]["Enums"]["collection_status"]
+      }
+      compute_invoice_status: {
+        Args: { p_invoice_id: string }
+        Returns: Database["public"]["Enums"]["invoice_status"]
+      }
+      suggest_invoice_clusters: {
+        Args: { p_user_id: string }
+        Returns: {
+          cluster_key: string
+          invoice_count: number
+          invoice_ids: string[]
+          max_date: string
+          min_date: string
+          total_amount: number
+          vendor: string
+        }[]
+      }
       update_provider_statistics: {
         Args: { p_provider_id: string }
         Returns: undefined
       }
     }
     Enums: {
+      collection_status: "active" | "complete" | "needs_attention"
       invoice_lifecycle_status:
         | "captured"
         | "pending_review"
@@ -2288,6 +2387,12 @@ export type Database = {
         | "ineligible"
         | "needs_receipt"
         | "submitted"
+        | "reimbursed"
+      invoice_status:
+        | "draft"
+        | "unpaid"
+        | "partially_paid"
+        | "fully_paid"
         | "reimbursed"
     }
     CompositeTypes: {
@@ -2411,6 +2516,7 @@ export const Constants = {
   },
   public: {
     Enums: {
+      collection_status: ["active", "complete", "needs_attention"],
       invoice_lifecycle_status: [
         "captured",
         "pending_review",
@@ -2418,6 +2524,13 @@ export const Constants = {
         "ineligible",
         "needs_receipt",
         "submitted",
+        "reimbursed",
+      ],
+      invoice_status: [
+        "draft",
+        "unpaid",
+        "partially_paid",
+        "fully_paid",
         "reimbursed",
       ],
     },

@@ -136,7 +136,7 @@ const Bills = () => {
         return data as Bill[];
       }),
     meta: {
-      errorMessage: "We had trouble loading your bills. Please try again.",
+      errorMessage: "We had trouble loading your expenses. Please try again.",
     },
   });
 
