@@ -45,7 +45,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, Paperclip, Sparkles, X, ArrowLeft } from "lucide-react";
+import {
+  Loader2,
+  Paperclip,
+  Sparkles,
+  X,
+  ArrowLeft,
+  ArrowRight,
+  Camera,
+} from "lucide-react";
 import { logError } from "@/utils/errorHandler";
 
 // Categories match BillUploadWizard so manual-entry and OCR-entry rows
@@ -252,9 +260,26 @@ export default function ExpenseEntry() {
           Back
         </button>
 
+        {/* Symmetric escape hatch to the scan-driven wizard. The two surfaces
+            link to each other so users can switch capture modes mid-thought
+            without backtracking. Brief §1 kill-shot is scanning, so manual
+            users get a gentle nudge toward the higher-value path when they
+            do have a receipt. */}
+        <div className="mb-4 text-center">
+          <button
+            type="button"
+            onClick={() => navigate("/bills/new")}
+            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Camera className="h-3.5 w-3.5" />
+            Have a receipt? Snap it instead
+            <ArrowRight className="h-3.5 w-3.5" />
+          </button>
+        </div>
+
         <Card>
           <CardHeader>
-            <CardTitle>Add an Expense</CardTitle>
+            <CardTitle>Log an expense</CardTitle>
             <CardDescription>
               No receipt to scan? Type it in here. We'll mark it for your
               review.

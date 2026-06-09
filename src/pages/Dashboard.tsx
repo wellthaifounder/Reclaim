@@ -31,6 +31,8 @@ import {
   ArrowRight,
   Sparkles,
   PiggyBank,
+  Camera,
+  Keyboard,
 } from "lucide-react";
 import { logError } from "@/utils/errorHandler";
 
@@ -201,6 +203,30 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
+        {/* Persistent add-expense affordance — two parallel CTAs framed by
+            the user's artifact ("what do you have in your hand?"). Receipt-
+            first is the brief's kill-shot; manual is the receipt-less
+            fallback. Substantiation is deliberately absent — that's an
+            output generated on /substantiation, not an input mode. */}
+        <div className="grid grid-cols-2 gap-2">
+          <Button
+            variant="outline"
+            onClick={() => navigate("/bills/new")}
+            className="justify-center"
+          >
+            <Camera className="h-4 w-4 mr-2" />
+            Snap a receipt
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => navigate("/expenses/new")}
+            className="justify-center"
+          >
+            <Keyboard className="h-4 w-4 mr-2" />
+            Log an expense
+          </Button>
+        </div>
+
         {/* All-caught-up empty state */}
         {allClear ? (
           <Card>
@@ -210,14 +236,15 @@ export default function Dashboard() {
               <p className="text-sm text-muted-foreground">
                 {data.reclaimedYtd > 0
                   ? `${fmtMoney(data.reclaimedYtd)} reclaimed this year.`
-                  : "Add your first expense to start reclaiming."}
+                  : "Snap a receipt or log an expense above to start reclaiming."}
               </p>
-              <div className="flex justify-center gap-2 pt-2">
-                <Button variant="outline" onClick={() => navigate("/expenses")}>
+              <div className="pt-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => navigate("/expenses")}
+                >
                   See all expenses
-                </Button>
-                <Button onClick={() => navigate("/bills/new")}>
-                  Add an expense
                 </Button>
               </div>
             </CardContent>
