@@ -17,7 +17,7 @@ import {
   LayoutDashboard,
   Building2,
   HelpCircle,
-  Upload,
+  Camera,
 } from "lucide-react";
 import { WellbieAvatar } from "@/components/WellbieAvatar";
 import { toast } from "sonner";
@@ -162,17 +162,20 @@ export const AuthenticatedNav = ({
             </div>
 
             <div className="flex items-center gap-2" role="group">
-              {/* Upload Bill Button - Primary CTA */}
+              {/* Reclaim Phase 5 polish — primary CTA aligned with the
+                  dashboard's "Snap a receipt" verb. Routes to the OCR wizard;
+                  the wizard itself has a "log it manually" escape hatch for
+                  receipt-less users (see NewBillUpload.tsx). */}
               <Button
                 variant="default"
                 size="sm"
                 onClick={() => navigate("/bills/new")}
                 className="flex items-center gap-2 bg-accent text-accent-foreground hover:bg-accent/90"
-                aria-label="Upload a new medical bill"
+                aria-label="Snap a receipt to log an expense"
               >
-                <Upload className="h-4 w-4" aria-hidden="true" />
+                <Camera className="h-4 w-4" aria-hidden="true" />
                 <span className="hidden md:inline text-sm font-medium">
-                  Upload Bill
+                  Snap a receipt
                 </span>
               </Button>
 

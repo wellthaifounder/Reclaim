@@ -316,12 +316,12 @@ const Bills = () => {
           <div>
             <h1 className="text-3xl font-bold mb-1">Expenses</h1>
             <p className="text-muted-foreground text-sm">
-              Upload, track, and manage your medical expenses
+              Track and manage your medical expenses
             </p>
           </div>
           <Button onClick={() => navigate("/bills/new")}>
             <Plus className="h-4 w-4 mr-2" />
-            Add Bill
+            Add expense
           </Button>
         </div>
 
@@ -416,7 +416,7 @@ const Bills = () => {
                 <CardTitle>All Expenses</CardTitle>
                 <Button onClick={() => navigate("/bills/new")}>
                   <Plus className="h-4 w-4 mr-2" />
-                  Add Bill
+                  Add expense
                 </Button>
               </div>
             </CardHeader>
