@@ -17,8 +17,11 @@ export interface PlaidTxnLike {
   name: string;
   merchant_name?: string | null;
   category?: string[] | null;
-  // Plaid raw MCC. Available on `transactions/get` and `transactions/sync`
-  // when the issuing bank exposes it. May be undefined for older items.
+  // Raw MCC. NOTE: Plaid does not return a field called `mcc` — it is
+  // `merchant_category_code` on the transaction object. Callers must map it.
+  // Reading `txn.mcc` straight off a Plaid transaction yields undefined and
+  // silently disables the MCC tier below. Verified against the sandbox
+  // 2026-08-14. Populated for roughly 60% of transactions.
   mcc?: string | null;
 }
 

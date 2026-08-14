@@ -33,7 +33,18 @@ The good news: the **Pub 502 rules table, the AI expense classifier, the substan
 | S8  | **Sequential per-transaction DB round-trips** in auto-capture and the webhook loop. At true backfill volume this risks edge-function timeout.                                                                                                                                                                      | both                                                                         | Medium       |
 | S9  | Dead conditional: `if (classification.isMedical && !txnRow.invoice_id && true)`.                                                                                                                                                                                                                                   | `plaid-webhook:265-272`                                                      | Low          |
 
-**Needs verification before building:** the classifier's tier-2 MCC lookup depends on `txn.mcc`. I could not confirm that Plaid's Transactions product returns a raw `mcc` field on the standard transaction object — the in-code comment asserts it does, but if it is usually absent, tier 2 never fires and everything falls through to keyword matching. **Check a real sandbox payload first**, because this single fact determines whether the classifier rewrite is a tuning job or a redesign around `personal_finance_category` and `merchant_entity_id`.
+**RESOLVED 2026-08-14 against the Plaid sandbox.** The open question was whether Plaid returns a raw `mcc` field. It does not — **there is no `mcc` field on the transaction object at all** (`'mcc' in txn === false`). The data exists under the name **`merchant_category_code`**, populated on 10 of 16 sandbox transactions (~60%).
+
+Both ingest paths read `txn.mcc`, so **the classifier's MCC tier has never fired in production.** Consequences, all previously invisible:
+
+- Every transaction fell through to the Plaid-category or keyword tier, both of which set `needsReview: true` — so *every* medical transaction landed in the review queue. The flooded-queue problem is not just bad keywords; it is structural.
+- `pub502RuleId` was always undefined, so every auto-captured expense got `lifecycle_status: 'captured'` and never `pending_review`.
+- The entire `mcc_codes` table and its `default_pub_502_rule_id` mapping (`20260521140000_phase2_mcc_codes.sql`) is dead code.
+- This also masked defect S5: the `pub502RuleId` carry-through bug was unobservable because the value was always undefined regardless.
+
+Fixed in `_shared/plaidSync.ts` by mapping `merchant_category_code → mcc`. So the classifier rewrite is a **tuning job, not a redesign** — but it must be re-evaluated now that tier 2 actually fires.
+
+**Other field availability measured in the same run** (matters for C3): `personal_finance_category` 16/16, `merchant_entity_id` **only 7/16 (~44%)**, legacy `category[]` 16/16, `payment_channel` 16/16.
 
 ### 1.2 Classification & rules
 
@@ -139,7 +150,9 @@ Ordered by dependency. Workstreams A and B unblock everything else.
 
 **C2. Stop setting eligibility at ingestion.** Remove `is_hsa_eligible` writes from both Plaid paths.
 
-**C3. Rules engine.** New `categorization_rules` table keyed on `merchant_entity_id` (with a name-pattern fallback), plus `applied_by_rule_id` provenance on transactions. Retroactive apply on rule creation. A rules management screen — list, edit, delete, see affected transactions, undo. Migrate existing `user_vendor_preferences` rows into it.
+**C3. Rules engine.** New `categorization_rules` table plus `applied_by_rule_id` provenance on transactions. Retroactive apply on rule creation. A rules management screen — list, edit, delete, see affected transactions, undo. Migrate existing `user_vendor_preferences` rows into it.
+
+⚠️ **Revised after the 2026-08-14 sandbox probe:** the original plan said to key rules on `merchant_entity_id`. It is present on only ~44% of transactions, so it cannot be the primary key on its own. Use a **precedence chain** — `merchant_entity_id` when present, else `merchant_category_code`, else a normalized merchant-name pattern — and record which one matched so the rules UI can explain itself.
 
 **C4. Review feed.** Rebuild around likely-medical-only, merchant-grouped bulk actions, and a "why" chip surfacing the classification reason. Reuse `useInboxItems.ts` shape but re-source it. Note: fix the dead `confirm_match` trigger — `20260414_create_inbox_items.sql:96` compares a 0–100 score against 0.7/0.9 thresholds, so it can never fire.
 

@@ -48,7 +48,10 @@ export interface PlaidApiTransaction {
   date: string;
   pending?: boolean;
   category?: string[] | null;
-  mcc?: string | null;
+  // Plaid names this `merchant_category_code`. The classifier's internal
+  // contract calls it `mcc`; `mcc` is NOT a field Plaid returns — see the
+  // mapping in the upsert below.
+  merchant_category_code?: string | null;
   personal_finance_category?: {
     primary?: string;
     detailed?: string;
@@ -395,7 +398,15 @@ async function drain(
         name: txn.name,
         merchant_name: txn.merchant_name,
         category: txn.category ?? null,
-        mcc: txn.mcc ?? null,
+        // Plaid returns `merchant_category_code`; there is no `mcc` field on
+        // the transaction object. Both ingest paths previously read `txn.mcc`,
+        // which was always undefined, so the classifier's MCC tier never fired
+        // and every transaction fell through to the keyword/category tiers —
+        // which always set needsReview, flooding the review queue and leaving
+        // the mcc_codes table and its Pub 502 rule mapping entirely unused.
+        // Verified against the Plaid sandbox 2026-08-14: 'mcc' in txn === false,
+        // merchant_category_code populated on 10 of 16 transactions.
+        mcc: txn.merchant_category_code ?? null,
       };
       const c = await classifyTransaction(
         supabase,
