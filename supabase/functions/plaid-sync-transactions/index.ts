@@ -152,16 +152,6 @@ serve(async (req) => {
       `[${requestId}] Ingested: +${counts.added} ~${counts.modified} -${counts.removed} across ${counts.pages} page(s)`,
     );
 
-    // Which of our accounts are HSA accounts. Spend on an HSA card is a
-    // distribution — it still needs substantiation, but it is never a
-    // reimbursement candidate, so it must not be auto-captured as one.
-    const { data: hsaAccounts } = await supabase
-      .from("plaid_accounts")
-      .select("id")
-      .eq("connection_id", connection.id)
-      .eq("is_hsa", true);
-    const hsaAccountIds = new Set((hsaAccounts ?? []).map((a) => a.id));
-
     const matchStartTime = Date.now();
     let autoLinkedCount = 0;
     let suggestedCount = 0;
@@ -266,10 +256,13 @@ serve(async (req) => {
               amount: txn.amount,
               // An HSA-account charge is a direct distribution, not an
               // out-of-pocket payment awaiting reimbursement.
-              payment_source:
-                txn.plaid_account_id && hsaAccountIds.has(txn.plaid_account_id)
-                  ? "hsa_direct"
-                  : "out_of_pocket",
+              // Spend on an HSA card is a direct distribution, not an
+              // out-of-pocket payment awaiting reimbursement. The flag rides
+              // along on the ingested row (resolved from plaid_accounts.is_hsa,
+              // which honours the user's override).
+              payment_source: txn.is_hsa_account
+                ? "hsa_direct"
+                : "out_of_pocket",
               auto_linked: true,
               auto_linked_at: new Date().toISOString(),
               match_confidence: bestMatch.confidence,

@@ -137,7 +137,8 @@ export function ClaimHSADialog({
       const invoiceIds = entries.map((e) => e.invoice_id);
       const { error: updateError } = await supabase
         .from("invoices")
-        .update({ is_reimbursed: true })
+        // Workstream B: is_reimbursed is derived from claim_state.
+        .update({ claim_state: "reimbursed" })
         .in("id", invoiceIds);
 
       if (updateError) throw updateError;

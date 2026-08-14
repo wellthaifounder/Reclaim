@@ -32,6 +32,7 @@ import {
 import { toast } from "sonner";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
 import { SubscriptionManagement } from "@/components/settings/SubscriptionManagement";
+import { EmailForwardingCard } from "@/components/settings/EmailForwardingCard";
 import { useOnboarding } from "@/contexts/OnboardingContext";
 import {
   Dialog,
@@ -57,6 +58,7 @@ import { logError } from "@/utils/errorHandler";
 const profileSchema = z.object({
   displayName: z.string().max(100),
   hsaOpenedDate: z.string(),
+  reimbursementStrategy: z.enum(["regular", "shoebox"]),
 });
 
 const paymentMethodSchema = z.object({
@@ -103,7 +105,11 @@ const Settings = () => {
 
   const profileForm = useForm<ProfileFormValues>({
     resolver: zodResolver(profileSchema),
-    defaultValues: { displayName: "", hsaOpenedDate: "" },
+    defaultValues: {
+      displayName: "",
+      hsaOpenedDate: "",
+      reimbursementStrategy: "regular",
+    },
   });
 
   const paymentMethodForm = useForm<PaymentMethodFormValues>({
@@ -128,7 +134,7 @@ const Settings = () => {
 
       const { data: profile } = await supabase
         .from("profiles")
-        .select("full_name, hsa_opened_date")
+        .select("full_name, hsa_opened_date, reimbursement_strategy_preference")
         .eq("id", user.id)
         .single();
 
@@ -136,6 +142,10 @@ const Settings = () => {
         profileForm.reset({
           displayName: profile.full_name || "",
           hsaOpenedDate: profile.hsa_opened_date || "",
+          reimbursementStrategy:
+            profile.reimbursement_strategy_preference === "shoebox"
+              ? "shoebox"
+              : "regular",
         });
       }
 
@@ -168,6 +178,7 @@ const Settings = () => {
           id: user.id,
           full_name: values.displayName,
           hsa_opened_date: values.hsaOpenedDate || null,
+          reimbursement_strategy_preference: values.reimbursementStrategy,
         },
         { onConflict: "id" },
       );
@@ -176,7 +187,12 @@ const Settings = () => {
       if (hsaDateChanged && values.hsaOpenedDate) {
         const { error: e1 } = await supabase
           .from("invoices")
-          .update({ is_hsa_eligible: false })
+          // Workstream B: pre-establishment expenses fail the timing gate
+          // permanently; record the reason, not just a cleared boolean.
+          .update({
+            eligibility_state: "ineligible",
+            ineligible_reason: "pre_establishment",
+          })
           .eq("user_id", user.id)
           .lt("date", values.hsaOpenedDate)
           .eq("is_hsa_eligible", true);
@@ -184,7 +200,12 @@ const Settings = () => {
 
         const { error: e2 } = await supabase
           .from("invoices")
-          .update({ is_hsa_eligible: false })
+          // Workstream B: pre-establishment expenses fail the timing gate
+          // permanently; record the reason, not just a cleared boolean.
+          .update({
+            eligibility_state: "ineligible",
+            ineligible_reason: "pre_establishment",
+          })
           .eq("user_id", user.id)
           .lt("invoice_date", values.hsaOpenedDate)
           .eq("is_hsa_eligible", true);
@@ -390,13 +411,13 @@ const Settings = () => {
                 Progressive Web App
               </CardTitle>
               <CardDescription>
-                Install Wellth.ai for a native app experience
+                Install Reclaim for a native app experience
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-sm text-muted-foreground">
                 Get instant access, offline support, and push notifications by
-                installing Wellth.ai as an app on your device.
+                installing Reclaim as an app on your device.
               </p>
               <Button onClick={() => navigate("/install")} variant="outline">
                 View Installation Guide
@@ -442,6 +463,41 @@ const Settings = () => {
                       {profileForm.formState.errors.displayName.message}
                     </p>
                   )}
+                </div>
+                {/* Reimbursement strategy — drives the Dashboard's primary
+                    number + bucket labels and whether submission reminders
+                    fire. 'shoebox' = defer reimbursement and grow the balance;
+                    'regular' = reimburse on a normal cadence. */}
+                <div className="space-y-2">
+                  <Label htmlFor="reimbursementStrategy">
+                    Reimbursement strategy
+                  </Label>
+                  <Controller
+                    name="reimbursementStrategy"
+                    control={profileForm.control}
+                    render={({ field }) => (
+                      <Select
+                        value={field.value}
+                        onValueChange={field.onChange}
+                      >
+                        <SelectTrigger id="reimbursementStrategy">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="regular">
+                            Reimburse regularly — remind me to submit
+                          </SelectItem>
+                          <SelectItem value="shoebox">
+                            Shoebox — defer and grow my HSA balance
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Shoebox mode relabels your eligible balance and pauses
+                    monthly submission reminders.
+                  </p>
                 </div>
                 <Button type="submit" disabled={saving}>
                   {saving ? "Saving..." : "Save Changes"}
@@ -688,6 +744,8 @@ const Settings = () => {
             </CardContent>
           </Card>
 
+          <EmailForwardingCard />
+
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -718,8 +776,8 @@ const Settings = () => {
             <CardContent>
               <p className="mb-4 text-sm text-muted-foreground">
                 This will remove your profile, receipts, transactions, bank
-                connections, and all other data from Wellth.ai. Plaid
-                connections will be revoked. This action cannot be undone.
+                connections, and all other data from Reclaim. Plaid connections
+                will be revoked. This action cannot be undone.
               </p>
               <Dialog
                 open={deleteDialogOpen}

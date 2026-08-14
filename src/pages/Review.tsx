@@ -194,7 +194,14 @@ export default function Review() {
       // confirmed_at is set ONLY when the user makes an audit-trail-quality
       // determination (eligible/ineligible). "needs_receipt" is a deferral,
       // not an eligibility decision.
-      const update: Record<string, unknown> = { lifecycle_status: next };
+      // Workstream B: lifecycle_status is derived from the facets, so write
+      // the facet the decision actually concerns. "needs_receipt" is a
+      // documentation deferral, not an eligibility determination — which is
+      // exactly why it does not set confirmed_at.
+      const update: Record<string, unknown> =
+        next === "needs_receipt"
+          ? { documentation_state: "none" }
+          : { eligibility_state: next };
       if (next === "eligible" || next === "ineligible") {
         update.confirmed_at = now;
       }

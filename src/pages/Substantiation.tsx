@@ -299,7 +299,10 @@ export default function Substantiation() {
       if (invoiceIds.length > 0) {
         await supabase
           .from("invoices")
-          .update({ lifecycle_status: "reimbursed", reimbursed_at: now })
+          // Workstream B: lifecycle_status is derived from the facets; set
+          // claim_state instead. This also releases the double-claim lock,
+          // since the lock keys on claim_state = 'locked_in_request'.
+          .update({ claim_state: "reimbursed", reimbursed_at: now })
           .in("id", invoiceIds);
       }
 
@@ -469,7 +472,10 @@ export default function Substantiation() {
       const { error: lifeErr } = await supabase
         .from("invoices")
         .update({
-          lifecycle_status: "submitted",
+          // Workstream B: claim_state drives the derived lifecycle_status.
+          // 'locked_in_request' is what makes the expense unavailable to any
+          // other reimbursement request.
+          claim_state: "locked_in_request",
           submitted_at: generatedAt,
           submitted_record_id: recordId,
         })
@@ -485,7 +491,7 @@ export default function Substantiation() {
       await supabase
         .from("invoices")
         .update({
-          lifecycle_status: "submitted",
+          claim_state: "locked_in_request",
           submitted_at: generatedAt,
         })
         .in("id", includedIds);

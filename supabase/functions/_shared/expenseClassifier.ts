@@ -1,4 +1,4 @@
-// Reclaim — Phase 3 expense classifier (Gemini + IRS Pub 502 catalog).
+// Reclaim — Phase 3 expense classifier (Vertex AI Gemini + IRS Pub 502 catalog).
 //
 // Given an invoice (and any attached OCR metadata), picks the most likely
 // matching IRS Pub 502 rule, scores confidence, and writes a structured
@@ -14,6 +14,10 @@
 // enforce RLS.
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  getVertexAccessToken,
+  vertexGenerateContentUrl,
+} from "./vertexAuth.ts";
 
 export interface Pub502Rule {
   id: string;
@@ -153,45 +157,42 @@ export async function classifyAndPersist(
   supabase: SupabaseClient,
   input: ExpenseInput,
 ): Promise<ClassificationOutput> {
-  const apiKey = Deno.env.get("GEMINI_API_KEY");
-  if (!apiKey) {
-    throw new Error("GEMINI_API_KEY is not configured");
-  }
-
   const rules = await loadRules(supabase);
   if (rules.length === 0) {
     throw new Error("Pub 502 rules catalog is empty");
   }
 
+  // Vertex AI (BAA-covered). Medical expense context is PHI, so this must not
+  // use the non-BAA AI Studio endpoint. Auth is a service-account OAuth token
+  // (see _shared/vertexAuth.ts).
+  const accessToken = await getVertexAccessToken();
+
   const prompt = buildPrompt(input, rules);
-  const response = await fetch(
-    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
-    {
-      method: "POST",
-      headers: {
-        "x-goog-api-key": apiKey,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { responseMimeType: "application/json" },
-      }),
+  const response = await fetch(vertexGenerateContentUrl("gemini-2.5-flash"), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
     },
-  );
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { responseMimeType: "application/json" },
+    }),
+  });
 
   if (!response.ok) {
     const errText = await response.text();
     console.error(
-      "[expenseClassifier] Gemini error:",
+      "[expenseClassifier] Vertex AI error:",
       response.status,
       errText,
     );
-    throw new Error(`Gemini error: ${response.status}`);
+    throw new Error(`Vertex AI error: ${response.status}`);
   }
 
   const data = await response.json();
   const content = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!content) throw new Error("Empty Gemini response");
+  if (!content) throw new Error("Empty Vertex AI response");
 
   let parsed: {
     ruleId?: string;
@@ -231,13 +232,14 @@ export async function classifyAndPersist(
     .select("*", { head: true, count: "exact" })
     .eq("invoice_id", input.invoiceId);
 
-  // Low confidence AND no receipt → route to NEEDS_RECEIPT instead of
-  // PENDING_REVIEW so the user is nudged to attach a document. The brief
-  // sets the threshold conceptually; 0.6 is the working number.
-  const nextLifecycle =
-    confidence < 0.6 && (receiptCount ?? 0) === 0
-      ? "needs_receipt"
-      : "pending_review";
+  // Workstream B: `lifecycle_status` is now derived from the three facets by
+  // trg_invoices_sync_lifecycle, so writing it directly would be overwritten.
+  // Set the facet instead. Classification produces a Pub 502 basis and a
+  // confidence — it does NOT confirm eligibility, because explicit user
+  // confirmation is the audit-trail event that earns 'eligible'. So the
+  // eligibility facet is deliberately left untouched here; only documentation
+  // state is recorded, which is what drives needs_receipt vs pending_review.
+  const documentationState = (receiptCount ?? 0) > 0 ? "complete" : "none";
 
   const { error: updateErr } = await supabase
     .from("invoices")
@@ -247,7 +249,7 @@ export async function classifyAndPersist(
       classification_reasoning: reasoning,
       classification_warnings: warnings,
       classified_at: new Date().toISOString(),
-      lifecycle_status: nextLifecycle,
+      documentation_state: documentationState,
     })
     .eq("id", input.invoiceId);
   if (updateErr) {

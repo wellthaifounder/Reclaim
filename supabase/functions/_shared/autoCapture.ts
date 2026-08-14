@@ -51,11 +51,19 @@ export async function autoCaptureExpenses(
         amount: txn.amount,
         date: txn.transaction_date,
         category: c.irsCategory || "Medical",
-        is_hsa_eligible: !c.needsReview,
-        // A high-confidence MCC match carries a Pub 502 rule, so the expense
-        // can go straight to review. Without one it stays CAPTURED until
-        // classification runs.
-        lifecycle_status: c.pub502RuleId ? "pending_review" : "captured",
+        // Workstream B/C2: eligibility is NOT decided at ingestion. It depends
+        // on date of service, patient and Pub 502 category, none of which are
+        // known when a bank transaction arrives — so the expense starts
+        // 'unknown' and substantiation resolves it. `is_hsa_eligible` and
+        // `lifecycle_status` are now derived from the facets and reject writes.
+        eligibility_state: "unknown",
+        documentation_state: "none",
+        // Spend on an HSA card is a distribution: it still needs
+        // substantiation, but it can never become a reimbursement request.
+        claim_state: txn.is_hsa_account ? "not_reimbursable" : "unclaimed",
+        amount_paid: txn.amount,
+        reimbursable_amount: txn.amount,
+        source_transaction_id: txn.id,
         eligibility_basis_rule_id: c.pub502RuleId ?? null,
         classification_confidence: c.pub502RuleId ? 0.95 : null,
         classification_reasoning: c.pub502RuleId

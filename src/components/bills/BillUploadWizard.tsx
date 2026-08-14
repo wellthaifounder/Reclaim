@@ -544,9 +544,16 @@ export function BillUploadWizard({
             invoice_number: d.invoiceNumber.trim() || null,
             collection_id: collectionId || null,
             notes: d.notes.trim() || null,
-            is_hsa_eligible: isHsaEligible,
+            // Workstream B: is_hsa_eligible and lifecycle_status are derived
+            // and reject writes. This wizard always attaches a document, so
+            // documentation_state is 'complete'; eligibility is left 'unknown'
+            // for substantiation to resolve.
+            eligibility_state: "unknown",
+            documentation_state: "complete",
+            claim_state: "unclaimed",
+            amount_paid: amount,
+            reimbursable_amount: amount,
             patient_name: patientName,
-            lifecycle_status: lifecycleStatus,
           })
           .select()
           .single();
@@ -1446,7 +1453,7 @@ export function BillUploadWizard({
               saved!
             </h3>
             <p className="text-sm text-muted-foreground">
-              Your bills are now being tracked in Wellth.
+              Your bills are now being tracked in Reclaim.
             </p>
           </div>
 

@@ -260,7 +260,12 @@ export default function HSAReimbursement() {
       // Mark expenses as reimbursed
       const { error: updateError } = await supabase
         .from("invoices")
-        .update({ is_reimbursed: true })
+        // Workstream B: is_reimbursed is derived from claim_state and rejects
+        // writes. Setting the facet is also what fixes the long-standing
+        // contradiction with /substantiation — both paths now move the same
+        // field, so an expense reimbursed here no longer keeps showing as
+        // claimable on the dashboard.
+        .update({ claim_state: "reimbursed" })
         .in("id", Array.from(selectedExpenses));
 
       if (updateError) throw updateError;
@@ -383,7 +388,7 @@ export default function HSAReimbursement() {
             <Info className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
             <div className="text-sm">
               <p className="font-semibold mb-1">
-                Wellth.ai creates your documentation — you submit it to your HSA
+                Reclaim creates your documentation — you submit it to your HSA
                 provider
               </p>
               <p className="text-muted-foreground">

@@ -312,9 +312,17 @@ serve(async (req) => {
           date,
           category,
           invoice_number: ocr?.invoiceNumber ?? null,
-          is_hsa_eligible: ocr?.isHSAEligible ?? false,
+          // Workstream B: is_hsa_eligible and lifecycle_status are now derived
+          // from the facets and reject direct writes. An OCR guess is not a
+          // user confirmation, so eligibility stays 'unknown' until
+          // substantiation; the email arrived with a document, so
+          // documentation_state reflects that and yields 'pending_review'.
+          eligibility_state: "unknown",
+          documentation_state: "complete",
+          claim_state: "unclaimed",
+          amount_paid: amount,
+          reimbursable_amount: amount,
           patient_name: null, // unknown from email; user sets during review
-          lifecycle_status: "captured",
           source: "email",
           source_email_message_id: dedupeKey,
           source_email_received_at: receivedAt,

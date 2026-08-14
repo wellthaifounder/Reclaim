@@ -193,9 +193,15 @@ export default function ExpenseEntry() {
           date: data.date,
           category: data.category,
           notes: data.notes?.trim() || null,
-          is_hsa_eligible: HSA_ELIGIBLE_CATEGORIES.has(data.category),
+          // Workstream B: is_hsa_eligible and lifecycle_status are derived and
+          // reject writes. Category matching is a guess, not a user
+          // determination, so eligibility stays 'unknown' until substantiation.
+          eligibility_state: "unknown",
+          documentation_state: "none",
+          claim_state: "unclaimed",
+          amount_paid: data.amount,
+          reimbursable_amount: data.amount,
           patient_name: resolvedPatient,
-          lifecycle_status: "captured",
         })
         .select("id")
         .single();

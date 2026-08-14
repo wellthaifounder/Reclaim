@@ -70,7 +70,14 @@ export function SetHSADateDialog({
       // 1) Invoices using `date`
       const { error: updateDateError } = await supabase
         .from("invoices")
-        .update({ is_hsa_eligible: false })
+        // Workstream B: expenses dated before the HSA establishment date fail
+        // the timing gate permanently, so record WHY rather than just clearing
+        // a boolean — the user is told the reason instead of silently losing
+        // eligibility.
+        .update({
+          eligibility_state: "ineligible",
+          ineligible_reason: "pre_establishment",
+        })
         .eq("user_id", user.id)
         .lt("date", hsaDateString)
         .eq("is_hsa_eligible", true);
@@ -79,7 +86,14 @@ export function SetHSADateDialog({
       // 2) Invoices using `invoice_date`
       const { error: updateInvoiceDateError } = await supabase
         .from("invoices")
-        .update({ is_hsa_eligible: false })
+        // Workstream B: expenses dated before the HSA establishment date fail
+        // the timing gate permanently, so record WHY rather than just clearing
+        // a boolean — the user is told the reason instead of silently losing
+        // eligibility.
+        .update({
+          eligibility_state: "ineligible",
+          ineligible_reason: "pre_establishment",
+        })
         .eq("user_id", user.id)
         .lt("invoice_date", hsaDateString)
         .eq("is_hsa_eligible", true);

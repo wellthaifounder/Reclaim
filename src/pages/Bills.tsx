@@ -152,7 +152,11 @@ const Bills = () => {
     try {
       const { error } = await supabase
         .from("invoices")
-        .update({ is_hsa_eligible: !currentStatus })
+        // Workstream B: is_hsa_eligible is derived from eligibility_state.
+        // A manual toggle here IS an explicit user determination, so it earns
+        // 'eligible'; clearing it returns the expense to 'unknown' rather than
+        // asserting ineligibility, which is a different claim.
+        .update({ eligibility_state: !currentStatus ? "eligible" : "unknown" })
         .eq("id", billId);
 
       if (error) throw error;

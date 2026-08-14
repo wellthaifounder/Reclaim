@@ -227,7 +227,11 @@ export default function BillDetail() {
         category: formData.category,
         notes: formData.notes || null,
         invoice_number: formData.invoiceNumber || null,
-        is_hsa_eligible: formData.isHsaEligible,
+        // Workstream B: is_hsa_eligible is derived from eligibility_state.
+        // Ticking the box on this form IS an explicit user determination, so
+        // it earns 'eligible'; unticking returns to 'unknown' rather than
+        // asserting ineligibility, which is a stronger and different claim.
+        eligibility_state: formData.isHsaEligible ? "eligible" : "unknown",
       };
 
       let billId = id;

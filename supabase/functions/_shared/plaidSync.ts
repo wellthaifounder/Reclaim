@@ -16,11 +16,11 @@
 // `/transactions/sync` fixes all three: it is cursor-based, pages via
 // `has_more`, and returns added/modified/removed as distinct sets.
 //
-// Scope note: this module deliberately preserves TODAY's classification and
-// eligibility semantics (including writing `is_hsa_eligible` at ingest). Moving
-// eligibility to the substantiation step is Workstream C and changes behavior
-// the current UI depends on; keeping it out of here means Workstream A is a
-// pure correctness change that can land on its own.
+// Scope note (updated 2026-08-14, Workstream B/C2): ingestion no longer decides
+// eligibility. It cannot — eligibility depends on date of service, patient and
+// Pub 502 category, none of which exist when a bank transaction arrives. The
+// expense is created with eligibility_state 'unknown' and substantiation
+// resolves it.
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
@@ -76,11 +76,23 @@ export interface SyncCounts {
   pages: number;
 }
 
+/** Resolved account: our row id plus whether it is an HSA. */
+export interface AccountRef {
+  id: string;
+  isHsa: boolean;
+}
+
 /** A stored transaction row joined with the classification that produced it. */
 export interface IngestedTransaction {
   id: string;
   plaid_transaction_id: string;
   plaid_account_id: string | null;
+  /**
+   * True when this transaction came from an HSA account, i.e. it is a
+   * distribution rather than an out-of-pocket payment. Such expenses require
+   * substantiation but can never enter a reimbursement request.
+   */
+  is_hsa_account: boolean;
   vendor: string | null;
   description: string;
   amount: number;
@@ -143,7 +155,7 @@ export async function syncAccounts(
     accessToken: string;
     creds: PlaidCreds;
   },
-): Promise<Map<string, string>> {
+): Promise<Map<string, AccountRef>> {
   const { accounts } = await plaidPost<{ accounts: PlaidApiAccount[] }>(
     opts.creds,
     "/accounts/get",
@@ -191,9 +203,12 @@ export async function syncAccounts(
       .not("plaid_account_id", "in", `(${quoted})`);
   }
 
+  // `is_hsa` is the generated column (user override, else Plaid-subtype
+  // detection), so reading it back here rather than recomputing from `rows`
+  // means a user's correction is respected on every subsequent sync.
   const { data: stored, error: selErr } = await supabase
     .from("plaid_accounts")
-    .select("id, plaid_account_id")
+    .select("id, plaid_account_id, is_hsa")
     .eq("connection_id", opts.connectionId);
   if (selErr) throw new Error(`plaid_accounts read failed: ${selErr.message}`);
 
@@ -202,7 +217,12 @@ export async function syncAccounts(
     .update({ accounts_synced_at: new Date().toISOString() })
     .eq("id", opts.connectionId);
 
-  return new Map((stored ?? []).map((r) => [r.plaid_account_id, r.id]));
+  return new Map(
+    (stored ?? []).map((r) => [
+      r.plaid_account_id as string,
+      { id: r.id as string, isHsa: !!r.is_hsa },
+    ]),
+  );
 }
 
 /**
@@ -248,7 +268,7 @@ export async function syncTransactions(
     accessToken: string;
     creds: PlaidCreds;
     cursor: string | null;
-    accountMap: Map<string, string>;
+    accountMap: Map<string, AccountRef>;
     userPreferences: UserVendorPreference[];
   },
 ): Promise<{ counts: SyncCounts; ingested: IngestedTransaction[] }> {
@@ -279,7 +299,7 @@ async function drain(
     accessToken: string;
     creds: PlaidCreds;
     cursor: string | null;
-    accountMap: Map<string, string>;
+    accountMap: Map<string, AccountRef>;
     userPreferences: UserVendorPreference[];
   },
 ): Promise<{ counts: SyncCounts; ingested: IngestedTransaction[] }> {
@@ -388,6 +408,9 @@ async function drain(
   // ignoreDuplicates: true, so pending→posted amount changes never landed.
   const inbound = [...added, ...modified];
   const ingested: IngestedTransaction[] = [];
+  // `transactions` has no is_hsa column — HSA-ness lives on plaid_accounts —
+  // so carry it alongside the upsert rather than re-querying per transaction.
+  const hsaByPlaidTxnId = new Map<string, boolean>();
   let medical = 0;
 
   for (const chunk of chunked(inbound, UPSERT_CHUNK)) {
@@ -421,10 +444,13 @@ async function drain(
       classifications.set(txn.transaction_id, c);
       if (c.isMedical) medical++;
 
+      const account = opts.accountMap.get(txn.account_id) ?? null;
+      hsaByPlaidTxnId.set(txn.transaction_id, account?.isHsa ?? false);
+
       rows.push({
         user_id: opts.userId,
         plaid_transaction_id: txn.transaction_id,
-        plaid_account_id: opts.accountMap.get(txn.account_id) ?? null,
+        plaid_account_id: account?.id ?? null,
         transaction_date: txn.date,
         vendor: txn.merchant_name || txn.name,
         description: txn.name,
@@ -435,7 +461,11 @@ async function drain(
         signed_amount: txn.amount,
         category: c.isMedical ? "medical" : (txn.category?.[0] ?? "Other"),
         is_medical: c.isMedical,
-        is_hsa_eligible: c.isMedical && !c.needsReview,
+        // Workstream C2: eligibility is no longer decided at ingestion. It
+        // depends on date of service, patient and Pub 502 category, none of
+        // which are known here. `transactions.is_hsa_eligible` is left at its
+        // default; the expense's eligibility_state is resolved at
+        // substantiation.
         needs_review: c.needsReview,
         reconciliation_status: "unlinked",
         source: "plaid",
@@ -459,7 +489,11 @@ async function drain(
     for (const row of upserted ?? []) {
       const c = classifications.get(row.plaid_transaction_id);
       if (!c) continue;
-      ingested.push({ ...row, classification: c } as IngestedTransaction);
+      ingested.push({
+        ...row,
+        is_hsa_account: hsaByPlaidTxnId.get(row.plaid_transaction_id) ?? false,
+        classification: c,
+      } as IngestedTransaction);
     }
   }
 

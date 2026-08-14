@@ -145,7 +145,10 @@ export const useWellbieChat = () => {
           amount: 0,
           date: new Date().toISOString().split("T")[0],
           category: "Medical Services",
-          is_hsa_eligible: true,
+          // Workstream B: is_hsa_eligible is derived from eligibility_state.
+          // A placeholder row created for analysis has made no eligibility
+          // determination, so it stays 'unknown'.
+          eligibility_state: "unknown",
         })
         .select()
         .single();
