@@ -522,17 +522,15 @@ export function BillUploadWizard({
         const vendor = d.vendor.trim() || d.file.name.replace(/\.[^.]+$/, "");
         const amount = d.amount !== "" ? parseFloat(d.amount) : 0;
         const date = d.date || new Date().toISOString().split("T")[0];
-        const isHsaEligible = HSA_ELIGIBLE_CATEGORIES.includes(d.category);
         const patientName =
           d.patientChoice === "Other"
             ? d.patientName.trim() || "Self"
             : d.patientChoice;
-        // Reclaim Phase 2: when OCR ran successfully, the invoice starts in
-        // PENDING_REVIEW so it shows up in the dashboard's review bucket and
-        // the user is prompted to confirm eligibility. Manual/PDF uploads
-        // (no OCR) default to CAPTURED via the column default.
+        // Workstream B: the old `isHsaEligible` (category matching) and
+        // `lifecycleStatus` locals are gone — both columns are now derived from
+        // the facets set below, and category matching is a guess rather than
+        // the explicit user confirmation that earns 'eligible'.
         const ocrExtraction = ocrResults[i];
-        const lifecycleStatus = ocrExtraction ? "pending_review" : "captured";
         const { data: invoice, error: invoiceErr } = await supabase
           .from("invoices")
           .insert({

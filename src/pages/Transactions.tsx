@@ -17,6 +17,8 @@ import {
   type FilterCriteria,
 } from "@/components/transactions/AdvancedFilters";
 import { TransactionSplitDialog } from "@/components/transactions/TransactionSplitDialog";
+import { ExpenseSplitDialog } from "@/components/transactions/ExpenseSplitDialog";
+import { canSplitIntoExpenses } from "@/lib/expenseSplitUtils";
 import { SplitTransactionCard } from "@/components/transactions/SplitTransactionCard";
 import { useTransactionSplits } from "@/hooks/useTransactionSplits";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
@@ -77,6 +79,13 @@ export default function Transactions() {
   const [splitDialogOpen, setSplitDialogOpen] = useState(false);
   const [transactionToSplit, setTransactionToSplit] =
     useState<Transaction | null>(null);
+  // Workstream B3: splitting a transaction into several EXPENSES is a
+  // different operation from TransactionSplitDialog's split across HSA
+  // accounts, so it gets its own dialog and its own state.
+  const [expenseSplitOpen, setExpenseSplitOpen] = useState(false);
+  const [txnToExpenseSplit, setTxnToExpenseSplit] =
+    useState<Transaction | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("all");
   const [advancedFilters, setAdvancedFilters] = useState<FilterCriteria>({});
   const [hsaOpenedDate, setHsaOpenedDate] = useState<string | null>(null);
@@ -110,6 +119,7 @@ export default function Transactions() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return;
+      setCurrentUserId(user.id);
 
       const { data: profile, error } = await supabase
         .from("profiles")
@@ -491,6 +501,21 @@ export default function Transactions() {
     setSplitDialogOpen(true);
   };
 
+  // Workstream B3. Distinct from handleSplitTransaction above, which splits a
+  // transaction across HSA accounts for allocation. This splits it into
+  // separate EXPENSES — the mixed-basket case ($12 of Tylenol in an $87
+  // Walmart run) and the bundled-payment case (one hospital charge covering
+  // several visits for different family members).
+  const handleSplitIntoExpenses = (transaction: Transaction) => {
+    const check = canSplitIntoExpenses(transaction);
+    if (!check.canSplit) {
+      toast.error(check.reason ?? "This transaction can't be split.");
+      return;
+    }
+    setTxnToExpenseSplit(transaction);
+    setExpenseSplitOpen(true);
+  };
+
   const stats = {
     total: transactions.length,
     medical: transactions.filter((t) => t.is_medical).length,
@@ -729,6 +754,9 @@ export default function Transactions() {
                           onSplitTransaction={() =>
                             handleSplitTransaction(transaction)
                           }
+                          onSplitIntoExpenses={() =>
+                            handleSplitIntoExpenses(transaction)
+                          }
                         />
                         {expandedTransactionId === transaction.id && (
                           <TransactionInlineDetail
@@ -775,6 +803,19 @@ export default function Transactions() {
               }
             }}
             transaction={transactionToSplit}
+          />
+        )}
+
+        {txnToExpenseSplit && currentUserId && (
+          <ExpenseSplitDialog
+            open={expenseSplitOpen}
+            onOpenChange={(open) => {
+              setExpenseSplitOpen(open);
+              if (!open) setTxnToExpenseSplit(null);
+            }}
+            transaction={txnToExpenseSplit}
+            userId={currentUserId}
+            onSplit={fetchTransactions}
           />
         )}
 

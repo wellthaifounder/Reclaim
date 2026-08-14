@@ -17,6 +17,7 @@ import {
   RotateCcw,
   ListRestart,
   Split,
+  Receipt,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -42,6 +43,7 @@ interface TransactionCardProps {
   onUnignore?: () => void;
   onAddToReviewQueue?: () => void;
   onSplitTransaction?: () => void;
+  onSplitIntoExpenses?: () => void;
 }
 
 export function TransactionCard({
@@ -65,6 +67,7 @@ export function TransactionCard({
   onUnignore,
   onAddToReviewQueue,
   onSplitTransaction,
+  onSplitIntoExpenses,
 }: TransactionCardProps) {
   const getStatusBadge = () => {
     switch (reconciliationStatus) {
@@ -212,7 +215,20 @@ export function TransactionCard({
                 !invoiceId && (
                   <DropdownMenuItem onClick={onSplitTransaction}>
                     <Split className="h-4 w-4 mr-2" />
-                    Split Transaction
+                    Split across HSA accounts
+                  </DropdownMenuItem>
+                )}
+
+              {/* Workstream B3: splitting one payment into several expenses —
+                  a mixed basket, or a bundled charge covering several visits.
+                  Distinct from the HSA-account allocation split above. */}
+              {onSplitIntoExpenses &&
+                !isSplit &&
+                !splitParentId &&
+                !invoiceId && (
+                  <DropdownMenuItem onClick={onSplitIntoExpenses}>
+                    <Receipt className="h-4 w-4 mr-2" />
+                    Split into expenses
                   </DropdownMenuItem>
                 )}
 
