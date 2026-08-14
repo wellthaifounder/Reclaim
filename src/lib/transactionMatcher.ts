@@ -1,5 +1,3 @@
-import { isMedicalVendor } from "./medicalVendors";
-
 export interface Transaction {
   id: string;
   vendor: string | null;
@@ -254,12 +252,17 @@ export function getSuggestion(
     };
   }
 
-  // Check if vendor is known medical provider
-  if (isMedicalVendor(transaction.vendor || transaction.description)) {
+  // Fall back to the server's classification. This used to re-run a
+  // client-side copy of the keyword list (src/lib/medicalVendors.ts), which
+  // drifted from the server's and matched unanchored substrings — so Dr Pepper
+  // and Univision were suggested as healthcare providers. The row already
+  // carries `is_medical` from _shared/medicalClassifier.ts; there is no reason
+  // to guess again in the browser.
+  if (transaction.is_medical) {
     return {
       type: "mark_medical",
       confidence: 0.8,
-      reason: "Vendor appears to be a healthcare provider",
+      reason: "Classified as a healthcare merchant during sync",
     };
   }
 

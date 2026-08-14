@@ -55,6 +55,7 @@ export interface PlaidApiTransaction {
   personal_finance_category?: {
     primary?: string;
     detailed?: string;
+    confidence_level?: string;
   } | null;
 }
 
@@ -407,6 +408,10 @@ async function drain(
         // Verified against the Plaid sandbox 2026-08-14: 'mcc' in txn === false,
         // merchant_category_code populated on 10 of 16 transactions.
         mcc: txn.merchant_category_code ?? null,
+        // Plaid's v2 taxonomy, present on every transaction in the sandbox run
+        // (16/16) versus 60% for MCC — the classifier's most reliable signal,
+        // and the source of the transfer/loan-payment exclusions.
+        personal_finance_category: txn.personal_finance_category ?? null,
       };
       const c = await classifyTransaction(
         supabase,
