@@ -43,7 +43,7 @@ type SplitFormValues = z.infer<typeof splitFormSchema>;
 interface TransactionSplitDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  transaction: Transaction & { is_split?: boolean };
+  transaction: Transaction;
 }
 
 export function TransactionSplitDialog({

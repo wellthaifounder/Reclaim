@@ -253,7 +253,7 @@ export const AuthenticatedNav = ({
                             <span className="flex-1 text-left">
                               {item.label}
                             </span>
-                            {"badge" in item && item.badge > 0 && (
+                            {"badge" in item && (item.badge ?? 0) > 0 && (
                               <span className="bg-yellow-500 text-white text-xs px-1.5 py-0.5 rounded-full min-w-[20px] text-center">
                                 {item.badge}
                               </span>

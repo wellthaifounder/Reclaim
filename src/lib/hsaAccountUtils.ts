@@ -6,9 +6,9 @@ export type HSAAccount = {
   account_name: string;
   opened_date: string;
   closed_date: string | null;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
+  is_active: boolean | null;
+  created_at: string | null;
+  updated_at: string | null;
   // Edge case fields
   eligibility_start_date: string | null;
   qle_type: string | null;

@@ -24,10 +24,10 @@ interface TransactionDetailDialogProps {
     vendor: string | null;
     amount: number;
     description: string;
-    category: string;
-    is_medical: boolean;
-    reconciliation_status: string;
-    is_hsa_eligible: boolean;
+    category: string | null;
+    is_medical: boolean | null;
+    reconciliation_status: string | null;
+    is_hsa_eligible: boolean | null;
     notes: string | null;
     payment_method_id: string | null;
     invoice_id: string | null;

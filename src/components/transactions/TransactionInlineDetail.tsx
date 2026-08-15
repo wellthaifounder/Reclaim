@@ -24,11 +24,11 @@ interface TransactionInlineDetailProps {
     vendor: string | null;
     amount: number;
     description: string;
-    category: string;
-    is_medical: boolean;
-    is_hsa_eligible: boolean;
+    category: string | null;
+    is_medical: boolean | null;
+    is_hsa_eligible: boolean | null;
     notes: string | null;
-    reconciliation_status: string;
+    reconciliation_status: string | null;
     payment_method_id: string | null;
     invoice_id: string | null;
     payment_methods?: {

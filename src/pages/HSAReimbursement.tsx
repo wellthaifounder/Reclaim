@@ -91,11 +91,15 @@ export default function HSAReimbursement() {
 
       if (error) throw error;
 
-      // Filter by HSA opened date
+      // Filter by HSA opened date. Hoisted to a const so the narrowing
+      // survives into the callback — as a property access it stayed
+      // `string | null` and `new Date(null)` would silently mean the epoch,
+      // i.e. the establishment-date gate would pass everything.
+      const hsaOpenedDate = profile?.hsa_opened_date;
       let filteredExpenses = data || [];
-      if (profile?.hsa_opened_date) {
+      if (hsaOpenedDate) {
         filteredExpenses = filteredExpenses.filter(
-          (exp) => new Date(exp.date) >= new Date(profile.hsa_opened_date),
+          (exp) => new Date(exp.date) >= new Date(hsaOpenedDate),
         );
       }
 

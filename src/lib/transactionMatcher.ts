@@ -4,10 +4,10 @@ export interface Transaction {
   amount: number;
   transaction_date: string;
   description: string;
-  is_medical?: boolean;
-  reconciliation_status?: string;
-  category?: string;
-  is_hsa_eligible?: boolean;
+  is_medical?: boolean | null;
+  reconciliation_status?: string | null;
+  category?: string | null;
+  is_hsa_eligible?: boolean | null;
   notes?: string | null;
   payment_method_id?: string | null;
   invoice_id?: string | null;
@@ -18,7 +18,7 @@ export interface Invoice {
   vendor: string;
   amount: number;
   date: string;
-  invoice_date?: string;
+  invoice_date?: string | null;
 }
 
 export interface VendorAlias {

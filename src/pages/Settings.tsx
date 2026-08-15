@@ -79,12 +79,12 @@ interface PaymentMethod {
   id: string;
   name: string;
   type: string;
-  rewards_rate: number;
+  rewards_rate: number | null;
 }
 
 interface BankConnection {
   id: string;
-  institution_name: string;
+  institution_name: string | null;
   created_at: string;
 }
 
@@ -667,7 +667,7 @@ const Settings = () => {
                         <div>
                           <p className="font-medium">{method.name}</p>
                           <p className="text-sm text-muted-foreground">
-                            {method.type} • {method.rewards_rate}% rewards
+                            {method.type} • {method.rewards_rate ?? 0}% rewards
                           </p>
                         </div>
                       </div>
@@ -718,7 +718,7 @@ const Settings = () => {
                         <Building2 className="h-5 w-5 text-muted-foreground" />
                         <div>
                           <p className="font-medium">
-                            {connection.institution_name}
+                            {connection.institution_name ?? "Linked bank"}
                           </p>
                           <p className="text-sm text-muted-foreground">
                             Connected{" "}

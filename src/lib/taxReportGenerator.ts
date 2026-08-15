@@ -7,15 +7,17 @@ interface Invoice {
   amount: number;
   vendor: string;
   category: string;
-  is_hsa_eligible: boolean;
-  is_reimbursed: boolean;
+  // Generated columns derived from eligibility_state / claim_state; null
+  // until those facets are decided.
+  is_hsa_eligible: boolean | null;
+  is_reimbursed: boolean | null;
 }
 
 interface Receipt {
   id: string;
-  invoice_id: string;
+  invoice_id: string | null;
   file_path: string;
-  document_type: string;
+  document_type: string | null;
 }
 
 interface TaxYearData {

@@ -23,12 +23,12 @@ interface Review {
   user_id: string;
   rating: number;
   review_text: string;
-  is_featured: boolean;
-  moderation_status: string;
+  is_featured: boolean | null;
+  moderation_status: string | null;
   moderated_by: string | null;
   moderated_at: string | null;
   moderation_notes: string | null;
-  created_at: string;
+  created_at: string | null;
 }
 
 export default function AdminReviews() {
@@ -223,8 +223,11 @@ export default function AdminReviews() {
                             {review.review_text}
                           </CardTitle>
                           <CardDescription className="mt-1">
-                            Submitted{" "}
-                            {new Date(review.created_at).toLocaleDateString()}
+                            {review.created_at
+                              ? `Submitted ${new Date(
+                                  review.created_at,
+                                ).toLocaleDateString()}`
+                              : "Submitted"}
                           </CardDescription>
                         </div>
                       </div>
@@ -288,7 +291,10 @@ export default function AdminReviews() {
                         <Button
                           variant="outline"
                           onClick={() =>
-                            handleFeatureToggle(review.id, review.is_featured)
+                            handleFeatureToggle(
+                              review.id,
+                              review.is_featured ?? false,
+                            )
                           }
                           className="w-full"
                         >

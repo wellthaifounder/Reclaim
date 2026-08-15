@@ -8,11 +8,15 @@ export interface PaymentTransaction {
   payment_method_id?: string;
 }
 
+// Nullability here mirrors the `invoices` row type. total_amount is nullable
+// in the DB and falls back to `amount` below; is_hsa_eligible is a generated
+// column derived from eligibility_state and is null until that is decided,
+// which reads the same as "not established as eligible" for these sums.
 export interface ExpenseReport {
   id: string;
-  total_amount?: number;
+  total_amount?: number | null;
   amount: number;
-  is_hsa_eligible: boolean;
+  is_hsa_eligible: boolean | null;
   vendor: string;
   category: string;
   date: string;

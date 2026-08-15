@@ -29,7 +29,7 @@ interface Transaction {
   description: string;
   category: string | null;
   payment_method_id: string | null;
-  is_hsa_eligible: boolean;
+  is_hsa_eligible: boolean | null;
   payment_methods?: {
     is_hsa_account: boolean;
   } | null;
@@ -38,21 +38,25 @@ interface Transaction {
 interface LinkedTransaction extends Transaction {
   payment_transaction_id: string;
   payment_source: string;
-  auto_linked?: boolean;
-  match_confidence?: number;
+  auto_linked?: boolean | null;
+  match_confidence?: number | null;
 }
 
 interface Invoice {
   id: string;
   vendor: string;
   amount: number;
-  total_amount: number;
+  total_amount: number | null;
   date: string;
 }
 
-type DisplayTransaction = (Transaction | LinkedTransaction) & {
-  isLinked: boolean;
-};
+// `isLinked` is a literal discriminant, not a plain boolean: it is the only
+// thing that tells the two row shapes apart, and the linked-only fields
+// (payment_transaction_id, payment_source, auto_linked, match_confidence)
+// are read behind `isLinked` checks.
+type DisplayTransaction =
+  | (Transaction & { isLinked: false })
+  | (LinkedTransaction & { isLinked: true });
 
 interface LinkTransactionDialogProps {
   open: boolean;
@@ -86,6 +90,7 @@ export function LinkTransactionDialog({
   }, [open, invoice]);
 
   const fetchTransactions = async () => {
+    if (!invoice) return;
     setLoading(true);
     try {
       const {
@@ -118,7 +123,7 @@ export function LinkTransactionDialog({
           )
         `,
         )
-        .eq("invoice_id", invoice?.id)
+        .eq("invoice_id", invoice.id)
         .not("transaction_id", "is", null);
 
       if (linkedError) throw linkedError;
@@ -166,9 +171,9 @@ export function LinkTransactionDialog({
       if (error) throw error;
 
       // Combine both lists, marking which are linked
-      const combined = [
-        ...linked.map((t) => ({ ...t, isLinked: true })),
-        ...(data || []).map((t) => ({ ...t, isLinked: false })),
+      const combined: DisplayTransaction[] = [
+        ...linked.map((t) => ({ ...t, isLinked: true as const })),
+        ...(data || []).map((t) => ({ ...t, isLinked: false as const })),
       ];
 
       setAllTransactions(combined);

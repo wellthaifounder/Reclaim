@@ -94,6 +94,7 @@ export default function CollectionDetail() {
   const { data: collection, isLoading: collectionLoading } = useQuery({
     queryKey: ["collection", id],
     queryFn: async () => {
+      if (!id) throw new Error("Missing collection id");
       const { data, error } = await supabase
         .from("collections")
         .select(
@@ -112,6 +113,7 @@ export default function CollectionDetail() {
   const { data: invoices } = useQuery({
     queryKey: ["collection-invoices", id],
     queryFn: async () => {
+      if (!id) throw new Error("Missing collection id");
       const { data, error } = await supabase
         .from("invoices")
         .select(
@@ -130,6 +132,7 @@ export default function CollectionDetail() {
   const { data: documents } = useQuery({
     queryKey: ["collection-documents", id],
     queryFn: async () => {
+      if (!id) throw new Error("Missing collection id");
       const { data, error } = await supabase
         .from("receipts")
         .select("id, file_path, document_type, description, uploaded_at")
@@ -164,6 +167,7 @@ export default function CollectionDetail() {
   // Update balance override mutation
   const updateBalanceMutation = useMutation({
     mutationFn: async (newBalance: number | null) => {
+      if (!id) throw new Error("Missing collection id");
       const { error } = await supabase
         .from("collections")
         .update({ user_responsibility_override: newBalance })

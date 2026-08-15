@@ -22,7 +22,7 @@ interface Receipt {
   id: string;
   file_path: string;
   file_type: string;
-  document_type: string;
+  document_type: string | null;
   description: string | null;
   uploaded_at: string;
   invoice_id: string | null;
@@ -87,7 +87,7 @@ const Documents = () => {
       filtered = filtered.filter(
         (r) =>
           r.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          r.document_type.toLowerCase().includes(searchQuery.toLowerCase()),
+          r.document_type?.toLowerCase().includes(searchQuery.toLowerCase()),
       );
     }
     if (selectedType !== "all") {

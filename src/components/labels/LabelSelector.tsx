@@ -111,11 +111,24 @@ export const LabelSelector = ({
         onLabelsChange(selectedLabels.filter((l) => l.id !== label.id));
         toast.success(`Removed label "${label.name}"`);
       } else {
-        // Add label
-        const { error } = await supabase.from(table).insert({
-          [column]: resourceId,
-          label_id: label.id,
-        });
+        // Add label. Branched per resource type rather than using a computed
+        // `[column]` key: that widens the literal to an index signature, which
+        // matches none of the three join-table row shapes.
+        const insert =
+          resourceType === "invoice"
+            ? supabase
+                .from("invoice_labels")
+                .insert({ invoice_id: resourceId, label_id: label.id })
+            : resourceType === "payment"
+              ? supabase.from("payment_labels").insert({
+                  payment_transaction_id: resourceId,
+                  label_id: label.id,
+                })
+              : supabase
+                  .from("receipt_labels")
+                  .insert({ receipt_id: resourceId, label_id: label.id });
+
+        const { error } = await insert;
 
         if (error) throw error;
 

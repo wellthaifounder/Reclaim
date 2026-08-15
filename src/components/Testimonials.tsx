@@ -9,7 +9,7 @@ interface Review {
   id: string;
   rating: number;
   review_text: string;
-  created_at: string;
+  created_at: string | null;
 }
 
 export const Testimonials = () => {
@@ -84,12 +84,14 @@ export const Testimonials = () => {
                 <p className="text-sm leading-relaxed text-foreground/90">
                   "{review.review_text}"
                 </p>
-                <p className="mt-4 text-xs text-muted-foreground">
-                  {new Date(review.created_at).toLocaleDateString("en-US", {
-                    month: "long",
-                    year: "numeric",
-                  })}
-                </p>
+                {review.created_at && (
+                  <p className="mt-4 text-xs text-muted-foreground">
+                    {new Date(review.created_at).toLocaleDateString("en-US", {
+                      month: "long",
+                      year: "numeric",
+                    })}
+                  </p>
+                )}
               </CardContent>
             </Card>
           ))}

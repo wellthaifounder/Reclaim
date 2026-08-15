@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 
-interface TransactionCardProps {
+export interface TransactionCardProps {
   id: string;
   date: string;
   vendor: string;

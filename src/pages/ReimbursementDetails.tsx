@@ -44,6 +44,10 @@ const ReimbursementDetails = () => {
   }, [id]);
 
   const fetchRequestDetails = async () => {
+    if (!id) {
+      setLoading(false);
+      return;
+    }
     try {
       const { data: requestData, error: requestError } = await supabase
         .from("reimbursement_requests")
@@ -152,6 +156,7 @@ const ReimbursementDetails = () => {
   };
 
   const handleStatusUpdate = async (newStatus: string) => {
+    if (!id) return;
     const previousStatus = request?.status;
     try {
       const { error } = await supabase

@@ -24,7 +24,7 @@ interface DocumentCardProps {
     id: string;
     file_path: string;
     file_type: string;
-    document_type: string;
+    document_type: string | null;
     description: string | null;
     uploaded_at: string;
     invoice_id: string | null;
@@ -103,7 +103,7 @@ export const DocumentCard = ({
               <div className="flex items-center gap-2 mb-2">
                 <FileText className="h-4 w-4 text-muted-foreground" />
                 <Badge variant="secondary" className="text-xs">
-                  {receipt.document_type.replace(/_/g, " ")}
+                  {receipt.document_type?.replace(/_/g, " ") ?? "document"}
                 </Badge>
               </div>
               {receipt.description && (

@@ -99,7 +99,7 @@ export default function BillDetail() {
   } = useQuery({
     queryKey: ["bill", id],
     queryFn: async () => {
-      if (isNewBill) return null;
+      if (isNewBill || !id) return null;
 
       // Get current user for ownership verification
       const {
@@ -137,7 +137,7 @@ export default function BillDetail() {
   const { data: receipts, refetch: refetchReceipts } = useQuery({
     queryKey: ["receipts", id],
     queryFn: async () => {
-      if (isNewBill) return [];
+      if (isNewBill || !id) return [];
       const { data, error } = await supabase
         .from("receipts")
         .select("*")
@@ -219,7 +219,9 @@ export default function BillDetail() {
         // Ticking the box on this form IS an explicit user determination, so
         // it earns 'eligible'; unticking returns to 'unknown' rather than
         // asserting ineligibility, which is a stronger and different claim.
-        eligibility_state: formData.isHsaEligible ? "eligible" : "unknown",
+        eligibility_state: formData.isHsaEligible
+          ? ("eligible" as const)
+          : ("unknown" as const),
       };
 
       let billId = id;
@@ -237,6 +239,7 @@ export default function BillDetail() {
         toast.success("Bill created successfully!");
         navigate(`/bills/${billId}`);
       } else {
+        if (!id) throw new Error("Missing bill id");
         const { error } = await supabase
           .from("invoices")
           .update(billData)
@@ -249,8 +252,6 @@ export default function BillDetail() {
 
       // Upload new files if any
       if (newFiles.length > 0 && billId) {
-        const uploadedReceipts: { id: string; document_type: string }[] = [];
-
         for (let i = 0; i < newFiles.length; i++) {
           const fileData = newFiles[i];
           const fileExt = fileData.file.name.split(".").pop();
@@ -263,7 +264,9 @@ export default function BillDetail() {
 
           if (uploadError) throw uploadError;
 
-          const { data: receiptData, error: receiptError } = await supabase
+          // Nothing consumes the inserted row — the only reader was the
+          // archived bill-review analysis — so skip the select round-trip.
+          const { error: receiptError } = await supabase
             .from("receipts")
             .insert({
               user_id: user.id,
@@ -273,12 +276,9 @@ export default function BillDetail() {
               document_type: fileData.documentType,
               description: fileData.description || null,
               display_order: i,
-            })
-            .select()
-            .single();
+            });
 
           if (receiptError) throw receiptError;
-          if (receiptData) uploadedReceipts.push(receiptData);
         }
 
         setNewFiles([]);
@@ -642,32 +642,33 @@ export default function BillDetail() {
                       {bill?.payment_transactions &&
                       bill.payment_transactions.length > 0 ? (
                         <div className="space-y-2">
-                          {bill.payment_transactions.map(
-                            (payment: BillPayment) => (
-                              <Card key={payment.id}>
-                                <CardContent className="pt-6">
-                                  <div className="flex items-center justify-between">
-                                    <div>
-                                      <p className="font-medium">
-                                        ${payment.amount.toFixed(2)}
-                                      </p>
-                                      <p className="text-sm text-muted-foreground">
-                                        {payment.payment_source} •{" "}
-                                        {new Date(
-                                          payment.payment_date,
-                                        ).toLocaleDateString()}
-                                      </p>
-                                    </div>
-                                    {payment.is_reimbursed && (
-                                      <Badge variant="default">
-                                        Reimbursed
-                                      </Badge>
-                                    )}
+                          {/* Inferred, not annotated as BillPayment: the row's
+                              payment_source is a CHECK-constrained text column,
+                              so the generated type is a plain string and the
+                              narrower union only holds at the calculation
+                              boundary below. */}
+                          {bill.payment_transactions.map((payment) => (
+                            <Card key={payment.id}>
+                              <CardContent className="pt-6">
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <p className="font-medium">
+                                      ${payment.amount.toFixed(2)}
+                                    </p>
+                                    <p className="text-sm text-muted-foreground">
+                                      {payment.payment_source} •{" "}
+                                      {new Date(
+                                        payment.payment_date,
+                                      ).toLocaleDateString()}
+                                    </p>
                                   </div>
-                                </CardContent>
-                              </Card>
-                            ),
-                          )}
+                                  {payment.is_reimbursed && (
+                                    <Badge variant="default">Reimbursed</Badge>
+                                  )}
+                                </div>
+                              </CardContent>
+                            </Card>
+                          ))}
                         </div>
                       ) : (
                         <div className="text-center py-12">
@@ -688,7 +689,7 @@ export default function BillDetail() {
       <LinkTransactionDialog
         open={showLinkTransactionDialog}
         onOpenChange={setShowLinkTransactionDialog}
-        invoice={bill}
+        invoice={bill ?? null}
         onSuccess={() => {
           refetch();
           setShowLinkTransactionDialog(false);

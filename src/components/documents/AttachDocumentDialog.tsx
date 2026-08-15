@@ -24,7 +24,7 @@ interface AttachDocumentDialogProps {
 
 interface UnattachedReceipt {
   id: string;
-  document_type: string;
+  document_type: string | null;
   description: string | null;
   uploaded_at: string;
   file_type: string;
@@ -146,7 +146,7 @@ export const AttachDocumentDialog = ({
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
                     <Badge variant="secondary" className="text-xs">
-                      {receipt.document_type.replace(/_/g, " ")}
+                      {receipt.document_type?.replace(/_/g, " ") ?? "document"}
                     </Badge>
                   </div>
                   {receipt.description && (

@@ -7,7 +7,10 @@ import { Card } from "@/components/ui/card";
 import { Plus, Search, CheckCircle2, XCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { TransactionCard } from "@/components/transactions/TransactionCard";
+import {
+  TransactionCard,
+  type TransactionCardProps,
+} from "@/components/transactions/TransactionCard";
 import { TransactionDetailDialog } from "@/components/transactions/TransactionDetailDialog";
 import { TransactionInlineDetail } from "@/components/transactions/TransactionInlineDetail";
 import { QuickAddTransactionDialog } from "@/components/transactions/QuickAddTransactionDialog";
@@ -34,28 +37,13 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import type { Database } from "@/integrations/supabase/types";
 
-type Transaction = {
-  id: string;
-  user_id: string;
-  transaction_date: string;
-  vendor: string | null;
-  amount: number;
-  description: string;
-  category: string;
-  is_medical: boolean;
-  reconciliation_status: "unlinked" | "linked_to_invoice" | "ignored";
-  is_hsa_eligible: boolean;
-  needs_review: boolean;
-  notes: string | null;
-  payment_method_id: string | null;
-  invoice_id: string | null;
-  is_split: boolean;
-  split_parent_id: string | null;
-  plaid_transaction_id: string | null;
-  source: string | null;
-  created_at: string;
-  updated_at: string;
+// Derived from the generated row type rather than hand-written. The previous
+// hand-written copy had drifted: it declared category/is_medical/needs_review
+// as non-null when the DB allows null, and predated plaid_account_id and
+// signed_amount, so it silently disagreed with every child that takes a row.
+type Transaction = Database["public"]["Tables"]["transactions"]["Row"] & {
   payment_methods?: {
     is_hsa_account: boolean;
   } | null;
@@ -726,15 +714,16 @@ export default function Transactions() {
                           vendor={transaction.vendor || "Unknown"}
                           amount={transaction.amount}
                           description={transaction.description}
-                          isMedical={transaction.is_medical}
+                          isMedical={transaction.is_medical ?? false}
                           reconciliationStatus={
-                            transaction.reconciliation_status
+                            (transaction.reconciliation_status ??
+                              "unlinked") as TransactionCardProps["reconciliationStatus"]
                           }
-                          isHsaEligible={transaction.is_hsa_eligible}
+                          isHsaEligible={transaction.is_hsa_eligible ?? false}
                           isFromHsaAccount={
                             transaction.payment_methods?.is_hsa_account || false
                           }
-                          isSplit={transaction.is_split}
+                          isSplit={transaction.is_split ?? false}
                           invoiceId={transaction.invoice_id}
                           splitParentId={transaction.split_parent_id}
                           onViewDetails={() => handleViewDetails(transaction)}

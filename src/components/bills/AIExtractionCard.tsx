@@ -15,6 +15,7 @@ import {
   Calendar,
   FileText,
   Tag,
+  type LucideIcon,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -43,7 +44,17 @@ interface AIExtractionCardProps {
   isEditable?: boolean;
 }
 
-const FIELD_CONFIG = {
+// Annotated rather than inferred: only total_amount carries a `prefix`, so an
+// inferred type made `config.prefix` unreachable on the union of entries.
+type FieldConfig = {
+  label: string;
+  icon: LucideIcon;
+  type: "text" | "number" | "date";
+  placeholder: string;
+  prefix?: string;
+};
+
+const FIELD_CONFIG: Record<keyof BillMetadata, FieldConfig> = {
   provider_name: {
     label: "Provider",
     icon: Building2,

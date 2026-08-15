@@ -126,6 +126,9 @@ export function useHSAEligibility(
           is_active: true,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
+          eligibility_start_date: null,
+          qle_type: null,
+          notes: null,
         };
 
         return {

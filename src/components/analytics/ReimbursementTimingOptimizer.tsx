@@ -10,8 +10,12 @@ import { TrendingUp, TrendingDown, Calendar, DollarSign } from "lucide-react";
 
 interface ReimbursementTimingOptimizerProps {
   unreimbursedTotal: number;
-  currentTaxBracket?: number;
-  projectedTaxBracket?: number;
+  // Required, not optional. These feed division directly, so an omitted
+  // bracket rendered the whole card as NaN; and silently defaulting a tax
+  // bracket would produce a plausible-looking but wrong savings figure,
+  // which is worse. The only caller already passes both.
+  currentTaxBracket: number;
+  projectedTaxBracket: number;
 }
 
 export const ReimbursementTimingOptimizer = ({
