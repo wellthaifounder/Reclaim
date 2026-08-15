@@ -13,14 +13,13 @@ import {
   type Invoice,
 } from "@/lib/transactionMatcher";
 import { Loader2, PartyPopper, ArrowLeft } from "lucide-react";
+import { suggestRuleKey, type MatchableRule } from "@/lib/merchantNormalize";
 import confetti from "canvas-confetti";
 
 export function ReviewQueue() {
   const [transactions, setTransactions] = useState<TransactionType[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [userPreferences, setUserPreferences] = useState<
-    Array<{ vendor_pattern: string; is_medical: boolean }>
-  >([]);
+  const [rules, setRules] = useState<MatchableRule[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -86,16 +85,16 @@ export function ReviewQueue() {
 
       if (invError) throw invError;
 
-      // Fetch user preferences
-      const { data: prefData, error: prefError } = await supabase
-        .from("user_vendor_preferences")
-        .select("vendor_pattern, is_medical");
+      // Workstream C3: categorization_rules replaces user_vendor_preferences.
+      const { data: ruleData, error: ruleError } = await supabase
+        .from("categorization_rules")
+        .select("id, match_type, match_value, is_medical, display_label");
 
-      if (prefError) throw prefError;
+      if (ruleError) throw ruleError;
 
       setTransactions(txData || []);
       setInvoices(invData || []);
-      setUserPreferences(prefData || []);
+      setRules(ruleData || []);
     } catch (error) {
       logError("Error fetching data", error);
       toast.error("Failed to load review queue");
@@ -104,39 +103,54 @@ export function ReviewQueue() {
     }
   };
 
-  const savePreference = async (vendorPattern: string, isMedical: boolean) => {
+  /**
+   * "Remember this choice" creates a categorization rule and applies it to
+   * matching past transactions. That retroactive apply is the point — the
+   * user has just told us how they think about this merchant, and leaving
+   * their history untouched wastes the answer.
+   *
+   * Unlike the old savePreference this is visible and reversible: the rule
+   * appears in Settings → Categorization rules with an undo that restores
+   * every transaction it touched.
+   */
+  const saveRule = async (transaction: TransactionType, isMedical: boolean) => {
     try {
       const {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { error } = await supabase.from("user_vendor_preferences").upsert({
-        user_id: user.id,
-        vendor_pattern: vendorPattern,
-        is_medical: isMedical,
-        times_confirmed: 1,
-      });
+      const key = suggestRuleKey(transaction);
+      if (!key) return;
 
+      const { data: rule, error } = await supabase
+        .from("categorization_rules")
+        .upsert(
+          {
+            user_id: user.id,
+            match_type: key.matchType,
+            match_value: key.matchValue,
+            is_medical: isMedical,
+            display_label: transaction.vendor ?? transaction.description,
+          },
+          { onConflict: "user_id,match_type,match_value" },
+        )
+        .select("id, match_type, match_value, is_medical, display_label")
+        .single();
       if (error) throw error;
 
-      // Update local state
-      setUserPreferences((prev) => {
-        const existing = prev.find((p) => p.vendor_pattern === vendorPattern);
-        if (existing) {
-          return prev.map((p) =>
-            p.vendor_pattern === vendorPattern
-              ? { ...p, is_medical: isMedical }
-              : p,
-          );
-        }
-        return [
-          ...prev,
-          { vendor_pattern: vendorPattern, is_medical: isMedical },
-        ];
-      });
+      const { error: applyError } = await supabase.rpc(
+        "apply_categorization_rule",
+        { p_rule_id: rule.id },
+      );
+      if (applyError) throw applyError;
+
+      setRules((prev) => [
+        ...prev.filter((r) => r.id !== rule.id),
+        rule as MatchableRule,
+      ]);
     } catch (error) {
-      logError("Error saving preference", error);
+      logError("Error saving categorization rule", error);
     }
   };
 
@@ -144,13 +158,17 @@ export function ReviewQueue() {
     const transaction = transactions[currentIndex];
     if (!transaction) return;
 
-    const suggestion = getSuggestion(transaction, invoices, userPreferences);
+    const suggestion = getSuggestion(transaction, invoices, rules);
 
     try {
-      const updates: any = {
+      // Workstream C2: no is_hsa_eligible here. Eligibility depends on date of
+      // service, patient and Pub 502 category, none of which this screen knows.
+      const updates: Record<string, unknown> = {
         is_medical: true,
-        is_hsa_eligible: true,
+        needs_review: false,
         reconciliation_status: "linked_to_invoice",
+        classification_reason: "user",
+        classification_explanation: "You confirmed this as a medical expense.",
       };
 
       if (suggestion.invoice) {
@@ -164,10 +182,9 @@ export function ReviewQueue() {
 
       if (error) throw error;
 
-      // Save preference if requested
-      if (rememberChoice && transaction.vendor) {
-        await savePreference(transaction.vendor, true);
-        toast.success("Marked as medical and saved preference");
+      if (rememberChoice) {
+        await saveRule(transaction, true);
+        toast.success("Marked as medical and saved a rule for this merchant");
       } else {
         toast.success("Marked as medical expense");
       }
@@ -188,16 +205,20 @@ export function ReviewQueue() {
         .from("transactions")
         .update({
           is_medical: false,
+          needs_review: false,
           reconciliation_status: "ignored",
+          classification_reason: "user",
+          classification_explanation: "You marked this as not medical.",
         })
         .eq("id", transaction.id);
 
       if (error) throw error;
 
-      // Save preference if requested
-      if (rememberChoice && transaction.vendor) {
-        await savePreference(transaction.vendor, false);
-        toast.success("Marked as not medical and saved preference");
+      if (rememberChoice) {
+        await saveRule(transaction, false);
+        toast.success(
+          "Marked as not medical and saved a rule for this merchant",
+        );
       } else {
         toast.success("Marked as not medical");
       }
@@ -286,11 +307,7 @@ export function ReviewQueue() {
   }
 
   const currentTransaction = transactions[currentIndex];
-  const suggestion = getSuggestion(
-    currentTransaction,
-    invoices,
-    userPreferences,
-  );
+  const suggestion = getSuggestion(currentTransaction, invoices, rules);
   const progress = ((currentIndex + 1) / transactions.length) * 100;
 
   // Extend transaction with missing properties for dialog

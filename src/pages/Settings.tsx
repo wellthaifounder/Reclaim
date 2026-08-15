@@ -50,6 +50,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { PlaidLink } from "@/components/PlaidLink";
+import { CategorizationRulesManager } from "@/components/transactions/CategorizationRulesManager";
 import { HSAAccountManager } from "@/components/hsa/HSAAccountManager";
 import { logError } from "@/utils/errorHandler";
 
@@ -684,6 +685,10 @@ const Settings = () => {
               )}
             </CardContent>
           </Card>
+
+          {/* Workstream C3 — rules were previously written silently with no
+              screen at all, so a mislabelled vendor was permanent. */}
+          <CategorizationRulesManager />
 
           <Card>
             <CardHeader>

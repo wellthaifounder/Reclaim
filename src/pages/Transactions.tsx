@@ -21,6 +21,10 @@ import {
 } from "@/components/transactions/AdvancedFilters";
 import { TransactionSplitDialog } from "@/components/transactions/TransactionSplitDialog";
 import { ExpenseSplitDialog } from "@/components/transactions/ExpenseSplitDialog";
+import {
+  CreateRulePrompt,
+  type RuleCandidate,
+} from "@/components/transactions/CreateRulePrompt";
 import { canSplitIntoExpenses } from "@/lib/expenseSplitUtils";
 import { SplitTransactionCard } from "@/components/transactions/SplitTransactionCard";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
@@ -73,6 +77,10 @@ export default function Transactions() {
   const [txnToExpenseSplit, setTxnToExpenseSplit] =
     useState<Transaction | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  // Workstream C3: set after a categorization decision, to offer a rule.
+  const [ruleCandidate, setRuleCandidate] = useState<RuleCandidate | null>(
+    null,
+  );
   const [activeTab, setActiveTab] = useState("all");
   const [advancedFilters, setAdvancedFilters] = useState<FilterCriteria>({});
   const [hsaOpenedDate, setHsaOpenedDate] = useState<string | null>(null);
@@ -357,32 +365,21 @@ export default function Transactions() {
         .from("transactions")
         .update({
           is_medical: true,
-          is_hsa_eligible: true,
           needs_review: false,
           category: "medical",
+          classification_reason: "user",
+          classification_explanation:
+            "You confirmed this as a medical expense.",
         })
         .eq("id", transaction.id);
       if (error) throw error;
 
-      // Save vendor preference so future syncs don't flag this vendor
-      if (transaction.vendor) {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        if (user) {
-          await supabase.from("user_vendor_preferences").upsert(
-            {
-              user_id: user.id,
-              vendor_pattern: transaction.vendor,
-              is_medical: true,
-            },
-            { onConflict: "user_id,vendor_pattern" },
-          );
-        }
-      }
-
       toast.success("Confirmed as medical expense");
       fetchTransactions();
+      // Workstream C3: this used to silently upsert a vendor preference the
+      // user could never see or undo. Now it offers a rule, shows how many
+      // past transactions it would touch, and is reversible.
+      setRuleCandidate({ ...transaction, isMedical: true });
     } catch (error) {
       logError("Error confirming medical transaction:", error);
       toast.error("Failed to update transaction");
@@ -395,32 +392,17 @@ export default function Transactions() {
         .from("transactions")
         .update({
           is_medical: false,
-          is_hsa_eligible: false,
           needs_review: false,
           reconciliation_status: "ignored",
+          classification_reason: "user",
+          classification_explanation: "You marked this as not medical.",
         })
         .eq("id", transaction.id);
       if (error) throw error;
 
-      // Save vendor preference so future syncs skip this vendor
-      if (transaction.vendor) {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        if (user) {
-          await supabase.from("user_vendor_preferences").upsert(
-            {
-              user_id: user.id,
-              vendor_pattern: transaction.vendor,
-              is_medical: false,
-            },
-            { onConflict: "user_id,vendor_pattern" },
-          );
-        }
-      }
-
       toast.success("Marked as non-medical");
       fetchTransactions();
+      setRuleCandidate({ ...transaction, isMedical: false });
     } catch (error) {
       logError("Error rejecting medical categorization:", error);
       toast.error("Failed to update transaction");
@@ -724,6 +706,9 @@ export default function Transactions() {
                             transaction.payment_methods?.is_hsa_account || false
                           }
                           isSplit={transaction.is_split ?? false}
+                          classificationExplanation={
+                            transaction.classification_explanation
+                          }
                           invoiceId={transaction.invoice_id}
                           splitParentId={transaction.split_parent_id}
                           onViewDetails={() => handleViewDetails(transaction)}
@@ -806,6 +791,13 @@ export default function Transactions() {
             onSplit={fetchTransactions}
           />
         )}
+
+        {/* Workstream C3 — offer a rule after a categorization decision. */}
+        <CreateRulePrompt
+          candidate={ruleCandidate}
+          onOpenChange={(open) => !open && setRuleCandidate(null)}
+          onCreated={fetchTransactions}
+        />
 
         {/* Invoice picker — step 1 of transaction linking */}
         <Dialog open={invoicePickerOpen} onOpenChange={setInvoicePickerOpen}>

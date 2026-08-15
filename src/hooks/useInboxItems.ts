@@ -206,30 +206,26 @@ export function useInboxItems(): UseInboxItemsReturn {
             .from("transactions")
             .update({
               is_medical: isMedical,
-              is_hsa_eligible: isMedical,
+              // Workstream C2: eligibility is decided at substantiation, not
+              // here. This used to set is_hsa_eligible from the medical
+              // verdict alone, which asserts a Pub 502 conclusion from a
+              // merchant name.
               needs_review: false,
               reconciliation_status: isMedical ? "unlinked" : "ignored",
+              classification_reason: "user",
+              classification_explanation: isMedical
+                ? "You confirmed this as a medical expense."
+                : "You marked this as not medical.",
             })
             .eq("id", item.source_entity_id);
 
           if (error) throw error;
 
-          // Save vendor preference for future auto-classification
-          if (item.title && item.title !== "Unknown Transaction") {
-            const { error: prefError } = await supabase
-              .from("user_vendor_preferences")
-              .upsert(
-                {
-                  user_id: user.id,
-                  vendor_pattern: item.title,
-                  is_medical: isMedical,
-                  times_confirmed: 1,
-                },
-                { onConflict: "user_id,vendor_pattern" },
-              );
-            if (prefError)
-              logError("Failed to save vendor preference", prefError);
-          }
+          // Workstream C3: the silent user_vendor_preferences upsert that used
+          // to live here is gone. It keyed on item.title — a display string,
+          // not a merchant identifier — and the user could neither see nor undo
+          // it. Rules are now offered explicitly on the Transactions page,
+          // where the blast radius can be shown before the user agrees to it.
 
           // Mark inbox item as acted
           await supabase

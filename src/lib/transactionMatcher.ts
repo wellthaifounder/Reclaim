@@ -1,3 +1,5 @@
+import { findGoverningRule, type MatchableRule } from "@/lib/merchantNormalize";
+
 export interface Transaction {
   id: string;
   vendor: string | null;
@@ -11,6 +13,9 @@ export interface Transaction {
   notes?: string | null;
   payment_method_id?: string | null;
   invoice_id?: string | null;
+  // Rule keys, persisted as of 20260815120000.
+  merchant_entity_id?: string | null;
+  merchant_category_code?: string | null;
 }
 
 export interface Invoice {
@@ -215,30 +220,28 @@ export function findTieredMatch(
 export function getSuggestion(
   transaction: Transaction,
   invoices: Invoice[],
-  userPreferences: Array<{ vendor_pattern: string; is_medical: boolean }>,
+  rules: readonly MatchableRule[],
 ): MatchSuggestion {
-  // Check user's learned preferences first
-  const vendorText = (
-    transaction.vendor || transaction.description
-  ).toUpperCase();
-  const userPref = userPreferences.find((pref) =>
-    vendorText.includes(pref.vendor_pattern.toUpperCase()),
-  );
+  // Workstream C3. This previously matched with
+  // `vendorText.includes(pref.vendor_pattern.toUpperCase())` — an unanchored
+  // substring, the same defect that made the classifier flag Dr Pepper. A
+  // saved pattern of "cvs" matched "MYCVSHEALTHYSNACKS". Rules now match on a
+  // precedence chain with normalized, boundary-anchored comparison.
+  const rule = findGoverningRule(rules, transaction);
 
-  if (userPref) {
-    if (userPref.is_medical) {
-      return {
-        type: "mark_medical",
-        confidence: 0.95,
-        reason: `You previously marked ${userPref.vendor_pattern} as medical`,
-      };
-    } else {
-      return {
-        type: "not_medical",
-        confidence: 0.95,
-        reason: `You previously marked ${userPref.vendor_pattern} as not medical`,
-      };
-    }
+  if (rule) {
+    const label = rule.display_label || rule.match_value;
+    return rule.is_medical
+      ? {
+          type: "mark_medical",
+          confidence: 0.95,
+          reason: `Your rule marks ${label} as medical`,
+        }
+      : {
+          type: "not_medical",
+          confidence: 0.95,
+          reason: `Your rule marks ${label} as not medical`,
+        };
   }
 
   // Try to find matching invoice

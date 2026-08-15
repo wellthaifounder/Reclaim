@@ -171,9 +171,10 @@ serve(async (req) => {
       creds,
     });
 
-    const { data: userPrefs } = await supabase
-      .from("user_vendor_preferences")
-      .select("vendor_pattern, is_medical")
+    // Workstream C3: categorization_rules replaces user_vendor_preferences.
+    const { data: rules } = await supabase
+      .from("categorization_rules")
+      .select("id, match_type, match_value, is_medical, display_label")
       .eq("user_id", connection.user_id);
 
     const { counts, ingested } = await syncTransactions(supabase, {
@@ -183,7 +184,7 @@ serve(async (req) => {
       creds,
       cursor: connection.transactions_cursor,
       accountMap,
-      userPreferences: userPrefs ?? [],
+      rules: rules ?? [],
     });
 
     // ── 5. Capture + deposit matching (shared with plaid-sync-transactions)

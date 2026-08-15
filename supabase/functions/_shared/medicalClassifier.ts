@@ -19,17 +19,28 @@
 //      candidates.
 //
 // Tier order (first match wins):
-//   1. User preference   — the user has ruled on this vendor; authoritative
+//   1. Categorization rule — the user has ruled on this merchant; authoritative
 //   2. Hard exclusion    — transfers, loan payments, veterinary care
 //   3. MCC               — IRS-aligned merchant category, high confidence
 //   4. Personal finance category — Plaid's v2 taxonomy, confidence-gated
 //   5. Keyword           — curated, word-boundary anchored
+//
+// Tier 1 was `user_vendor_preferences` (lowercase substring on the vendor
+// name) until Workstream C3 replaced it with `categorization_rules`, which
+// keys on a precedence chain — merchant_entity_id, else merchant_category_code,
+// else a normalized name pattern — and records which one matched so the rules
+// screen can explain and undo itself.
 //
 // Scope note: this decides MEDICAL vs NOT MEDICAL only. HSA *eligibility* is
 // resolved later, at substantiation, where date of service, patient and Pub 502
 // category are known. See .claude/plans/bank-sync-workflow-spec.md.
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  type CategorizationRule,
+  explainRule,
+  findGoverningRule,
+} from "./categorizationRules.ts";
 
 export interface PlaidPersonalFinanceCategory {
   primary?: string | null;
@@ -50,16 +61,13 @@ export interface PlaidTxnLike {
    * on roughly 60% of transactions.
    */
   mcc?: string | null;
+  /** Plaid's stable merchant id. Present on ~44% of transactions. */
+  merchant_entity_id?: string | null;
   personal_finance_category?: PlaidPersonalFinanceCategory | null;
 }
 
-export interface UserVendorPreference {
-  vendor_pattern: string;
-  is_medical: boolean;
-}
-
 export type ClassificationReason =
-  | "user_preference"
+  | "rule"
   | "excluded"
   | "mcc"
   | "personal_finance_category"
@@ -80,6 +88,8 @@ export interface ClassificationResult {
   confidence: number;
   /** Plain-language justification. Surfaced in the UI as the "why" chip. */
   explanation: string;
+  /** Set when reason is "rule", so the caller can stamp provenance. */
+  ruleId?: string;
 }
 
 // ── Hard exclusions ───────────────────────────────────────────────────────
@@ -260,30 +270,6 @@ function firstMatch(re: RegExp, haystack: string): string | null {
   return m ? m[0] : null;
 }
 
-/**
- * Match a user's saved vendor pattern on a word boundary rather than as a bare
- * substring, and prefer the longest pattern when several apply — so a specific
- * rule beats a generic one instead of whichever happened to be first.
- */
-function matchUserPreference(
-  vendor: string,
-  prefs: UserVendorPreference[],
-): UserVendorPreference | null {
-  let best: UserVendorPreference | null = null;
-  for (const p of prefs) {
-    const pattern = (p.vendor_pattern ?? "").trim();
-    if (!pattern) continue;
-    const re = new RegExp(`\\b${escapeRegex(pattern)}`, "i");
-    if (
-      re.test(vendor) &&
-      (!best || pattern.length > best.vendor_pattern.trim().length)
-    ) {
-      best = p;
-    }
-  }
-  return best;
-}
-
 // ── MCC lookup ────────────────────────────────────────────────────────────
 // Cached for the lifetime of the Deno worker; the table is small and changes
 // only by migration, so one miss per cold start is fine.
@@ -330,24 +316,29 @@ export function _resetMccCacheForTests(): void {
 export async function classifyTransaction(
   supabase: SupabaseClient,
   txn: PlaidTxnLike,
-  userPreferences: UserVendorPreference[] = [],
+  rules: readonly CategorizationRule[] = [],
 ): Promise<ClassificationResult> {
   const vendor = (txn.merchant_name || txn.name || "").trim();
   const pfc = txn.personal_finance_category ?? null;
   const detailed = (pfc?.detailed ?? "").toUpperCase();
   const primary = (pfc?.primary ?? "").toUpperCase();
 
-  // Tier 1 — the user has already ruled on this vendor.
-  const pref = matchUserPreference(vendor, userPreferences);
-  if (pref) {
+  // Tier 1 — the user has already ruled on this merchant. Authoritative, and
+  // deliberately ahead of the exclusions below: the service-animal case is
+  // exactly why a user rule has to be able to override "veterinary care".
+  const rule = findGoverningRule(rules, {
+    merchantEntityId: txn.merchant_entity_id ?? null,
+    merchantCategoryCode: txn.mcc ?? null,
+    merchantName: vendor,
+  });
+  if (rule) {
     return {
-      isMedical: pref.is_medical,
+      isMedical: rule.is_medical,
       needsReview: false,
-      reason: "user_preference",
+      reason: "rule",
+      ruleId: rule.id,
       confidence: 1.0,
-      explanation: `You previously marked "${pref.vendor_pattern}" as ${
-        pref.is_medical ? "medical" : "not medical"
-      }.`,
+      explanation: explainRule(rule),
     };
   }
 

@@ -27,8 +27,8 @@ import {
   classifyTransaction,
   type ClassificationResult,
   type PlaidTxnLike,
-  type UserVendorPreference,
 } from "./medicalClassifier.ts";
+import type { CategorizationRule } from "./categorizationRules.ts";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -269,7 +269,7 @@ export async function syncTransactions(
     creds: PlaidCreds;
     cursor: string | null;
     accountMap: Map<string, AccountRef>;
-    userPreferences: UserVendorPreference[];
+    rules: readonly CategorizationRule[];
   },
 ): Promise<{ counts: SyncCounts; ingested: IngestedTransaction[] }> {
   let attempt = 0;
@@ -300,7 +300,7 @@ async function drain(
     creds: PlaidCreds;
     cursor: string | null;
     accountMap: Map<string, AccountRef>;
-    userPreferences: UserVendorPreference[];
+    rules: readonly CategorizationRule[];
   },
 ): Promise<{ counts: SyncCounts; ingested: IngestedTransaction[] }> {
   const added: PlaidApiTransaction[] = [];
@@ -431,16 +431,16 @@ async function drain(
         // Verified against the Plaid sandbox 2026-08-14: 'mcc' in txn === false,
         // merchant_category_code populated on 10 of 16 transactions.
         mcc: txn.merchant_category_code ?? null,
+        // Plaid's stable merchant id — the highest-precedence rule key.
+        // Measured at ~44% coverage in the sandbox, which is why the rules
+        // engine falls back to MCC and then to a normalized name.
+        merchant_entity_id: txn.merchant_entity_id ?? null,
         // Plaid's v2 taxonomy, present on every transaction in the sandbox run
         // (16/16) versus 60% for MCC — the classifier's most reliable signal,
         // and the source of the transfer/loan-payment exclusions.
         personal_finance_category: txn.personal_finance_category ?? null,
       };
-      const c = await classifyTransaction(
-        supabase,
-        txnLike,
-        opts.userPreferences,
-      );
+      const c = await classifyTransaction(supabase, txnLike, opts.rules);
       classifications.set(txn.transaction_id, c);
       if (c.isMedical) medical++;
 
@@ -461,6 +461,20 @@ async function drain(
         signed_amount: txn.amount,
         category: c.isMedical ? "medical" : (txn.category?.[0] ?? "Other"),
         is_medical: c.isMedical,
+        // Workstream C3: persist the signals a rule keys on, and the reason
+        // this verdict was reached. Previously all three were read off the
+        // Plaid payload, handed to the classifier and discarded, which left
+        // retroactive rule application with nothing to match against and the
+        // "why was this categorized?" chip with nothing to render.
+        merchant_entity_id: txn.merchant_entity_id ?? null,
+        merchant_category_code: txn.merchant_category_code ?? null,
+        pfc_primary: txn.personal_finance_category?.primary ?? null,
+        pfc_detailed: txn.personal_finance_category?.detailed ?? null,
+        pfc_confidence: txn.personal_finance_category?.confidence_level ?? null,
+        classification_reason: c.reason,
+        classification_explanation: c.explanation,
+        classification_confidence: c.confidence,
+        applied_by_rule_id: c.ruleId ?? null,
         // Workstream C2: eligibility is no longer decided at ingestion. It
         // depends on date of service, patient and Pub 502 category, none of
         // which are known here. `transactions.is_hsa_eligible` is left at its

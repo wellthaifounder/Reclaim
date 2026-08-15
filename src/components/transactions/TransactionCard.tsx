@@ -18,6 +18,7 @@ import {
   ListRestart,
   Split,
   Receipt,
+  HelpCircle,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -35,6 +36,12 @@ export interface TransactionCardProps {
   invoiceId?: string | null;
   splitParentId?: string | null;
   splitCount?: number;
+  /**
+   * Workstream C3 — the "why" chip. Spec: "Every auto-decision shows why.
+   * Audit-anxious users need the reasoning visible, and it makes disagreement
+   * actionable rather than mysterious."
+   */
+  classificationExplanation?: string | null;
   onViewDetails: () => void;
   onMarkMedical?: () => void;
   onLinkToInvoice?: () => void;
@@ -59,6 +66,7 @@ export function TransactionCard({
   invoiceId,
   splitParentId,
   splitCount,
+  classificationExplanation,
   onViewDetails,
   onMarkMedical,
   onLinkToInvoice,
@@ -162,6 +170,16 @@ export function TransactionCard({
               </Badge>
             )}
           </div>
+
+          {classificationExplanation && (
+            <p className="mb-2 flex items-start gap-1.5 text-xs text-muted-foreground">
+              <HelpCircle
+                className="mt-0.5 h-3 w-3 shrink-0"
+                aria-hidden="true"
+              />
+              <span>{classificationExplanation}</span>
+            </p>
+          )}
 
           {vendor && vendor !== description && (
             <p className="text-sm text-muted-foreground truncate">

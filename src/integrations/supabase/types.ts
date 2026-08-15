@@ -57,6 +57,39 @@ export type Database = {
         };
         Relationships: [];
       };
+      categorization_rules: {
+        Row: {
+          created_at: string;
+          display_label: string | null;
+          id: string;
+          is_medical: boolean;
+          match_type: Database["public"]["Enums"]["rule_match_type"];
+          match_value: string;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          display_label?: string | null;
+          id?: string;
+          is_medical: boolean;
+          match_type: Database["public"]["Enums"]["rule_match_type"];
+          match_value: string;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          display_label?: string | null;
+          id?: string;
+          is_medical?: boolean;
+          match_type?: Database["public"]["Enums"]["rule_match_type"];
+          match_value?: string;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
       collections: {
         Row: {
           color: string | null;
@@ -1997,6 +2030,63 @@ export type Database = {
         };
         Relationships: [];
       };
+      rule_applications: {
+        Row: {
+          applied_at: string;
+          id: string;
+          previous_applied_by_rule_id: string | null;
+          previous_classification_explanation: string | null;
+          previous_classification_reason: string | null;
+          previous_is_medical: boolean | null;
+          previous_needs_review: boolean | null;
+          reverted_at: string | null;
+          rule_id: string;
+          transaction_id: string;
+          user_id: string;
+        };
+        Insert: {
+          applied_at?: string;
+          id?: string;
+          previous_applied_by_rule_id?: string | null;
+          previous_classification_explanation?: string | null;
+          previous_classification_reason?: string | null;
+          previous_is_medical?: boolean | null;
+          previous_needs_review?: boolean | null;
+          reverted_at?: string | null;
+          rule_id: string;
+          transaction_id: string;
+          user_id: string;
+        };
+        Update: {
+          applied_at?: string;
+          id?: string;
+          previous_applied_by_rule_id?: string | null;
+          previous_classification_explanation?: string | null;
+          previous_classification_reason?: string | null;
+          previous_is_medical?: boolean | null;
+          previous_needs_review?: boolean | null;
+          reverted_at?: string | null;
+          rule_id?: string;
+          transaction_id?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "rule_applications_rule_id_fkey";
+            columns: ["rule_id"];
+            isOneToOne: false;
+            referencedRelation: "categorization_rules";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "rule_applications_transaction_id_fkey";
+            columns: ["transaction_id"];
+            isOneToOne: false;
+            referencedRelation: "transactions";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       savings_goals: {
         Row: {
           created_at: string;
@@ -2269,7 +2359,11 @@ export type Database = {
       transactions: {
         Row: {
           amount: number;
+          applied_by_rule_id: string | null;
           category: string | null;
+          classification_confidence: number | null;
+          classification_explanation: string | null;
+          classification_reason: string | null;
           created_at: string;
           description: string;
           id: string;
@@ -2277,9 +2371,15 @@ export type Database = {
           is_hsa_eligible: boolean | null;
           is_medical: boolean | null;
           is_split: boolean | null;
+          merchant_category_code: string | null;
+          merchant_entity_id: string | null;
+          merchant_normalized: string | null;
           needs_review: boolean;
           notes: string | null;
           payment_method_id: string | null;
+          pfc_confidence: string | null;
+          pfc_detailed: string | null;
+          pfc_primary: string | null;
           plaid_account_id: string | null;
           plaid_transaction_id: string | null;
           reconciliation_status: string | null;
@@ -2293,7 +2393,11 @@ export type Database = {
         };
         Insert: {
           amount: number;
+          applied_by_rule_id?: string | null;
           category?: string | null;
+          classification_confidence?: number | null;
+          classification_explanation?: string | null;
+          classification_reason?: string | null;
           created_at?: string;
           description: string;
           id?: string;
@@ -2301,9 +2405,15 @@ export type Database = {
           is_hsa_eligible?: boolean | null;
           is_medical?: boolean | null;
           is_split?: boolean | null;
+          merchant_category_code?: string | null;
+          merchant_entity_id?: string | null;
+          merchant_normalized?: string | null;
           needs_review?: boolean;
           notes?: string | null;
           payment_method_id?: string | null;
+          pfc_confidence?: string | null;
+          pfc_detailed?: string | null;
+          pfc_primary?: string | null;
           plaid_account_id?: string | null;
           plaid_transaction_id?: string | null;
           reconciliation_status?: string | null;
@@ -2317,7 +2427,11 @@ export type Database = {
         };
         Update: {
           amount?: number;
+          applied_by_rule_id?: string | null;
           category?: string | null;
+          classification_confidence?: number | null;
+          classification_explanation?: string | null;
+          classification_reason?: string | null;
           created_at?: string;
           description?: string;
           id?: string;
@@ -2325,9 +2439,15 @@ export type Database = {
           is_hsa_eligible?: boolean | null;
           is_medical?: boolean | null;
           is_split?: boolean | null;
+          merchant_category_code?: string | null;
+          merchant_entity_id?: string | null;
+          merchant_normalized?: string | null;
           needs_review?: boolean;
           notes?: string | null;
           payment_method_id?: string | null;
+          pfc_confidence?: string | null;
+          pfc_detailed?: string | null;
+          pfc_primary?: string | null;
           plaid_account_id?: string | null;
           plaid_transaction_id?: string | null;
           reconciliation_status?: string | null;
@@ -2340,6 +2460,13 @@ export type Database = {
           vendor?: string | null;
         };
         Relationships: [
+          {
+            foreignKeyName: "transactions_applied_by_rule_id_fkey";
+            columns: ["applied_by_rule_id"];
+            isOneToOne: false;
+            referencedRelation: "categorization_rules";
+            referencedColumns: ["id"];
+          },
           {
             foreignKeyName: "transactions_invoice_id_fkey";
             columns: ["invoice_id"];
@@ -2665,6 +2792,10 @@ export type Database = {
       };
     };
     Functions: {
+      apply_categorization_rule: {
+        Args: { p_rule_id: string };
+        Returns: number;
+      };
       calculate_fair_pricing_score: {
         Args: { p_provider_id: string };
         Returns: number;
@@ -2694,6 +2825,18 @@ export type Database = {
           unreimbursed_invoice_ids: string[];
         }[];
       };
+      normalize_merchant_name: { Args: { p_name: string }; Returns: string };
+      preview_categorization_rule: {
+        Args: {
+          p_match_type: Database["public"]["Enums"]["rule_match_type"];
+          p_match_value: string;
+        };
+        Returns: number;
+      };
+      revert_categorization_rule: {
+        Args: { p_rule_id: string };
+        Returns: number;
+      };
       suggest_invoice_clusters: {
         Args: { p_user_id: string };
         Returns: {
@@ -2705,6 +2848,16 @@ export type Database = {
           total_amount: number;
           vendor: string;
         }[];
+      };
+      transaction_matches_rule: {
+        Args: {
+          p_match_type: Database["public"]["Enums"]["rule_match_type"];
+          p_match_value: string;
+          p_merchant_category_code: string;
+          p_merchant_entity_id: string;
+          p_merchant_normalized: string;
+        };
+        Returns: boolean;
       };
       update_provider_statistics: {
         Args: { p_provider_id: string };
@@ -2734,6 +2887,7 @@ export type Database = {
         | "reimbursed";
       invoice_status:
         "draft" | "unpaid" | "partially_paid" | "fully_paid" | "reimbursed";
+      rule_match_type: "merchant_entity" | "mcc" | "name_pattern";
     };
     CompositeTypes: {
       [_ in never]: never;
@@ -2889,6 +3043,7 @@ export const Constants = {
         "fully_paid",
         "reimbursed",
       ],
+      rule_match_type: ["merchant_entity", "mcc", "name_pattern"],
     },
   },
 } as const;

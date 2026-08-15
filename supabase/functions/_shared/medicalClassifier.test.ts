@@ -16,6 +16,7 @@ import {
   classifyTransaction,
   type PlaidTxnLike,
 } from "./medicalClassifier.ts";
+import type { CategorizationRule } from "./categorizationRules.ts";
 
 // ── Minimal Supabase stub ─────────────────────────────────────────────────
 // Only mcc_codes is ever read, and only these three columns.
@@ -59,9 +60,28 @@ function txn(partial: Partial<PlaidTxnLike> & { name: string }): PlaidTxnLike {
   return { merchant_name: null, category: null, mcc: null, ...partial };
 }
 
-async function classify(t: PlaidTxnLike, prefs = [], rows = MCC_ROWS) {
+/** Build a categorization rule. match_value is stored already-normalized. */
+function rule(
+  match_type: CategorizationRule["match_type"],
+  match_value: string,
+  is_medical: boolean,
+): CategorizationRule {
+  return {
+    id: crypto.randomUUID(),
+    match_type,
+    match_value,
+    is_medical,
+    display_label: match_value,
+  };
+}
+
+async function classify(
+  t: PlaidTxnLike,
+  rules: CategorizationRule[] = [],
+  rows = MCC_ROWS,
+) {
   _resetMccCacheForTests();
-  return await classifyTransaction(stubSupabase(rows), t, prefs);
+  return await classifyTransaction(stubSupabase(rows), t, rules);
 }
 
 // ── False positives: the whole reason for the rewrite ─────────────────────
@@ -204,7 +224,7 @@ Deno.test("known brands are accepted; generic terms go to review", async () => {
 // ── User preference ───────────────────────────────────────────────────────
 
 Deno.test(
-  "user preference overrides everything, including exclusions",
+  "a user rule overrides everything, including the hard exclusions",
   async () => {
     const r = await classify(
       txn({
@@ -215,33 +235,50 @@ Deno.test(
           confidence_level: "VERY_HIGH",
         },
       }),
-      // Service-animal care is a qualified expense, so the user must be able to
-      // override the veterinary exclusion.
-      [{ vendor_pattern: "VCA", is_medical: true }] as never,
+      // Service-animal care is a qualified expense, so a user rule must be able
+      // to override the veterinary exclusion.
+      [rule("name_pattern", "vca", true)],
     );
     assertEquals(r.isMedical, true);
-    assertEquals(r.reason, "user_preference");
+    assertEquals(r.reason, "rule");
   },
 );
 
-Deno.test("the most specific user preference wins", async () => {
+Deno.test("the most specific name-pattern rule wins", async () => {
   const r = await classify(txn({ name: "TARGET PHARMACY #22" }), [
-    { vendor_pattern: "Target", is_medical: false },
-    { vendor_pattern: "Target Pharmacy", is_medical: true },
-  ] as never);
+    rule("name_pattern", "target", false),
+    rule("name_pattern", "target pharmacy", true),
+  ]);
   assertEquals(r.isMedical, true);
 });
 
 Deno.test(
-  "user preference matches on a word boundary, not a bare substring",
+  "a name-pattern rule does not match a longer word with the same prefix",
   async () => {
-    // "CVS" must not match "CVSHEALTHYSNACKS" mid-word.
-    const r = await classify(txn({ name: "MYCVSHEALTHYSNACKS LLC" }), [
-      { vendor_pattern: "CVS", is_medical: true },
-    ] as never);
-    assertEquals(r.reason !== "user_preference", true);
+    // "cvs" must not match "MYCVSHEALTHYSNACKS" — and after normalization the
+    // descriptor is one token, so a prefix match is the only risk.
+    const r = await classify(txn({ name: "CVSHEALTHYSNACKS LLC" }), [
+      rule("name_pattern", "cvs", true),
+    ]);
+    assertEquals(r.reason !== "rule", true);
   },
 );
+
+Deno.test("an entity rule outranks the MCC tier", async () => {
+  // MCC 8011 alone would classify this as medical; the user's rule says no.
+  const r = await classify(
+    txn({ name: "DR SMITH", mcc: "8011", merchant_entity_id: "ent_abc" }),
+    [rule("merchant_entity", "ent_abc", false)],
+  );
+  assertEquals(r.isMedical, false);
+  assertEquals(r.reason, "rule");
+});
+
+Deno.test("a rule result carries its rule id for provenance", async () => {
+  const r0 = rule("name_pattern", "walgreens", true);
+  const r = await classify(txn({ name: "WALGREENS #4821" }), [r0]);
+  assertEquals(r.ruleId, r0.id);
+});
 
 // ── Explanation ───────────────────────────────────────────────────────────
 
