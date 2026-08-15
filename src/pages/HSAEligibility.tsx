@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
+import { FF } from "@/lib/featureFlags";
 import {
   Card,
   CardContent,
@@ -30,8 +31,6 @@ import {
 import {
   hsaEligibilityItems,
   searchEligibilityItems,
-  filterByCategory,
-  filterByStatus,
   CATEGORIES,
   getCategoryCounts,
   type HSAEligibilityItem,
@@ -138,34 +137,36 @@ export default function HSAEligibility() {
           </AlertDescription>
         </Alert>
 
-        {/* Wellbie AI Helper Card */}
-        <Card className="mb-6 border-primary/50 bg-gradient-to-r from-primary/5 to-primary/10">
-          <CardContent className="pt-6">
-            <div className="flex items-start gap-4">
-              <div className="flex-shrink-0">
-                <div className="h-12 w-12 rounded-full bg-primary/20 flex items-center justify-center">
-                  <Sparkles className="h-6 w-6 text-primary" />
+        {/* Wellbie AI Helper Card — hidden for soft launch (v1.1) via FF. */}
+        {FF.WELLBIE_ENABLED && (
+          <Card className="mb-6 border-primary/50 bg-gradient-to-r from-primary/5 to-primary/10">
+            <CardContent className="pt-6">
+              <div className="flex items-start gap-4">
+                <div className="flex-shrink-0">
+                  <div className="h-12 w-12 rounded-full bg-primary/20 flex items-center justify-center">
+                    <Sparkles className="h-6 w-6 text-primary" />
+                  </div>
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-lg mb-2 flex items-center gap-2">
+                    <MessageCircle className="h-5 w-5" />
+                    Ask Wellbie for Personalized Help
+                  </h3>
+                  <p className="text-muted-foreground mb-3">
+                    Not sure if a specific purchase qualifies? Ask Wellbie, your
+                    AI assistant, for instant guidance on HSA eligibility. Just
+                    describe your expense and get personalized answers based on
+                    IRS guidelines.
+                  </p>
+                  <p className="text-sm text-muted-foreground italic">
+                    Try asking: "Is a massage HSA eligible?" or "Can I use my
+                    HSA for prescription sunglasses?"
+                  </p>
                 </div>
               </div>
-              <div className="flex-1">
-                <h3 className="font-semibold text-lg mb-2 flex items-center gap-2">
-                  <MessageCircle className="h-5 w-5" />
-                  Ask Wellbie for Personalized Help
-                </h3>
-                <p className="text-muted-foreground mb-3">
-                  Not sure if a specific purchase qualifies? Ask Wellbie, your
-                  AI assistant, for instant guidance on HSA eligibility. Just
-                  describe your expense and get personalized answers based on
-                  IRS guidelines.
-                </p>
-                <p className="text-sm text-muted-foreground italic">
-                  Try asking: "Is a massage HSA eligible?" or "Can I use my HSA
-                  for prescription sunglasses?"
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Search and Filters */}
         <Card className="mb-6">

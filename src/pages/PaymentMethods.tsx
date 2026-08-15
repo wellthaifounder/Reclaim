@@ -9,7 +9,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { WellthLogo } from "@/components/WellthLogo";
+import { ReclaimLogo } from "@/components/ReclaimLogo";
 import { ArrowLeft, Plus, CreditCard, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
@@ -183,7 +183,7 @@ const PaymentMethods = () => {
             onClick={() => navigate("/dashboard")}
             className="hover:opacity-80 transition-opacity"
           >
-            <WellthLogo size="sm" showTagline />
+            <ReclaimLogo size="sm" showTagline />
           </button>
 
           <Button

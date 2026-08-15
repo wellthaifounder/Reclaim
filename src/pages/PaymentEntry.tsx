@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { ArrowLeft, CheckCircle2, DollarSign } from "lucide-react";
+import { CheckCircle2 } from "lucide-react";
 import { z } from "zod";
 import { MultiFileUpload } from "@/components/expense/MultiFileUpload";
 import { Badge } from "@/components/ui/badge";
@@ -48,7 +48,7 @@ const PaymentEntry = () => {
   const [newFiles, setNewFiles] = useState<any[]>([]);
   const [selectedInvoice, setSelectedInvoice] = useState<string>("");
   const [selectedHSAAccount, setSelectedHSAAccount] = useState<string>("");
-  const { accounts: hsaAccounts } = useHSAAccounts();
+  useHSAAccounts();
 
   const [formData, setFormData] = useState({
     paymentDate: new Date().toISOString().split("T")[0],

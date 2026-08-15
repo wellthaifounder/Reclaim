@@ -19,6 +19,7 @@ import {
   FileText,
   MessageCircle,
 } from "lucide-react";
+import { FF } from "@/lib/featureFlags";
 
 const TABS = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
@@ -50,14 +51,17 @@ export const BottomTabNavigation = () => {
             <span className="text-xs">{tab.label}</span>
           </NavLink>
         ))}
-        <button
-          onClick={handleOpenWellbie}
-          className="flex flex-col items-center justify-center flex-1 h-full gap-1 rounded-lg transition-colors hover:bg-accent/50 text-muted-foreground"
-          aria-label="Ask Wellbie AI assistant"
-        >
-          <MessageCircle className="h-5 w-5" aria-hidden="true" />
-          <span className="text-xs">Wellbie</span>
-        </button>
+        {/* Wellbie tab — hidden for soft launch (v1.1) via FF. */}
+        {FF.WELLBIE_ENABLED && (
+          <button
+            onClick={handleOpenWellbie}
+            className="flex flex-col items-center justify-center flex-1 h-full gap-1 rounded-lg transition-colors hover:bg-accent/50 text-muted-foreground"
+            aria-label="Ask Wellbie AI assistant"
+          >
+            <MessageCircle className="h-5 w-5" aria-hidden="true" />
+            <span className="text-xs">Wellbie</span>
+          </button>
+        )}
       </div>
     </nav>
   );

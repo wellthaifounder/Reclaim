@@ -96,7 +96,7 @@ export function PlaidLink({ onSuccess }: PlaidLinkProps) {
         Connect Bank Account
       </Button>
       <p className="text-xs leading-relaxed text-muted-foreground">
-        By connecting an account, you authorize Wellth.ai to access your account
+        By connecting an account, you authorize Reclaim to access your account
         and transaction data via Plaid in accordance with our{" "}
         <a
           href="/privacy"

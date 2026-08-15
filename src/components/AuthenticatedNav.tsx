@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { WellthLogo } from "@/components/WellthLogo";
+import { ReclaimLogo } from "@/components/ReclaimLogo";
 import {
   LogOut,
   Calculator,
@@ -124,8 +124,12 @@ export const AuthenticatedNav = ({
                 className="flex-shrink-0 hover:opacity-80 transition-opacity"
                 aria-label="Go to dashboard"
               >
-                <WellthLogo size="sm" showTagline className="hidden sm:block" />
-                <WellthLogo variant="icon" size="sm" className="sm:hidden" />
+                <ReclaimLogo
+                  size="sm"
+                  showTagline
+                  className="hidden sm:block"
+                />
+                <ReclaimLogo variant="icon" size="sm" className="sm:hidden" />
               </button>
 
               {/* Desktop Navigation Links - hidden on mobile */}
@@ -179,26 +183,28 @@ export const AuthenticatedNav = ({
                 </span>
               </Button>
 
-              {/* Wellbie Button */}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() =>
-                  window.dispatchEvent(new Event("openWellbieChat"))
-                }
-                className="flex items-center gap-2"
-                aria-label="Open Wellbie AI assistant"
-              >
-                <div className="h-6 w-6">
-                  <WellbieAvatar
-                    size="sm"
-                    className="h-full w-full hover:scale-100"
-                  />
-                </div>
-                <span className="hidden sm:inline text-sm font-medium">
-                  Wellbie
-                </span>
-              </Button>
+              {/* Wellbie Button — hidden for soft launch (v1.1) via FF. */}
+              {FF.WELLBIE_ENABLED && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() =>
+                    window.dispatchEvent(new Event("openWellbieChat"))
+                  }
+                  className="flex items-center gap-2"
+                  aria-label="Open Wellbie AI assistant"
+                >
+                  <div className="h-6 w-6">
+                    <WellbieAvatar
+                      size="sm"
+                      className="h-full w-full hover:scale-100"
+                    />
+                  </div>
+                  <span className="hidden sm:inline text-sm font-medium">
+                    Wellbie
+                  </span>
+                </Button>
+              )}
 
               {/* Mobile Menu - only visible on mobile/tablet */}
               <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>

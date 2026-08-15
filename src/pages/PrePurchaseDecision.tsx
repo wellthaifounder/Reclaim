@@ -29,7 +29,6 @@ import {
   Receipt,
   TrendingUp,
   ChevronDown,
-  AlertCircle,
   Calculator,
   Save,
   FileText,

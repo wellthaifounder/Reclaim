@@ -130,7 +130,7 @@ export const PWAInstallPrompt = () => {
               <Download className="h-6 w-6 text-primary" />
             </div>
             <div>
-              <CardTitle className="text-lg">Install Wellth</CardTitle>
+              <CardTitle className="text-lg">Install Reclaim</CardTitle>
               <CardDescription className="text-xs">
                 Quick access from your home screen
               </CardDescription>

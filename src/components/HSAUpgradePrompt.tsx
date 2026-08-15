@@ -39,7 +39,7 @@ interface HSAUpgradePromptProps {
 
 export function HSAUpgradePrompt({
   expenseAmount,
-  context,
+  context: _context,
   onConnect,
   title,
   variant = "default",

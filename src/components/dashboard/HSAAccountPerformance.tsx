@@ -133,7 +133,7 @@ export function HSAAccountPerformance() {
               totalExpenses,
               unreimbursed,
               taxSavings,
-              splitsTotal,
+              splitsTotal: _splitsTotal,
             }) => (
               <div
                 key={account.id}

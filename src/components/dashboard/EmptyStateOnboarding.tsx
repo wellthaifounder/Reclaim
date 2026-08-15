@@ -56,7 +56,7 @@ export function EmptyStateOnboarding({
                 : "Start Saving on Healthcare Today"}
             </h2>
             <p className="text-muted-foreground">
-              Upload your first expense and see how Wellth organizes everything
+              Upload your first expense and see how Reclaim organizes everything
               for you.
             </p>
           </div>
@@ -102,8 +102,8 @@ export function EmptyStateOnboarding({
                     Organize & Categorize
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    Wellth auto-categorizes expenses and helps you organize them
-                    into collections.
+                    Reclaim auto-categorizes expenses and helps you organize
+                    them into collections.
                   </p>
                 </div>
               </div>

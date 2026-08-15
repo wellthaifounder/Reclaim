@@ -72,7 +72,7 @@ export const TaxPackageExport = () => {
       const url = URL.createObjectURL(pdfBlob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `Wellth_Tax_Package_${selectedYear}.pdf`;
+      a.download = `Reclaim_Tax_Package_${selectedYear}.pdf`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);

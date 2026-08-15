@@ -16,14 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
-import {
-  ArrowLeft,
-  FileText,
-  Download,
-  Send,
-  CheckCircle2,
-  Info,
-} from "lucide-react";
+import { FileText, Download, Send, CheckCircle2, Info } from "lucide-react";
 import { generateReimbursementPDF } from "@/lib/pdfGenerator";
 import { celebrateFirstReimbursement } from "@/lib/confettiUtils";
 import { logError } from "@/utils/errorHandler";

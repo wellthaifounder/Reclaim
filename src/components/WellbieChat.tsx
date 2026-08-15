@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { WellbieAvatar } from "./WellbieAvatar";
 import { WellbieChatPanel } from "./WellbieChatPanel";
 import { useWellbieChat } from "@/hooks/useWellbieChat";
-import { cn } from "@/lib/utils";
 
 export const WellbieChat = () => {
   const [isOpen, setIsOpen] = useState(false);

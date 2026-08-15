@@ -128,7 +128,6 @@ export function HSAHealthCheck({
   }
 
   const isHealthy = issues.length === 0;
-  const statusIcon = isHealthy ? CheckCircle2 : AlertCircle;
   const statusColor = isHealthy
     ? "text-green-600 dark:text-green-400 bg-green-500/10"
     : "text-amber-600 dark:text-amber-400 bg-amber-500/10";

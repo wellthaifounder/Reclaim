@@ -42,7 +42,7 @@ export function ProgressTracker({ steps }: ProgressTrackerProps) {
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
-          {steps.map((step, index) => (
+          {steps.map((step, _index) => (
             <div key={step.id} className="flex items-center gap-4">
               <div
                 className={cn(

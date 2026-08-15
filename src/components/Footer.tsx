@@ -1,4 +1,4 @@
-import { WellthLogo } from "./WellthLogo";
+import { ReclaimLogo } from "./ReclaimLogo";
 
 export const Footer = () => {
   return (
@@ -7,7 +7,7 @@ export const Footer = () => {
         <div className="grid gap-8 md:grid-cols-4">
           <div className="md:col-span-2">
             <div className="mb-4">
-              <WellthLogo size="sm" showTagline />
+              <ReclaimLogo size="sm" showTagline />
             </div>
             <p className="mb-4 text-sm text-muted-foreground">
               Your healthcare expense companion. Track medical spending,
@@ -15,7 +15,7 @@ export const Footer = () => {
               savings.
             </p>
             <p className="text-xs text-muted-foreground">
-              © 2025 Wellth.ai. All rights reserved.
+              © 2026 Reclaim. All rights reserved.
             </p>
           </div>
 
@@ -68,6 +68,11 @@ export const Footer = () => {
                 <li>
                   <a href="/privacy" className="hover:text-foreground">
                     Privacy Policy
+                  </a>
+                </li>
+                <li>
+                  <a href="/terms" className="hover:text-foreground">
+                    Terms of Service
                   </a>
                 </li>
               </ul>

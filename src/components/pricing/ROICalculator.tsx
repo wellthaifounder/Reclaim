@@ -40,7 +40,7 @@ export const ROICalculator = () => {
           </div>
           <CardTitle className="text-2xl">Calculate Your Savings</CardTitle>
           <CardDescription>
-            See how much you could save on healthcare costs with Wellth
+            See how much you could save on healthcare costs with Reclaim
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">

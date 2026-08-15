@@ -29,7 +29,7 @@ interface ExtendedHSAInvestmentTrackerProps extends HSAInvestmentTrackerProps {
 
 export const HSAInvestmentTracker = ({
   unreimbursedTotal,
-  yearlyContributions = 0,
+  yearlyContributions: _yearlyContributions = 0,
   investmentReturnRate = 7,
 }: ExtendedHSAInvestmentTrackerProps) => {
   // Calculate investment growth projections
@@ -43,7 +43,6 @@ export const HSAInvestmentTracker = ({
 
   // Generate projection data for next 10 years
   const projectionData = Array.from({ length: 11 }, (_, i) => {
-    const year = new Date().getFullYear() + i;
     const growth = calculateGrowth(unreimbursedTotal, i);
     const withReimbursement = unreimbursedTotal; // Stays constant as it's already spent
 

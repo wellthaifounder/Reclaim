@@ -23,7 +23,6 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "./ui/sheet";
-import { Badge } from "./ui/badge";
 import { logError } from "@/utils/errorHandler";
 
 type Message = { role: "user" | "assistant"; content: string };
@@ -93,7 +92,7 @@ export const WellbieChatPanel = ({
   const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
   const quickActions = quickActionsByPage[location.pathname] || [
-    "How does Wellth.ai work?",
+    "How does Reclaim work?",
     "What are HSA tax benefits?",
   ];
 

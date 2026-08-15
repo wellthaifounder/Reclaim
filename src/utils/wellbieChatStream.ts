@@ -98,8 +98,7 @@ export async function streamWellbieChat({
         try {
           const parsed = JSON.parse(jsonStr);
           const content = parsed.choices?.[0]?.delta?.content as
-            | string
-            | undefined;
+            string | undefined;
           if (content) onDelta(content);
         } catch {
           textBuffer = line + "\n" + textBuffer;
@@ -118,8 +117,7 @@ export async function streamWellbieChat({
         try {
           const parsed = JSON.parse(jsonStr);
           const content = parsed.choices?.[0]?.delta?.content as
-            | string
-            | undefined;
+            string | undefined;
           if (content) onDelta(content);
         } catch {
           /* ignore */

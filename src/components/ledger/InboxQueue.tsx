@@ -17,11 +17,7 @@ import {
   X,
   Loader2,
 } from "lucide-react";
-import {
-  useInboxItems,
-  type InboxItem,
-  type UseInboxItemsReturn,
-} from "@/hooks/useInboxItems";
+import { useInboxItems, type InboxItem } from "@/hooks/useInboxItems";
 import { useInboxKeyboardShortcuts } from "@/hooks/useInboxKeyboardShortcuts";
 
 const ITEM_TYPE_CONFIG: Record<

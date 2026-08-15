@@ -20,7 +20,7 @@ export function WelcomeDialog({
   open,
   onClose,
   firstName,
-  hasHSA,
+  hasHSA: _hasHSA,
 }: WelcomeDialogProps) {
   const navigate = useNavigate();
 
@@ -48,7 +48,7 @@ export function WelcomeDialog({
           <div className="flex items-center gap-2 mb-2">
             <Sparkles className="h-6 w-6 text-primary" />
             <DialogTitle className="text-2xl">
-              Welcome to Wellth, {firstName}! 🎉
+              Welcome to Reclaim, {firstName}! 🎉
             </DialogTitle>
           </div>
           <DialogDescription className="text-base">

@@ -14,7 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Star, Check, X, Eye, EyeOff, Loader2 } from "lucide-react";
+import { Star, Check, X, Eye, EyeOff } from "lucide-react";
 import { DashboardSkeleton } from "@/components/skeletons/DashboardSkeleton";
 import { logError } from "@/utils/errorHandler";
 

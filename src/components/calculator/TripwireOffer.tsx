@@ -28,7 +28,7 @@ export const TripwireOffer = ({
 }: TripwireOfferProps) => {
   const navigate = useNavigate();
   const [isProcessing, setIsProcessing] = useState(false);
-  const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [clientSecret] = useState<string | null>(null);
   const [showCheckout, setShowCheckout] = useState(false);
 
   const handlePurchase = async () => {

@@ -21,21 +21,9 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import { toast } from "sonner";
-import {
-  FileText,
-  AlertTriangle,
-  CreditCard,
-  Scale,
-  Upload,
-  Link2,
-  CheckCircle2,
-  Plus,
-} from "lucide-react";
+import { FileText, CreditCard, Upload, Link2, Plus } from "lucide-react";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
 import { logError } from "@/utils/errorHandler";
-import { BillErrorCard } from "@/components/bills/BillErrorCard";
-import { PriceBenchmarking } from "@/components/bills/PriceBenchmarking";
-import { ProviderPerformanceCard } from "@/components/bills/ProviderPerformanceCard";
 import { ReceiptGallery } from "@/components/expense/ReceiptGallery";
 import { MultiFileUpload } from "@/components/expense/MultiFileUpload";
 import { LinkTransactionDialog } from "@/components/bills/LinkTransactionDialog";
@@ -92,7 +80,7 @@ export default function BillDetail() {
   const [newFiles, setNewFiles] = useState<UploadedFile[]>([]);
   const [showLinkTransactionDialog, setShowLinkTransactionDialog] =
     useState(false);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isAnalyzing] = useState(false);
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split("T")[0],
     vendor: "",
@@ -165,7 +153,7 @@ export default function BillDetail() {
   // Bill review feature archived - removed error fetching
 
   // Fetch provider data
-  const { data: providerData } = useQuery({
+  useQuery({
     queryKey: ["provider-for-bill", bill?.vendor],
     queryFn: async () => {
       if (!bill?.vendor) return null;
@@ -296,12 +284,8 @@ export default function BillDetail() {
         setNewFiles([]);
         refetchReceipts();
 
-        // Trigger AI review if medical bill or EOB was uploaded
-        const billOrEOBReceipt = uploadedReceipts.find(
-          (r) => r.document_type === "bill" || r.document_type === "eob",
-        );
-
-        // Bill review feature archived - removed AI analysis trigger
+        // Bill review feature archived — the AI analysis trigger and the
+        // bill/EOB lookup that fed it were removed with it.
       }
     } catch (error) {
       logError("Error saving bill", error);

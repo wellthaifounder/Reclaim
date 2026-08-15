@@ -15,7 +15,7 @@ const PrivacyPolicy = () => {
           <section className="mb-8">
             <h2 className="mb-3 text-xl font-semibold">1. Introduction</h2>
             <p className="text-sm leading-relaxed text-muted-foreground">
-              Wellth.ai ("we," "us," or "our") provides a healthcare expense
+              Reclaim ("we," "us," or "our") provides a healthcare expense
               management platform that helps users track HSA/FSA accounts,
               categorize medical expenses, and manage reimbursements. This
               Privacy Policy explains how we collect, use, store, and protect
@@ -125,15 +125,15 @@ const PrivacyPolicy = () => {
                 <strong>Stripe</strong> — payment processing
               </li>
               <li>
-                <strong>Google (Gemini via Lovable Gateway)</strong> —
-                AI-assisted receipt processing, with PHI redacted before
-                submission
+                <strong>Google (Gemini via Vertex AI, under a BAA)</strong> —
+                AI-assisted receipt processing and expense classification on
+                Google Cloud's HIPAA-covered Vertex AI platform
               </li>
             </ul>
             <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
               We may also disclose information if required by law, to enforce
               our Terms of Service, or to protect the rights, safety, or
-              property of Wellth.ai or others.
+              property of Reclaim or others.
             </p>
           </section>
 

@@ -5,7 +5,7 @@
  * ------------
  * - Use for conversational moments, chat interfaces, and onboarding
  * - Use for loading/thinking states with the "thinking" variant
- * - NOT for navigation or branding (use WellthLogo instead)
+ * - NOT for navigation or branding (use ReclaimLogo instead)
  *
  * PERSONALITY: Supportive coach + analytical guide
  * - Calm, helpful, slightly playful

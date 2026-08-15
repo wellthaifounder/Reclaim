@@ -131,7 +131,7 @@ export const Hero = () => {
               size="lg"
               className="w-full sm:w-auto group bg-accent text-accent-foreground hover:bg-accent/90 shadow-lg hover:shadow-xl transition-all text-sm sm:text-base"
               onClick={handleCalculatorClick}
-              aria-label="See how much you could save with Wellth"
+              aria-label="See how much you could save with Reclaim"
             >
               See How Much You Could Save
               <ArrowRight
@@ -144,7 +144,7 @@ export const Hero = () => {
               variant="outline"
               className="w-full sm:w-auto border-white/20 bg-white/10 text-white backdrop-blur-sm hover:bg-white/20 text-sm sm:text-base"
               onClick={handleAuthClick}
-              aria-label="Start using Wellth for free"
+              aria-label="Start using Reclaim for free"
             >
               Start Free
             </Button>
@@ -209,7 +209,7 @@ export const Hero = () => {
                 Built for HSA & FSA Holders
               </h3>
               <p className="text-sm sm:text-base text-white/80">
-                Wellth is designed to help you get the most from your
+                Reclaim is designed to help you get the most from your
                 tax-advantaged healthcare accounts.
               </p>
             </div>

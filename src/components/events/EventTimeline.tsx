@@ -1,7 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import {
   FileText,
-  DollarSign,
   Receipt,
   FileCheck,
   Stethoscope,
@@ -78,7 +77,7 @@ export function EventTimeline({ items, onItemClick }: EventTimelineProps) {
       {/* Timeline line */}
       <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-border" />
 
-      {sortedItems.map((item, index) => {
+      {sortedItems.map((item, _index) => {
         const config = TYPE_CONFIG[item.type];
         const Icon = item.document_type
           ? DOCUMENT_TYPE_ICONS[item.document_type] || config.icon

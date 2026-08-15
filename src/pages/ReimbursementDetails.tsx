@@ -9,8 +9,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { WellthLogo } from "@/components/WellthLogo";
-import { Download, Mail, FileText } from "lucide-react";
+import { ReclaimLogo } from "@/components/ReclaimLogo";
+import { Download, FileText } from "lucide-react";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -216,7 +216,7 @@ const ReimbursementDetails = () => {
             onClick={() => navigate("/dashboard")}
             className="hover:opacity-80 transition-opacity"
           >
-            <WellthLogo size="sm" showTagline />
+            <ReclaimLogo size="sm" showTagline />
           </button>
         </div>
       </nav>

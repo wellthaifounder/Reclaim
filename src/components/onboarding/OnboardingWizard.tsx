@@ -35,9 +35,9 @@ const STEPS = [
     icon: Sparkles,
     iconColor: "text-blue-600",
     iconBg: "bg-blue-500/10",
-    title: "Wellth.ai builds your paper trail",
+    title: "Reclaim builds your paper trail",
     description:
-      "To reimburse yourself from your HSA, you need documentation. Wellth.ai automatically creates and stores the records you need:",
+      "To reimburse yourself from your HSA, you need documentation. Reclaim automatically creates and stores the records you need:",
     steps: [
       { icon: Upload, label: "Upload bills and receipts" },
       { icon: Inbox, label: "Classify bank transactions as medical or not" },
@@ -55,7 +55,7 @@ const STEPS = [
     description:
       "Whether that's tomorrow or a decade from now — when you want your money back, generate a reimbursement PDF with one click. It includes everything your HSA administrator needs.",
     highlight:
-      "Start by uploading a bill or connecting your bank. Wellth.ai will guide you from there.",
+      "Start by uploading a bill or connecting your bank. Reclaim will guide you from there.",
   },
 ];
 

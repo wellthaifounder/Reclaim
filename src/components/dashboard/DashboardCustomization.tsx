@@ -26,7 +26,7 @@ export function DashboardCustomization({
   currentTab,
   hasHSA,
 }: DashboardCustomizationProps) {
-  const { visibleCards, toggleCardVisibility, resetLayout, isCardVisible } =
+  const { toggleCardVisibility, resetLayout, isCardVisible } =
     useDashboardLayout();
 
   const getCategoryTitle = (category: string) => {

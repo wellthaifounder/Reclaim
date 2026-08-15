@@ -16,7 +16,7 @@ import { useNavigate } from "react-router-dom";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
 import { BillUploadWizard } from "@/components/bills/BillUploadWizard";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, ArrowRight, Keyboard } from "lucide-react";
+import { ArrowLeft, ArrowRight, Keyboard, Mail } from "lucide-react";
 
 export default function NewBillUpload() {
   const navigate = useNavigate();
@@ -59,6 +59,21 @@ export default function NewBillUpload() {
           >
             <Keyboard className="h-3.5 w-3.5" />
             Don't have a receipt? Log it manually
+            <ArrowRight className="h-3.5 w-3.5" />
+          </button>
+        </div>
+
+        {/* Email-forward capture: receipts can also arrive without opening the
+            app. The personal address + controls live in Settings; this is just
+            the discovery nudge. */}
+        <div className="mb-6 text-center">
+          <button
+            type="button"
+            onClick={() => navigate("/settings")}
+            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Mail className="h-3.5 w-3.5" />
+            Or forward receipts by email — set up your address
             <ArrowRight className="h-3.5 w-3.5" />
           </button>
         </div>

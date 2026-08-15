@@ -6,6 +6,7 @@ import { BottomTabNavigation } from "@/components/BottomTabNavigation";
 import { WellbieChat } from "@/components/WellbieChat";
 import { useSessionTimeout } from "@/hooks/useSessionTimeout";
 import { useHSA } from "@/contexts/HSAContext";
+import { FF } from "@/lib/featureFlags";
 
 interface AuthenticatedLayoutProps {
   children: ReactNode;
@@ -69,8 +70,9 @@ export const AuthenticatedLayout = ({
         </div>
       </div>
 
-      {/* Wellbie Chat - only for authenticated users */}
-      <WellbieChat />
+      {/* Wellbie Chat - only for authenticated users; hidden for soft launch
+          (v1.1) behind FF.WELLBIE_ENABLED. */}
+      {FF.WELLBIE_ENABLED && <WellbieChat />}
     </SidebarProvider>
   );
 };

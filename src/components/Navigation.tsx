@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Link, useNavigate } from "react-router-dom";
-import { WellthLogo } from "./WellthLogo";
-import { Menu, X } from "lucide-react";
+import { ReclaimLogo } from "./ReclaimLogo";
+import { Menu } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -49,17 +49,17 @@ export const Navigation = () => {
       aria-label="Main navigation"
     >
       <div className="container mx-auto flex h-14 sm:h-16 items-center justify-between px-4 sm:px-6">
-        <Link to="/" className="cursor-pointer group" aria-label="Wellth home">
+        <Link to="/" className="cursor-pointer group" aria-label="Reclaim home">
           {/* Show full logo on desktop, icon only on mobile */}
           <div className="hidden md:block">
-            <WellthLogo
+            <ReclaimLogo
               size="sm"
               showTagline
               className="transition-transform group-hover:scale-105"
             />
           </div>
           <div className="md:hidden">
-            <WellthLogo
+            <ReclaimLogo
               variant="icon"
               size="sm"
               className="transition-transform group-hover:scale-110"

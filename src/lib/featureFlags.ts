@@ -65,4 +65,15 @@ export const FF = {
    * Set VITE_FF_BILLS_LEDGER_IA_COLLAPSE=true to enable.
    */
   BILLS_LEDGER_IA_COLLAPSE: flagOnByDefault("VITE_FF_BILLS_LEDGER_IA_COLLAPSE"),
+
+  /**
+   * Wellbie AI assistant (chat + mascot). OFF by default for the Reclaim soft
+   * launch — conversational chat is a v1.1 item, and shipping a half-surfaced
+   * assistant dilutes the launch. All Wellbie entry points (nav button, bottom
+   * tab, dashboard tip, "Ask Wellbie" cards, pricing lines, /wellbie route) are
+   * gated on this. Code + DB tables are retained for re-enable.
+   *
+   * Set VITE_FF_WELLBIE_ENABLED=true to bring it back.
+   */
+  WELLBIE_ENABLED: flag("VITE_FF_WELLBIE_ENABLED"),
 } as const;

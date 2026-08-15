@@ -20,7 +20,6 @@ import { TransactionSplitDialog } from "@/components/transactions/TransactionSpl
 import { ExpenseSplitDialog } from "@/components/transactions/ExpenseSplitDialog";
 import { canSplitIntoExpenses } from "@/lib/expenseSplitUtils";
 import { SplitTransactionCard } from "@/components/transactions/SplitTransactionCard";
-import { useTransactionSplits } from "@/hooks/useTransactionSplits";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
 import { MissingHSADateBanner } from "@/components/dashboard/MissingHSADateBanner";
 import { TransactionsSkeleton } from "@/components/skeletons/TransactionsSkeleton";

@@ -25,7 +25,7 @@ export function ReviewQueue() {
   const [loading, setLoading] = useState(true);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
-  const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(false);
+  const [, setHasCompletedOnboarding] = useState(false);
   const [showCompletion, setShowCompletion] = useState(false);
 
   useEffect(() => {

@@ -11,15 +11,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  ArrowLeft,
-  TrendingUp,
-  DollarSign,
-  PieChart,
-  Target,
-  Award,
-  Sparkles,
-} from "lucide-react";
+import { ArrowLeft, TrendingUp, DollarSign, PieChart } from "lucide-react";
 import { FeatureGate } from "@/components/subscription/FeatureGate";
 import { toast } from "sonner";
 import {
@@ -564,7 +556,7 @@ const Reports = () => {
                               />
                               <Legend />
                               <Bar dataKey="total" name="Amount">
-                                {categoryData.map((entry, index) => (
+                                {categoryData.map((_entry, index) => (
                                   <Cell
                                     key={`cell-${index}`}
                                     fill={COLORS[index % COLORS.length]}
@@ -605,7 +597,7 @@ const Reports = () => {
                             fill="hsl(var(--primary))"
                             dataKey="total"
                           >
-                            {categoryData.map((entry, index) => (
+                            {categoryData.map((_entry, index) => (
                               <Cell
                                 key={`cell-${index}`}
                                 fill={COLORS[index % COLORS.length]}

@@ -65,7 +65,7 @@ const DOCUMENT_TYPE_COLORS = {
 };
 
 export function ReceiptGallery({
-  expenseId,
+  expenseId: _expenseId,
   receipts,
   onReceiptDeleted,
   onReceiptUpdated,

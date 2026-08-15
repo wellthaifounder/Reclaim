@@ -32,7 +32,7 @@ const Guide = () => {
             Maximize Your Healthcare Savings
           </h1>
           <p className="text-muted-foreground max-w-2xl mx-auto text-lg">
-            Wellth.ai helps you track every medical expense so you can claim HSA
+            Reclaim helps you track every medical expense so you can claim HSA
             reimbursements on your schedule — now or decades from now.
           </p>
         </div>
@@ -135,7 +135,7 @@ const Guide = () => {
                   </span>
                   <div>
                     <p className="font-medium">
-                      Save your receipts (Wellth.ai does this for you)
+                      Save your receipts (Reclaim does this for you)
                     </p>
                     <p className="text-sm text-muted-foreground">
                       Upload bills and receipts to build a verified paper trail
@@ -183,17 +183,17 @@ const Guide = () => {
           </Card>
         </section>
 
-        {/* Section 2: How Wellth.ai Works */}
+        {/* Section 2: How Reclaim Works */}
         <section id="app-workflow" className="space-y-6">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-blue-500/10">
               <ArrowRight className="h-5 w-5 text-blue-600" />
             </div>
-            <h2 className="text-2xl font-bold">How Wellth.ai Works</h2>
+            <h2 className="text-2xl font-bold">How Reclaim Works</h2>
           </div>
 
           <p className="text-muted-foreground">
-            Wellth.ai turns your medical expenses into a searchable, organized
+            Reclaim turns your medical expenses into a searchable, organized
             archive — so when you're ready to reimburse, you have everything you
             need in one click. Here are the four steps:
           </p>
@@ -211,7 +211,7 @@ const Guide = () => {
                       Step 1: Upload Bills
                     </h3>
                     <p className="text-muted-foreground">
-                      Scan or photograph medical bills and receipts. Wellth.ai
+                      Scan or photograph medical bills and receipts. Reclaim
                       uses AI to extract the vendor, date, amount, and category
                       automatically. You can also connect your bank via Plaid to
                       auto-import transactions.
@@ -241,12 +241,11 @@ const Guide = () => {
                       Step 2: Triage Your Inbox
                     </h3>
                     <p className="text-muted-foreground">
-                      When transactions arrive from your bank, Wellth.ai asks
-                      you one question: <em>is this medical?</em> Mark
-                      transactions as medical or not-medical to build an
-                      accurate record. The system learns your preferences over
-                      time — known vendors are auto-classified on future
-                      imports.
+                      When transactions arrive from your bank, Reclaim asks you
+                      one question: <em>is this medical?</em> Mark transactions
+                      as medical or not-medical to build an accurate record. The
+                      system learns your preferences over time — known vendors
+                      are auto-classified on future imports.
                     </p>
                     <Button
                       variant="outline"
@@ -276,7 +275,7 @@ const Guide = () => {
                       Group related bills into Care Events — for example, all
                       visits to "City Hospital" for a knee surgery. This makes
                       it easy to see the full cost of an episode of care and
-                      generates cleaner reimbursement claims. Wellth.ai suggests
+                      generates cleaner reimbursement claims. Reclaim suggests
                       groupings automatically when it detects related bills.
                     </p>
                     <Button
@@ -363,7 +362,7 @@ const Guide = () => {
                 <p className="text-sm text-muted-foreground">
                   Even small expenses add up. Upload copay receipts,
                   prescription costs, and dental/vision bills. They're all
-                  reimbursable — and having them in Wellth.ai means you'll never
+                  reimbursable — and having them in Reclaim means you'll never
                   lose them.
                 </p>
               </CardContent>

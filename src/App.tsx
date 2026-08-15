@@ -12,9 +12,9 @@ import { SubscriptionProvider } from "@/contexts/SubscriptionContext";
 import { HSAProvider } from "@/contexts/HSAContext";
 import { OnboardingProvider } from "@/contexts/OnboardingContext";
 import { DashboardLayoutProvider } from "@/contexts/DashboardLayoutContext";
-import { WellbieChat } from "@/components/WellbieChat";
 import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
 import { PWAUpdatePrompt } from "@/components/PWAUpdatePrompt";
+import { CookieConsent } from "@/components/CookieConsent";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { FF } from "@/lib/featureFlags";
@@ -63,6 +63,7 @@ const NewCollection = lazy(() => import("./pages/NewCollection"));
 const UserReviews = lazy(() => import("./pages/UserReviews"));
 const AdminReviews = lazy(() => import("./pages/AdminReviews"));
 const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
+const TermsOfService = lazy(() => import("./pages/TermsOfService"));
 const Guide = lazy(() => import("./pages/Guide"));
 const WellbieRedirect = lazy(() => import("./pages/WellbieRedirect"));
 const NotFound = lazy(() => import("./pages/NotFound"));
@@ -82,8 +83,7 @@ const queryClient = new QueryClient({
   queryCache: new QueryCache({
     onError: (_error, query) => {
       const meta = query.meta as
-        | { errorMessage?: string; suppressErrorToast?: boolean }
-        | undefined;
+        { errorMessage?: string; suppressErrorToast?: boolean } | undefined;
       if (meta?.suppressErrorToast) return;
       toast.error(
         meta?.errorMessage ??
@@ -111,6 +111,7 @@ const App = () => (
               <BrowserRouter>
                 <PWAInstallPrompt />
                 <PWAUpdatePrompt />
+                <CookieConsent />
                 <ErrorBoundary>
                   <Suspense fallback={<PageLoader />}>
                     <Routes>
@@ -129,6 +130,7 @@ const App = () => (
                       <Route path="/checkout" element={<Checkout />} />
                       <Route path="/install" element={<Install />} />
                       <Route path="/privacy" element={<PrivacyPolicy />} />
+                      <Route path="/terms" element={<TermsOfService />} />
 
                       {/* Protected routes */}
                       <Route
@@ -217,8 +219,18 @@ const App = () => (
                         path="/hsa-calculator"
                         element={<Navigate to="/savings-calculator" replace />}
                       />
-                      {/* Wellbie is a modal, not a page — this route opens the chat and bounces to the dashboard */}
-                      <Route path="/wellbie" element={<WellbieRedirect />} />
+                      {/* Wellbie is a modal, not a page — this route opens the chat and bounces to the dashboard.
+                          Hidden for soft launch (v1.1): when off, /wellbie lands on the dashboard. */}
+                      <Route
+                        path="/wellbie"
+                        element={
+                          FF.WELLBIE_ENABLED ? (
+                            <WellbieRedirect />
+                          ) : (
+                            <Navigate to="/dashboard" replace />
+                          )
+                        }
+                      />
 
                       {/* HSA Routes */}
                       <Route

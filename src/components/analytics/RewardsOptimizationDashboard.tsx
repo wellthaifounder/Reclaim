@@ -152,7 +152,7 @@ export const RewardsOptimizationDashboard = ({
                   radius={[8, 8, 0, 0]}
                   name="Rewards Earned"
                 >
-                  {chartData.map((entry, index) => (
+                  {chartData.map((_entry, index) => (
                     <Cell
                       key={`cell-${index}`}
                       fill={COLORS[index % COLORS.length]}

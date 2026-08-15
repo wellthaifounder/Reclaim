@@ -24,7 +24,6 @@ export const ReimbursementTimingOptimizer = ({
   const savingsDifferential = futureSavings - currentSavings;
 
   const shouldWait = projectedTaxBracket > currentTaxBracket;
-  const yearsToWait = shouldWait ? Math.ceil(savingsDifferential / 100) : 0;
 
   return (
     <Card>

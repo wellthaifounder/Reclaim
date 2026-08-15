@@ -141,8 +141,8 @@ const UserReviews = () => {
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2">Share Your Experience</h1>
           <p className="text-muted-foreground">
-            Help others by sharing your experience with Wellth. Featured reviews
-            appear on our homepage.
+            Help others by sharing your experience with Reclaim. Featured
+            reviews appear on our homepage.
           </p>
         </div>
 
@@ -172,7 +172,7 @@ const UserReviews = () => {
               ) : existingReview ? (
                 "Your review is under review by our team"
               ) : (
-                "Tell us about your experience with Wellth"
+                "Tell us about your experience with Reclaim"
               )}
             </CardDescription>
           </CardHeader>
@@ -214,7 +214,7 @@ const UserReviews = () => {
                 <Label htmlFor="review">Your Review</Label>
                 <Textarea
                   id="review"
-                  placeholder="Share your experience with Wellth. What did you find most helpful? How has it impacted your healthcare spending?"
+                  placeholder="Share your experience with Reclaim. What did you find most helpful? How has it impacted your healthcare spending?"
                   value={reviewText}
                   onChange={(e) => setReviewText(e.target.value)}
                   rows={6}

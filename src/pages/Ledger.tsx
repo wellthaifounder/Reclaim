@@ -72,17 +72,10 @@ interface LedgerEntry {
 }
 
 type StatusFilter =
-  | "all"
-  | "unpaid"
-  | "partially_paid"
-  | "fully_paid"
-  | "reimbursed";
+  "all" | "unpaid" | "partially_paid" | "fully_paid" | "reimbursed";
 type MatchFilter = "all" | "auto_matched" | "manual" | "unmatched";
 type SortField =
-  | "service_date"
-  | "billed_amount"
-  | "outstanding_balance"
-  | "vendor";
+  "service_date" | "billed_amount" | "outstanding_balance" | "vendor";
 type SortDir = "asc" | "desc";
 
 const STATUS_CONFIG: Record<

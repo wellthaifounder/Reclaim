@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
-import { WellthLogo } from "@/components/WellthLogo";
+import { ReclaimLogo } from "@/components/ReclaimLogo";
 import { toast } from "sonner";
 import { z } from "zod";
 import {
@@ -208,6 +208,13 @@ const Auth = () => {
           .eq("id", signUpResult.user.id);
       }
 
+      // Best-effort welcome email. The edge function is auth-gated and only
+      // mails the caller's own address; a failure here must never block signup,
+      // so swallow errors (it just won't send if there's no session yet).
+      if (signUpResult.session) {
+        supabase.functions.invoke("send-welcome-email").catch(() => {});
+      }
+
       toast.success("Account created! You can now sign in.");
       setSignUpData({ fullName: "", email: "", password: "" });
       setTermsAccepted(false);
@@ -320,7 +327,7 @@ const Auth = () => {
         <Card className="w-full max-w-md">
           <CardHeader className="space-y-1">
             <div className="flex justify-center mb-4">
-              <WellthLogo size="md" />
+              <ReclaimLogo size="md" />
             </div>
             <CardTitle className="text-2xl text-center font-heading">
               Reset Password
@@ -367,7 +374,7 @@ const Auth = () => {
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
           <div className="flex justify-center mb-2">
-            <WellthLogo size="md" showTagline />
+            <ReclaimLogo size="md" showTagline />
           </div>
         </CardHeader>
         <CardContent>
@@ -477,7 +484,16 @@ const Auth = () => {
                   htmlFor="terms-accepted"
                   className="text-xs font-normal leading-relaxed text-muted-foreground"
                 >
-                  I agree to Wellth.ai's{" "}
+                  I agree to Reclaim's{" "}
+                  <a
+                    href="/terms"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary underline"
+                  >
+                    Terms of Service
+                  </a>{" "}
+                  and{" "}
                   <a
                     href="/privacy"
                     target="_blank"

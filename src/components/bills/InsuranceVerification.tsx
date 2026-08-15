@@ -13,7 +13,6 @@ import {
   Phone,
   Mail,
 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { logError } from "@/utils/errorHandler";
 

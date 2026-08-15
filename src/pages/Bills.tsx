@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -15,7 +15,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Plus, Loader2, FileText, Search } from "lucide-react";
-import { toast } from "sonner";
 import {
   calculateHSAEligibility,
   getPaymentStatusBadge,
@@ -23,7 +22,6 @@ import {
 } from "@/lib/hsaCalculations";
 import { Link } from "react-router-dom";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
-import { logError } from "@/utils/errorHandler";
 import { withQueryTimeout } from "@/lib/queryHelpers";
 import { FF } from "@/lib/featureFlags";
 import { analytics } from "@/lib/analytics";
@@ -142,33 +140,6 @@ const Bills = () => {
 
   // Bill review feature archived - removed review and dispute queries
 
-  const toggleHSAEligibility = async (
-    billId: string,
-    currentStatus: boolean,
-    e: React.MouseEvent,
-  ) => {
-    e.stopPropagation();
-
-    try {
-      const { error } = await supabase
-        .from("invoices")
-        // Workstream B: is_hsa_eligible is derived from eligibility_state.
-        // A manual toggle here IS an explicit user determination, so it earns
-        // 'eligible'; clearing it returns the expense to 'unknown' rather than
-        // asserting ineligibility, which is a different claim.
-        .update({ eligibility_state: !currentStatus ? "eligible" : "unknown" })
-        .eq("id", billId);
-
-      if (error) throw error;
-      refetchBills();
-      toast.success(
-        `HSA eligibility ${!currentStatus ? "enabled" : "disabled"}`,
-      );
-    } catch (error) {
-      logError("Error toggling HSA eligibility", error);
-      toast.error("Failed to update HSA eligibility");
-    }
-  };
 
   const filteredBills = useMemo(() => {
     if (!bills) return [];

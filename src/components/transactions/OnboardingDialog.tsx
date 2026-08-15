@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -8,7 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { CheckCircle2, ArrowRight, Keyboard, Lightbulb, X } from "lucide-react";
+import { CheckCircle2, ArrowRight, Keyboard, Lightbulb } from "lucide-react";
 
 interface OnboardingDialogProps {
   open: boolean;

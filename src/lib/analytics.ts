@@ -52,13 +52,8 @@ interface AnalyticsEvent {
 }
 
 class Analytics {
-  private enabled: boolean;
-  private sessionStartTime: number;
-
   constructor() {
     // Enable analytics in production
-    this.enabled = import.meta.env.PROD;
-    this.sessionStartTime = Date.now();
   }
 
   async track(event: AnalyticsEvent) {

@@ -22,18 +22,18 @@ interface ResultsScreenProps {
 
 const getPersonalizedMessage = (data: CalculatorData): string => {
   if (data.trackingMethod === "none") {
-    return "You're not tracking medical expenses yet — Wellth gives you one organized place for every bill, receipt, and payment.";
+    return "You're not tracking medical expenses yet — Reclaim gives you one organized place for every bill, receipt, and payment.";
   }
   if (data.topPriority === "taxes") {
-    return "Tax savings are your top priority — Wellth automatically categorizes expenses and tracks your deductions year-round.";
+    return "Tax savings are your top priority — Reclaim automatically categorizes expenses and tracks your deductions year-round.";
   }
   if (data.topPriority === "hsa_growth") {
-    return "Growing your HSA is your goal — Wellth's savings calculator and reimbursement timing tools help you maximize compound growth.";
+    return "Growing your HSA is your goal — Reclaim's savings calculator and reimbursement timing tools help you maximize compound growth.";
   }
   if (data.topPriority === "organizing") {
-    return "Staying organized matters most — Wellth lets you group expenses by episode of care and find any receipt in seconds.";
+    return "Staying organized matters most — Reclaim lets you group expenses by episode of care and find any receipt in seconds.";
   }
-  return "Wellth helps you track expenses, optimize your HSA or FSA, and keep every receipt organized in one place.";
+  return "Reclaim helps you track expenses, optimize your HSA or FSA, and keep every receipt organized in one place.";
 };
 
 export const ResultsScreen = ({ data }: ResultsScreenProps) => {
@@ -182,7 +182,7 @@ export const ResultsScreen = ({ data }: ResultsScreenProps) => {
           size="lg"
           className="w-full"
         >
-          Start Free with Wellth
+          Start Free with Reclaim
           <ArrowRight className="ml-2 h-4 w-4" />
         </Button>
 

@@ -11,10 +11,7 @@ import { useAuthUser } from "@/hooks/useAuthUser";
 const SCHEMA_MISSING_CODES = new Set(["PGRST205", "42P01"]);
 
 export type InboxItemType =
-  | "review_transaction"
-  | "confirm_match"
-  | "overdue_unpaid"
-  | "hsa_claimable";
+  "review_transaction" | "confirm_match" | "overdue_unpaid" | "hsa_claimable";
 
 export interface InboxItem {
   id: string;

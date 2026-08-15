@@ -25,5 +25,12 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src"]
+  "include": ["src"],
+  /* src/_archived holds a deliberately retained but fully orphaned feature
+     (bill dispute tooling). Nothing in live code imports it, so it is never
+     bundled, but it still references tables that no longer exist
+     (bill_disputes, dispute_communications) and contributed 130 type errors
+     that drowned out real ones. Excluded from typechecking rather than
+     deleted, since the directory name signals intentional retention. */
+  "exclude": ["src/_archived"]
 }

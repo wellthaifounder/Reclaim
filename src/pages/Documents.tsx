@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,7 +18,6 @@ import { MultiFileUpload } from "@/components/expense/MultiFileUpload";
 import { Badge } from "@/components/ui/badge";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
 import { logError } from "@/utils/errorHandler";
-
 interface Receipt {
   id: string;
   file_path: string;
@@ -36,9 +34,7 @@ interface Receipt {
     color: string | null;
   } | null;
 }
-
 const Documents = () => {
-  const navigate = useNavigate();
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [filteredReceipts, setFilteredReceipts] = useState<Receipt[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,15 +44,12 @@ const Documents = () => {
   const [linkingReceiptId, setLinkingReceiptId] = useState<string | null>(null);
   const [showUpload, setShowUpload] = useState(false);
   const [newFiles, setNewFiles] = useState<any[]>([]);
-
   useEffect(() => {
     loadReceipts();
   }, []);
-
   useEffect(() => {
     filterReceipts();
   }, [receipts, searchQuery, selectedType]);
-
   const loadReceipts = async () => {
     try {
       setLoading(true);
@@ -65,7 +58,6 @@ const Documents = () => {
       } = await supabase.auth.getSession();
       const user = session?.user;
       if (!user) throw new Error("Not authenticated");
-
       const { data, error } = await supabase
         .from("receipts")
         .select(
@@ -80,7 +72,6 @@ const Documents = () => {
         )
         .eq("user_id", user.id)
         .order("uploaded_at", { ascending: false });
-
       if (error) throw error;
       setReceipts(data || []);
     } catch (error) {
@@ -90,10 +81,8 @@ const Documents = () => {
       setLoading(false);
     }
   };
-
   const filterReceipts = () => {
     let filtered = receipts;
-
     if (searchQuery) {
       filtered = filtered.filter(
         (r) =>
@@ -101,7 +90,6 @@ const Documents = () => {
           r.document_type.toLowerCase().includes(searchQuery.toLowerCase()),
       );
     }
-
     if (selectedType !== "all") {
       if (selectedType === "unattached") {
         filtered = filtered.filter(
@@ -115,32 +103,25 @@ const Documents = () => {
         filtered = filtered.filter((r) => r.document_type === selectedType);
       }
     }
-
     setFilteredReceipts(filtered);
   };
-
   const handleUpload = async () => {
     if (newFiles.length === 0) return;
-
     try {
       const {
         data: { session },
       } = await supabase.auth.getSession();
       const user = session?.user;
       if (!user) throw new Error("Not authenticated");
-
       for (let i = 0; i < newFiles.length; i++) {
         const fileData = newFiles[i];
         const fileExt = fileData.file.name.split(".").pop();
         const timestamp = Date.now();
         const filePath = `${user.id}/unattached/${fileData.documentType}_${timestamp}.${fileExt}`;
-
         const { error: uploadError } = await supabase.storage
           .from("receipts")
           .upload(filePath, fileData.file);
-
         if (uploadError) throw uploadError;
-
         const { error: receiptError } = await supabase.from("receipts").insert({
           user_id: user.id,
           file_path: filePath,
@@ -149,10 +130,8 @@ const Documents = () => {
           description: fileData.description || null,
           display_order: i,
         });
-
         if (receiptError) throw receiptError;
       }
-
       toast.success("Documents uploaded successfully!");
       setNewFiles([]);
       setShowUpload(false);
@@ -162,27 +141,21 @@ const Documents = () => {
       toast.error("Failed to upload documents");
     }
   };
-
   const handleDelete = async (receiptId: string) => {
     try {
       const receipt = receipts.find((r) => r.id === receiptId);
       if (!receipt) return;
-
       // Delete from storage
       const { error: storageError } = await supabase.storage
         .from("receipts")
         .remove([receipt.file_path]);
-
       if (storageError) throw storageError;
-
       // Delete from database
       const { error: dbError } = await supabase
         .from("receipts")
         .delete()
         .eq("id", receiptId);
-
       if (dbError) throw dbError;
-
       toast.success("Document deleted successfully");
       loadReceipts();
     } catch (error) {
@@ -190,7 +163,6 @@ const Documents = () => {
       toast.error("Failed to delete document");
     }
   };
-
   const documentTypes = [
     "receipt",
     "invoice",
@@ -199,7 +171,6 @@ const Documents = () => {
     "medical_record",
   ];
   const attachmentStatus = ["all", "attached", "unattached"];
-
   return (
     <AuthenticatedLayout>
       <div className="container mx-auto px-4 py-8">
@@ -233,7 +204,6 @@ const Documents = () => {
                 )}
               </div>
             )}
-
             <div className="space-y-4">
               <div className="flex gap-4">
                 <div className="flex-1 relative">
@@ -246,7 +216,6 @@ const Documents = () => {
                   />
                 </div>
               </div>
-
               <div className="flex flex-wrap gap-2">
                 <span className="text-sm text-muted-foreground flex items-center gap-2">
                   <Tag className="h-4 w-4" />
@@ -276,7 +245,6 @@ const Documents = () => {
             </div>
           </CardContent>
         </Card>
-
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {loading ? (
             <div className="col-span-full text-center py-12 text-muted-foreground">
@@ -311,7 +279,6 @@ const Documents = () => {
           )}
         </div>
       </div>
-
       {editingReceipt && (
         <EditDocumentDialog
           receipt={editingReceipt}
@@ -323,7 +290,6 @@ const Documents = () => {
           }}
         />
       )}
-
       {linkingReceiptId && (
         <LinkToCollectionDialog
           open={!!linkingReceiptId}
@@ -335,5 +301,4 @@ const Documents = () => {
     </AuthenticatedLayout>
   );
 };
-
 export default Documents;
