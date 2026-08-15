@@ -140,7 +140,6 @@ const Bills = () => {
 
   // Bill review feature archived - removed review and dispute queries
 
-
   const filteredBills = useMemo(() => {
     if (!bills) return [];
     return bills.filter((bill) => {

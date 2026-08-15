@@ -23,7 +23,7 @@ import { ProviderReviewForm } from "@/components/bills/ProviderReviewForm";
 import { ProviderChargeComparison } from "@/components/bills/ProviderChargeComparison";
 import { FairPricingScoreCard } from "@/components/bills/FairPricingScoreCard";
 import { TransparencyScoreCard } from "@/components/bills/TransparencyScoreCard";
-import { ProcedureCostInsights } from "@/components/bills/ProcedureCostInsights";
+import { ProcedureCostInsights } from "@/_archived/components/bills/ProcedureCostInsights";
 
 export default function ProviderDetail() {
   const { id } = useParams<{ id: string }>();

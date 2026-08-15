@@ -157,7 +157,7 @@ interface FileWithMetadata {
 interface MedicalEvent {
   id: string;
   title: string;
-  event_date: string | null;
+  created_at: string;
 }
 
 type WizardStep = "upload" | "classify" | "link" | "ai-review" | "complete";
@@ -201,10 +201,10 @@ export function UnifiedUploadWizard({
       if (!user) return [];
 
       const { data, error } = await supabase
-        .from("medical_events")
-        .select("id, title, event_date")
+        .from("collections")
+        .select("id, title, created_at")
         .eq("user_id", user.id)
-        .order("event_date", { ascending: false });
+        .order("created_at", { ascending: false });
 
       if (error) throw error;
       return data as MedicalEvent[];
@@ -266,7 +266,7 @@ export function UnifiedUploadWizard({
       // Create new event if needed
       if (linkOption === "new" && newEventTitle) {
         const { data: newEvent, error: eventError } = await supabase
-          .from("medical_events")
+          .from("collections")
           .insert({
             user_id: user.id,
             title: newEventTitle,
@@ -311,7 +311,7 @@ export function UnifiedUploadWizard({
             document_type: fileData.documentType,
             description: fileData.description || null,
             category: docType?.category || "other",
-            medical_event_id: eventId || null,
+            collection_id: eventId || null,
           })
           .select()
           .single();
@@ -338,7 +338,7 @@ export function UnifiedUploadWizard({
               amount: 0,
               date: new Date().toISOString().split("T")[0],
               category: "Medical Services",
-              medical_event_id: eventId || null,
+              collection_id: eventId || null,
             })
             .select()
             .single();

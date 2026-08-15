@@ -25,12 +25,13 @@ interface LinkToEventDialogProps {
   onSuccess: () => void;
 }
 
+// `medical_events` was renamed to `collections` in 20260131, which also
+// dropped event_date, event_type and primary_provider. This component was
+// still selecting and ordering by them, so the query failed at runtime.
 interface MedicalEvent {
   id: string;
   title: string;
-  event_date: string | null;
-  event_type: string;
-  primary_provider: string | null;
+  created_at: string;
 }
 
 export function LinkToEventDialog({
@@ -55,10 +56,10 @@ export function LinkToEventDialog({
       if (!user) throw new Error("Not authenticated");
 
       const { data, error } = await supabase
-        .from("medical_events")
-        .select("id, title, event_date, event_type, primary_provider")
+        .from("collections")
+        .select("id, title, created_at")
         .eq("user_id", user.id)
-        .order("event_date", { ascending: false, nullsFirst: false });
+        .order("created_at", { ascending: false });
 
       if (error) throw error;
       return data as MedicalEvent[];
@@ -70,11 +71,9 @@ export function LinkToEventDialog({
   const filteredEvents = events?.filter((event) => {
     if (!searchQuery) return true;
     const query = searchQuery.toLowerCase();
-    return (
-      event.title.toLowerCase().includes(query) ||
-      event.primary_provider?.toLowerCase().includes(query) ||
-      event.event_type.toLowerCase().includes(query)
-    );
+    // primary_provider and event_type were dropped along with medical_events;
+    // title is the only searchable field collections still carries.
+    return event.title.toLowerCase().includes(query);
   });
 
   // Link document to existing event
@@ -82,7 +81,7 @@ export function LinkToEventDialog({
     mutationFn: async (eventId: string) => {
       const { error } = await supabase
         .from("receipts")
-        .update({ medical_event_id: eventId })
+        .update({ collection_id: eventId })
         .eq("id", documentId);
 
       if (error) throw error;
@@ -108,7 +107,7 @@ export function LinkToEventDialog({
 
       // Create new event
       const { data: newEvent, error: createError } = await supabase
-        .from("medical_events")
+        .from("collections")
         .insert({
           user_id: user.id,
           title,
@@ -122,7 +121,7 @@ export function LinkToEventDialog({
       // Link document to new event
       const { error: linkError } = await supabase
         .from("receipts")
-        .update({ medical_event_id: newEvent.id })
+        .update({ collection_id: newEvent.id })
         .eq("id", documentId);
 
       if (linkError) throw linkError;
@@ -251,18 +250,13 @@ export function LinkToEventDialog({
                         >
                           <p className="font-medium">{event.title}</p>
                           <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
-                            {event.event_date && (
-                              <span className="flex items-center gap-1">
-                                <Calendar className="h-3 w-3" />
-                                {format(
-                                  new Date(event.event_date),
-                                  "MMM d, yyyy",
-                                )}
-                              </span>
-                            )}
-                            {event.primary_provider && (
-                              <span>• {event.primary_provider}</span>
-                            )}
+                            <span className="flex items-center gap-1">
+                              <Calendar className="h-3 w-3" />
+                              {format(
+                                new Date(event.created_at),
+                                "MMM d, yyyy",
+                              )}
+                            </span>
                           </div>
                         </label>
                       </div>

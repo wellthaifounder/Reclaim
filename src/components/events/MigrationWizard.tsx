@@ -90,7 +90,7 @@ export function MigrationWizard({
         .from("invoices")
         .select("id, vendor, amount, date, category")
         .eq("user_id", user.id)
-        .is("medical_event_id", null)
+        .is("collection_id", null)
         .order("date", { ascending: false });
 
       if (error) throw error;
@@ -120,7 +120,7 @@ export function MigrationWizard({
 
       // Create the event
       const { data: event, error: eventError } = await supabase
-        .from("medical_events")
+        .from("collections")
         .insert({
           user_id: user.id,
           title: newEventTitle,
@@ -140,7 +140,7 @@ export function MigrationWizard({
       if (selectedInvoices.length > 0) {
         const { error: updateError } = await supabase
           .from("invoices")
-          .update({ medical_event_id: event.id })
+          .update({ collection_id: event.id })
           .in("id", selectedInvoices);
 
         if (updateError) throw updateError;
