@@ -598,6 +598,7 @@ export type Database = {
           deductible_met: boolean | null;
           deductible_portion: number | null;
           documentation_state: Database["public"]["Enums"]["expense_documentation_state"];
+          effective_service_date: string | null;
           eligibility_basis_rule_id: string | null;
           eligibility_state: Database["public"]["Enums"]["expense_eligibility_state"];
           hsa_account_id: string | null;
@@ -626,6 +627,7 @@ export type Database = {
           reimbursed_at: string | null;
           reimbursement_reminder_date: string | null;
           reimbursement_strategy: string | null;
+          service_date: string | null;
           source: string | null;
           source_email_message_id: string | null;
           source_email_received_at: string | null;
@@ -657,6 +659,7 @@ export type Database = {
           deductible_met?: boolean | null;
           deductible_portion?: number | null;
           documentation_state?: Database["public"]["Enums"]["expense_documentation_state"];
+          effective_service_date?: string | null;
           eligibility_basis_rule_id?: string | null;
           eligibility_state?: Database["public"]["Enums"]["expense_eligibility_state"];
           hsa_account_id?: string | null;
@@ -685,6 +688,7 @@ export type Database = {
           reimbursed_at?: string | null;
           reimbursement_reminder_date?: string | null;
           reimbursement_strategy?: string | null;
+          service_date?: string | null;
           source?: string | null;
           source_email_message_id?: string | null;
           source_email_received_at?: string | null;
@@ -716,6 +720,7 @@ export type Database = {
           deductible_met?: boolean | null;
           deductible_portion?: number | null;
           documentation_state?: Database["public"]["Enums"]["expense_documentation_state"];
+          effective_service_date?: string | null;
           eligibility_basis_rule_id?: string | null;
           eligibility_state?: Database["public"]["Enums"]["expense_eligibility_state"];
           hsa_account_id?: string | null;
@@ -744,6 +749,7 @@ export type Database = {
           reimbursed_at?: string | null;
           reimbursement_reminder_date?: string | null;
           reimbursement_strategy?: string | null;
+          service_date?: string | null;
           source?: string | null;
           source_email_message_id?: string | null;
           source_email_received_at?: string | null;
@@ -2956,6 +2962,17 @@ export type Database = {
           status: string;
         }[];
       };
+      expense_timing_gate: {
+        Args: { p_invoice_id: string };
+        Returns: {
+          establishment_date: string;
+          reason: string;
+          service_date: string;
+          status: string;
+          uses_payment_date: boolean;
+        }[];
+      };
+      hsa_establishment_date: { Args: { p_user_id: string }; Returns: string };
       merge_duplicate_expenses: {
         Args: { p_candidate_id: string; p_keep_id: string };
         Returns: string;
@@ -2967,6 +2984,13 @@ export type Database = {
           p_match_value: string;
         };
         Returns: number;
+      };
+      recompute_timing_eligibility: {
+        Args: { p_user_id: string };
+        Returns: {
+          blocked: number;
+          restored: number;
+        }[];
       };
       relink_pending_expense: {
         Args: { p_pending_id: string; p_posted_id: string; p_user_id: string };

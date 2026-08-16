@@ -23,6 +23,7 @@ import {
 import { toast } from "sonner";
 import { FileText, CreditCard, Upload, Link2, Plus } from "lucide-react";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
+import { TimingGateNotice } from "@/components/hsa/TimingGateNotice";
 import { logError } from "@/utils/errorHandler";
 import { ReceiptGallery } from "@/components/expense/ReceiptGallery";
 import { MultiFileUpload } from "@/components/expense/MultiFileUpload";
@@ -347,6 +348,18 @@ export default function BillDetail() {
         </div>
 
         <div className="max-w-5xl mx-auto">
+          {/* Workstream D2, Gate 1. Above the bill itself because it can be a
+              hard no — care predating the HSA is never claimable, and finding
+              that out below the fold is finding it out too late. */}
+          {!isNewBill && bill?.id && (
+            <div className="mb-4">
+              <TimingGateNotice
+                invoiceId={bill.id}
+                serviceDate={bill.service_date ?? null}
+              />
+            </div>
+          )}
+
           <Card>
             <CardHeader>
               <div className="flex items-start justify-between">

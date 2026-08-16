@@ -32,6 +32,7 @@ import {
 import { toast } from "sonner";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
 import { FamilyRosterCard } from "@/components/family/FamilyRosterCard";
+import { useRecomputeTiming } from "@/hooks/useHSAEligibility";
 import { SubscriptionManagement } from "@/components/settings/SubscriptionManagement";
 import { EmailForwardingCard } from "@/components/settings/EmailForwardingCard";
 import { useOnboarding } from "@/contexts/OnboardingContext";
@@ -104,6 +105,9 @@ const Settings = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteConfirmationText, setDeleteConfirmationText] = useState("");
   const [deleting, setDeleting] = useState(false);
+  // Workstream D2: the establishment-date cliff is recomputed in the database,
+  // in both directions, whenever the HSA date changes.
+  const recomputeTiming = useRecomputeTiming();
 
   const profileForm = useForm<ProfileFormValues>({
     resolver: zodResolver(profileSchema),
@@ -186,34 +190,30 @@ const Settings = () => {
       );
       if (upsertError) throw upsertError;
 
-      if (hsaDateChanged && values.hsaOpenedDate) {
-        const { error: e1 } = await supabase
-          .from("invoices")
-          // Workstream B: pre-establishment expenses fail the timing gate
-          // permanently; record the reason, not just a cleared boolean.
-          .update({
-            eligibility_state: "ineligible",
-            ineligible_reason: "pre_establishment",
-          })
-          .eq("user_id", user.id)
-          .lt("date", values.hsaOpenedDate)
-          .eq("is_hsa_eligible", true);
-        if (e1) throw e1;
+      if (hsaDateChanged) {
+        // Workstream D2. Was two hand-written bulk updates, both filtered on
+        // `is_hsa_eligible = true` — a generated column meaning
+        // eligibility_state is 'eligible'. Expenses default to 'unknown', so
+        // the filter matched almost nothing and the cliff had stopped firing.
+        // Neither update ever restored anything either, so a corrected date
+        // could not give back what a wrong one took away.
+        const { blocked, restored } = await recomputeTiming.mutateAsync();
 
-        const { error: e2 } = await supabase
-          .from("invoices")
-          // Workstream B: pre-establishment expenses fail the timing gate
-          // permanently; record the reason, not just a cleared boolean.
-          .update({
-            eligibility_state: "ineligible",
-            ineligible_reason: "pre_establishment",
-          })
-          .eq("user_id", user.id)
-          .lt("invoice_date", values.hsaOpenedDate)
-          .eq("is_hsa_eligible", true);
-        if (e2) throw e2;
-
-        toast.success("Profile updated and expense eligibility recalculated");
+        if (restored > 0) {
+          toast.success(
+            `Profile updated. ${restored} expense${restored === 1 ? "" : "s"} ${
+              restored === 1 ? "is" : "are"
+            } claimable again now that your HSA date is corrected.`,
+          );
+        } else if (blocked > 0) {
+          toast.success(
+            `Profile updated. ${blocked} expense${blocked === 1 ? "" : "s"} predate${
+              blocked === 1 ? "s" : ""
+            } your HSA and can't be reimbursed.`,
+          );
+        } else {
+          toast.success("Profile updated successfully");
+        }
       } else {
         toast.success("Profile updated successfully");
       }

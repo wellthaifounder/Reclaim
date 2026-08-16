@@ -20,6 +20,7 @@ import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { logError } from "@/utils/errorHandler";
+import { useRecomputeTiming } from "@/hooks/useHSAEligibility";
 
 interface SetHSADateDialogProps {
   open: boolean;
@@ -34,6 +35,7 @@ export function SetHSADateDialog({
 }: SetHSADateDialogProps) {
   const [date, setDate] = useState<Date>();
   const [saving, setSaving] = useState(false);
+  const recomputeTiming = useRecomputeTiming();
 
   const handleSave = async () => {
     if (!date) {
@@ -66,41 +68,23 @@ export function SetHSADateDialog({
 
       if (profileError) throw profileError;
 
-      // Retroactively update existing invoices based on HSA opened date
-      // 1) Invoices using `date`
-      const { error: updateDateError } = await supabase
-        .from("invoices")
-        // Workstream B: expenses dated before the HSA establishment date fail
-        // the timing gate permanently, so record WHY rather than just clearing
-        // a boolean — the user is told the reason instead of silently losing
-        // eligibility.
-        .update({
-          eligibility_state: "ineligible",
-          ineligible_reason: "pre_establishment",
-        })
-        .eq("user_id", user.id)
-        .lt("date", hsaDateString)
-        .eq("is_hsa_eligible", true);
-      if (updateDateError) throw updateDateError;
+      // Workstream D2: recompute the establishment-date cliff in the
+      // database, in both directions. This replaced two hand-written bulk
+      // updates that were each filtered on `is_hsa_eligible = true` -- a
+      // generated column meaning eligibility_state is 'eligible'. Expenses
+      // default to 'unknown', so the filter matched almost nothing and the
+      // cliff had effectively stopped firing.
+      const { blocked, restored } = await recomputeTiming.mutateAsync();
 
-      // 2) Invoices using `invoice_date`
-      const { error: updateInvoiceDateError } = await supabase
-        .from("invoices")
-        // Workstream B: expenses dated before the HSA establishment date fail
-        // the timing gate permanently, so record WHY rather than just clearing
-        // a boolean — the user is told the reason instead of silently losing
-        // eligibility.
-        .update({
-          eligibility_state: "ineligible",
-          ineligible_reason: "pre_establishment",
-        })
-        .eq("user_id", user.id)
-        .lt("invoice_date", hsaDateString)
-        .eq("is_hsa_eligible", true);
-      if (updateInvoiceDateError) throw updateInvoiceDateError;
-
+      // Restoring is the surprising outcome and gets said first: it is what
+      // happens when someone corrects a year they mistyped, and until now
+      // there was no way back from that mistake.
       toast.success(
-        "HSA opened date saved! We've updated your expense eligibility.",
+        restored > 0
+          ? `HSA date saved. ${restored} expense${restored === 1 ? "" : "s"} ${restored === 1 ? "is" : "are"} claimable again.`
+          : blocked > 0
+            ? `HSA date saved. ${blocked} expense${blocked === 1 ? "" : "s"} predate${blocked === 1 ? "s" : ""} your HSA and can't be reimbursed.`
+            : "HSA date saved.",
       );
       onOpenChange(false);
       onSuccess?.();
