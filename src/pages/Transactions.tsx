@@ -16,6 +16,7 @@ import { TransactionDetailDialog } from "@/components/transactions/TransactionDe
 import { TransactionInlineDetail } from "@/components/transactions/TransactionInlineDetail";
 import { QuickAddTransactionDialog } from "@/components/transactions/QuickAddTransactionDialog";
 import { ReviewFeed } from "@/components/transactions/ReviewFeed";
+import { DuplicateWarnings } from "@/components/transactions/DuplicateWarnings";
 import {
   AdvancedFilters,
   type FilterCriteria,
@@ -603,6 +604,10 @@ export default function Transactions() {
             </TabsList>
 
             <TabsContent value="review" className="space-y-4">
+              {/* Workstream C6. Above the categorize feed on purpose: a
+                  duplicate is money already at risk, whereas an unreviewed
+                  transaction is only undecided. */}
+              <DuplicateWarnings />
               <ReviewFeed />
             </TabsContent>
 

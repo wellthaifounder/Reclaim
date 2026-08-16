@@ -244,6 +244,26 @@ export default function ExpenseEntry() {
           ),
         );
 
+      // Workstream C6: the spec requires duplicate detection to fire on manual
+      // entry against already-synced transactions, not only on sync. This is
+      // the moment it matters — the user has just hand-entered a charge their
+      // bank may already have delivered, and telling them now is far better
+      // than letting two claimable records sit until they build a request.
+      const { data: dupes, error: dupeErr } = await supabase.rpc(
+        "detect_duplicate_expenses",
+        { p_user_id: user.id },
+      );
+      if (dupeErr) {
+        logError("ExpenseEntry: duplicate detection failed", dupeErr);
+      } else if ((dupes ?? 0) > 0) {
+        toast.warning(
+          "Expense saved. It looks like one you already have — check Possible duplicates under Transactions → Review.",
+          { duration: 8000 },
+        );
+        navigate("/bills");
+        return;
+      }
+
       toast.success("Expense saved.");
       navigate("/bills");
     } catch (error) {

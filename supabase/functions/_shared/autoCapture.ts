@@ -45,6 +45,42 @@ export async function detectTransfers(
 }
 
 /**
+ * Workstream C6 — raise candidate duplicate expense pairs.
+ *
+ * MUST run after autoCaptureExpenses: the expense this sync just created is
+ * one half of every pair worth finding. The case that costs real money is a
+ * user who entered a charge by hand on the day of the visit and is now handed
+ * a second record for it by the bank — both eligible, both unclaimed, both
+ * selectable into a reimbursement request.
+ *
+ * Raises warnings only; it never merges. A wrong auto-merge would silently
+ * delete a real expense, which is worse than the double-count it would be
+ * preventing.
+ *
+ * Failure is logged and swallowed, for the same reason as transfer detection:
+ * this is an accuracy improvement, not a precondition for ingesting, and
+ * aborting here would lose the cursor advance for the whole batch.
+ */
+export async function detectDuplicates(
+  supabase: SupabaseClient,
+  opts: { userId: string; requestId?: string },
+): Promise<number> {
+  const tag = opts.requestId ? `[${opts.requestId}] ` : "";
+  const { data, error } = await supabase.rpc("detect_duplicate_expenses", {
+    p_user_id: opts.userId,
+  });
+  if (error) {
+    console.warn(`${tag}[duplicates] detection failed: ${error.message}`);
+    return 0;
+  }
+  const found = data ?? 0;
+  if (found > 0) {
+    console.log(`${tag}[duplicates] raised ${found} candidate pair(s)`);
+  }
+  return found;
+}
+
+/**
  * Create CAPTURED invoices for medical transactions that aren't already linked
  * to one, and back-link the transaction row.
  *

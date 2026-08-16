@@ -180,6 +180,71 @@ export type Database = {
           },
         ];
       };
+      expense_duplicate_candidates: {
+        Row: {
+          confidence: number;
+          detected_at: string;
+          expense_a_id: string;
+          expense_b_id: string;
+          id: string;
+          match_reason: Database["public"]["Enums"]["duplicate_match_reason"];
+          resolved_at: string | null;
+          status: Database["public"]["Enums"]["duplicate_status"];
+          user_id: string;
+        };
+        Insert: {
+          confidence: number;
+          detected_at?: string;
+          expense_a_id: string;
+          expense_b_id: string;
+          id?: string;
+          match_reason: Database["public"]["Enums"]["duplicate_match_reason"];
+          resolved_at?: string | null;
+          status?: Database["public"]["Enums"]["duplicate_status"];
+          user_id: string;
+        };
+        Update: {
+          confidence?: number;
+          detected_at?: string;
+          expense_a_id?: string;
+          expense_b_id?: string;
+          id?: string;
+          match_reason?: Database["public"]["Enums"]["duplicate_match_reason"];
+          resolved_at?: string | null;
+          status?: Database["public"]["Enums"]["duplicate_status"];
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "expense_duplicate_candidates_expense_a_id_fkey";
+            columns: ["expense_a_id"];
+            isOneToOne: false;
+            referencedRelation: "invoices";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "expense_duplicate_candidates_expense_a_id_fkey";
+            columns: ["expense_a_id"];
+            isOneToOne: false;
+            referencedRelation: "ledger_entries";
+            referencedColumns: ["invoice_id"];
+          },
+          {
+            foreignKeyName: "expense_duplicate_candidates_expense_b_id_fkey";
+            columns: ["expense_b_id"];
+            isOneToOne: false;
+            referencedRelation: "invoices";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "expense_duplicate_candidates_expense_b_id_fkey";
+            columns: ["expense_b_id"];
+            isOneToOne: false;
+            referencedRelation: "ledger_entries";
+            referencedColumns: ["invoice_id"];
+          },
+        ];
+      };
       hospital_pricing: {
         Row: {
           additional_generic_notes: string | null;
@@ -2321,6 +2386,7 @@ export type Database = {
           invoice_id: string | null;
           is_hsa_eligible: boolean | null;
           is_medical: boolean | null;
+          is_pending: boolean;
           is_split: boolean | null;
           is_transfer: boolean;
           merchant_category_code: string | null;
@@ -2329,6 +2395,7 @@ export type Database = {
           needs_review: boolean;
           notes: string | null;
           payment_method_id: string | null;
+          pending_plaid_transaction_id: string | null;
           pfc_confidence: string | null;
           pfc_detailed: string | null;
           pfc_primary: string | null;
@@ -2359,6 +2426,7 @@ export type Database = {
           invoice_id?: string | null;
           is_hsa_eligible?: boolean | null;
           is_medical?: boolean | null;
+          is_pending?: boolean;
           is_split?: boolean | null;
           is_transfer?: boolean;
           merchant_category_code?: string | null;
@@ -2367,6 +2435,7 @@ export type Database = {
           needs_review?: boolean;
           notes?: string | null;
           payment_method_id?: string | null;
+          pending_plaid_transaction_id?: string | null;
           pfc_confidence?: string | null;
           pfc_detailed?: string | null;
           pfc_primary?: string | null;
@@ -2397,6 +2466,7 @@ export type Database = {
           invoice_id?: string | null;
           is_hsa_eligible?: boolean | null;
           is_medical?: boolean | null;
+          is_pending?: boolean;
           is_split?: boolean | null;
           is_transfer?: boolean;
           merchant_category_code?: string | null;
@@ -2405,6 +2475,7 @@ export type Database = {
           needs_review?: boolean;
           notes?: string | null;
           payment_method_id?: string | null;
+          pending_plaid_transaction_id?: string | null;
           pfc_confidence?: string | null;
           pfc_detailed?: string | null;
           pfc_primary?: string | null;
@@ -2799,6 +2870,15 @@ export type Database = {
           unreimbursed_invoice_ids: string[];
         }[];
       };
+      detect_duplicate_expenses: {
+        Args: {
+          p_cross_source_window_days?: number;
+          p_same_source_window_days?: number;
+          p_tolerance?: number;
+          p_user_id: string;
+        };
+        Returns: number;
+      };
       detect_transfers: {
         Args: {
           p_lookback_days?: number;
@@ -2808,6 +2888,14 @@ export type Database = {
         };
         Returns: number;
       };
+      dismiss_duplicate_candidate: {
+        Args: { p_candidate_id: string };
+        Returns: boolean;
+      };
+      merge_duplicate_expenses: {
+        Args: { p_candidate_id: string; p_keep_id: string };
+        Returns: string;
+      };
       normalize_merchant_name: { Args: { p_name: string }; Returns: string };
       preview_categorization_rule: {
         Args: {
@@ -2815,6 +2903,10 @@ export type Database = {
           p_match_value: string;
         };
         Returns: number;
+      };
+      relink_pending_expense: {
+        Args: { p_pending_id: string; p_posted_id: string; p_user_id: string };
+        Returns: string;
       };
       revert_categorization_rule: {
         Args: { p_rule_id: string };
@@ -2864,6 +2956,8 @@ export type Database = {
     };
     Enums: {
       collection_status: "active" | "complete" | "needs_attention";
+      duplicate_match_reason: "manual_vs_synced" | "same_charge";
+      duplicate_status: "open" | "dismissed";
       expense_claim_state:
         | "unclaimed"
         | "locked_in_request"
@@ -3011,6 +3105,8 @@ export const Constants = {
   public: {
     Enums: {
       collection_status: ["active", "complete", "needs_attention"],
+      duplicate_match_reason: ["manual_vs_synced", "same_charge"],
+      duplicate_status: ["open", "dismissed"],
       expense_claim_state: [
         "unclaimed",
         "locked_in_request",

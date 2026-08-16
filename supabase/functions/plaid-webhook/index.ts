@@ -27,6 +27,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { decryptPlaidToken } from "../_shared/encryption.ts";
 import {
   autoCaptureExpenses,
+  detectDuplicates,
   detectTransfers,
   matchDeposits,
 } from "../_shared/autoCapture.ts";
@@ -207,8 +208,14 @@ serve(async (req) => {
       ingested,
     });
 
+    // ── 5b. Duplicate detection (Workstream C6), after capture — the expense
+    // just created is one half of every pair worth finding.
+    const duplicates = await detectDuplicates(supabase, {
+      userId: connection.user_id,
+    });
+
     console.log(
-      `[plaid-webhook] +${counts.added} ~${counts.modified} -${counts.removed} across ${counts.pages} page(s); transfers ${transferPairs}, captured ${captured}, deposit candidates ${depositCandidates}`,
+      `[plaid-webhook] +${counts.added} ~${counts.modified} -${counts.removed} across ${counts.pages} page(s); transfers ${transferPairs}, captured ${captured}, deposit candidates ${depositCandidates}, duplicate candidates ${duplicates}`,
     );
 
     return new Response(

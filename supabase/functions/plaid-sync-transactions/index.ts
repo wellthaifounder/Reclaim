@@ -26,6 +26,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { decryptPlaidToken } from "../_shared/encryption.ts";
 import {
   autoCaptureExpenses,
+  detectDuplicates,
   detectTransfers,
   matchDeposits,
 } from "../_shared/autoCapture.ts";
@@ -343,6 +344,16 @@ serve(async (req) => {
       );
     }
 
+    // ── 5b. Duplicate detection (Workstream C6) ───────────────────────────
+    // After capture, deliberately: the expense this sync just created is one
+    // half of every pair worth finding. The costly case is a charge the user
+    // already entered by hand on the day of the visit, which the bank now
+    // hands them a second time.
+    const duplicateCandidates = await detectDuplicates(supabase, {
+      userId: user.id,
+      requestId,
+    });
+
     await supabase.from("matching_run_log").insert({
       user_id: user.id,
       trigger_source: "plaid_sync",
@@ -398,6 +409,7 @@ serve(async (req) => {
         auto_linked: autoLinkedCount,
         transfers_matched: transferPairs,
         captured: capturedCount,
+        duplicate_candidates: duplicateCandidates,
         window_days: windowDays,
         institution_name: connection.institution_name,
       }),

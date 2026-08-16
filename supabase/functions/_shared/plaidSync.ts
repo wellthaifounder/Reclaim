@@ -47,6 +47,12 @@ export interface PlaidApiTransaction {
   amount: number;
   date: string;
   pending?: boolean;
+  /**
+   * On a posted transaction, the id of the pending transaction it replaces.
+   * Plaid states this link as fact, which is what makes the relink in
+   * `relink_pending_expense` safe to perform without asking the user.
+   */
+  pending_transaction_id?: string | null;
   category?: string[] | null;
   // Plaid names this `merchant_category_code`. The classifier's internal
   // contract calls it `mcc`; `mcc` is NOT a field Plaid returns — see the
@@ -335,73 +341,6 @@ async function drain(
     hasMore = page.has_more;
   }
 
-  // ── Apply removals first ────────────────────────────────────────────────
-  // A removed Plaid transaction is one that never actually posted (a dropped
-  // pending authorization) or was reversed. Leaving it behind is what made
-  // stale rows accumulate under the old date-window implementation.
-  //
-  // Removing the transaction alone is not enough: medical transactions are
-  // auto-captured into an invoice, and `transactions.invoice_id` is the child
-  // side of that relationship. Deleting only the transaction would strand a
-  // phantom expense that the user never incurred — worse than the stale row we
-  // are fixing. So we clean up the auto-captured invoice too, but ONLY when it
-  // is untouched: still in an early lifecycle state, carrying no receipts, and
-  // never submitted. Anything the user has worked on is preserved and logged
-  // for them to resolve, and anything already in a substantiation record is
-  // protected by that table's ON DELETE RESTRICT regardless.
-  if (removedIds.length > 0) {
-    for (const chunk of chunked(removedIds, UPSERT_CHUNK)) {
-      const { data: orphanCandidates } = await supabase
-        .from("invoices")
-        .select("id, lifecycle_status, source_plaid_transaction_id")
-        .eq("user_id", opts.userId)
-        .in("source_plaid_transaction_id", chunk)
-        .in("lifecycle_status", ["captured", "pending_review"]);
-
-      const candidateIds = (orphanCandidates ?? []).map((i) => i.id);
-
-      if (candidateIds.length > 0) {
-        // Exclude any that have documentation attached — the presence of a
-        // receipt means the user engaged with it.
-        const { data: withReceipts } = await supabase
-          .from("receipts")
-          .select("invoice_id")
-          .in("invoice_id", candidateIds);
-        const keep = new Set(
-          (withReceipts ?? []).map((r) => r.invoice_id as string),
-        );
-        const deletable = candidateIds.filter((id) => !keep.has(id));
-
-        if (deletable.length > 0) {
-          const { error: invDelErr } = await supabase
-            .from("invoices")
-            .delete()
-            .eq("user_id", opts.userId)
-            .in("id", deletable);
-          if (invDelErr) {
-            console.warn(
-              `[plaidSync] Orphan invoice cleanup failed: ${invDelErr.message}`,
-            );
-          }
-        }
-        if (keep.size > 0) {
-          console.log(
-            `[plaidSync] ${keep.size} auto-captured expense(s) kept despite Plaid removal — they have receipts attached.`,
-          );
-        }
-      }
-
-      const { error } = await supabase
-        .from("transactions")
-        .delete()
-        .eq("user_id", opts.userId)
-        .in("plaid_transaction_id", chunk);
-      if (error) {
-        console.warn(`[plaidSync] Removal delete failed: ${error.message}`);
-      }
-    }
-  }
-
   // ── Classify + upsert added and modified ────────────────────────────────
   // `modified` must overwrite (ignoreDuplicates: false) — that is the whole
   // point of processing it. The old manual-sync path used
@@ -454,6 +393,11 @@ async function drain(
         transaction_date: txn.date,
         vendor: txn.merchant_name || txn.name,
         description: txn.name,
+        // Workstream C6: both were previously read off the payload and thrown
+        // away. `pending_plaid_transaction_id` is what lets a posted charge
+        // find the pending row the user already attached a receipt to.
+        is_pending: txn.pending ?? false,
+        pending_plaid_transaction_id: txn.pending_transaction_id ?? null,
         // `amount` stays absolute for existing consumers; `signed_amount`
         // preserves Plaid's convention (positive = money out) so credit
         // detection and transfer matching can run against stored rows.
@@ -511,6 +455,46 @@ async function drain(
     }
   }
 
+  // ── Carry user work from a pending charge onto its posted twin ──────────
+  // Workstream C6. Ordering is the whole point and it is why removals moved
+  // below this block. When a pending charge settles, Plaid sends the pending
+  // id in `removed` and the posted transaction in `added`. Removing first
+  // meant one of two bad outcomes for anyone who had already worked on the
+  // pending expense: the receipt-bearing invoice was deliberately kept (see
+  // applyRemovals) and left pointing at a deleted transaction, while the
+  // posted charge auto-captured a SECOND expense — two records for one visit,
+  // each independently claimable. Relinking first moves the expense onto the
+  // posted charge, so the removal pass finds nothing to strand and capture
+  // finds the transaction already linked.
+  //
+  // Upserting before removing is also the more correct order in its own
+  // right: a charge that both appears and vanishes within one drain (a
+  // dropped authorization spanning pages) now ends up deleted rather than
+  // re-added after its own removal.
+  let relinked = 0;
+  for (const txn of inbound) {
+    if (!txn.pending_transaction_id) continue;
+    const { data, error } = await supabase.rpc("relink_pending_expense", {
+      p_user_id: opts.userId,
+      p_pending_id: txn.pending_transaction_id,
+      p_posted_id: txn.transaction_id,
+    });
+    if (error) {
+      // Not fatal. Worst case the pending expense is handled by the removal
+      // pass as before, and duplicate detection raises whatever survives.
+      console.warn(`[plaidSync] Pending relink failed: ${error.message}`);
+      continue;
+    }
+    if (data) relinked++;
+  }
+  if (relinked > 0) {
+    console.log(
+      `[plaidSync] Moved ${relinked} expense(s) from a pending charge onto its posted twin.`,
+    );
+  }
+
+  await applyRemovals(supabase, opts.userId, removedIds);
+
   // ── Commit the cursor only after every page applied cleanly ─────────────
   if (cursor) {
     const { error } = await supabase
@@ -535,6 +519,88 @@ async function drain(
     },
     ingested,
   };
+}
+
+// ── Removals ──────────────────────────────────────────────────────────────
+
+/**
+ * Delete transactions Plaid has retracted, plus any untouched expense they
+ * auto-captured.
+ *
+ * A removed Plaid transaction is one that never actually posted (a dropped
+ * pending authorization) or was reversed. Leaving it behind is what made stale
+ * rows accumulate under the old date-window implementation.
+ *
+ * Removing the transaction alone is not enough: medical transactions are
+ * auto-captured into an invoice, and `transactions.invoice_id` is the child
+ * side of that relationship. Deleting only the transaction would strand a
+ * phantom expense the user never incurred — worse than the stale row we are
+ * fixing. So the auto-captured invoice goes too, but ONLY when it is
+ * untouched: still in an early lifecycle state, carrying no receipts, and
+ * never submitted. Anything the user has worked on is preserved and logged for
+ * them to resolve, and anything already in a substantiation record is
+ * protected by that table's ON DELETE RESTRICT regardless.
+ *
+ * Runs AFTER the relink pass in `drain`, so an expense whose pending charge
+ * has settled has already moved to the posted charge and is not seen here.
+ */
+async function applyRemovals(
+  supabase: SupabaseClient,
+  userId: string,
+  removedIds: string[],
+): Promise<void> {
+  if (removedIds.length === 0) return;
+
+  for (const chunk of chunked(removedIds, UPSERT_CHUNK)) {
+    const { data: orphanCandidates } = await supabase
+      .from("invoices")
+      .select("id, lifecycle_status, source_plaid_transaction_id")
+      .eq("user_id", userId)
+      .in("source_plaid_transaction_id", chunk)
+      .in("lifecycle_status", ["captured", "pending_review"]);
+
+    const candidateIds = (orphanCandidates ?? []).map((i) => i.id);
+
+    if (candidateIds.length > 0) {
+      // Exclude any that have documentation attached — the presence of a
+      // receipt means the user engaged with it.
+      const { data: withReceipts } = await supabase
+        .from("receipts")
+        .select("invoice_id")
+        .in("invoice_id", candidateIds);
+      const keep = new Set(
+        (withReceipts ?? []).map((r) => r.invoice_id as string),
+      );
+      const deletable = candidateIds.filter((id) => !keep.has(id));
+
+      if (deletable.length > 0) {
+        const { error: invDelErr } = await supabase
+          .from("invoices")
+          .delete()
+          .eq("user_id", userId)
+          .in("id", deletable);
+        if (invDelErr) {
+          console.warn(
+            `[plaidSync] Orphan invoice cleanup failed: ${invDelErr.message}`,
+          );
+        }
+      }
+      if (keep.size > 0) {
+        console.log(
+          `[plaidSync] ${keep.size} auto-captured expense(s) kept despite Plaid removal — they have receipts attached.`,
+        );
+      }
+    }
+
+    const { error } = await supabase
+      .from("transactions")
+      .delete()
+      .eq("user_id", userId)
+      .in("plaid_transaction_id", chunk);
+    if (error) {
+      console.warn(`[plaidSync] Removal delete failed: ${error.message}`);
+    }
+  }
 }
 
 // ── Institution display name ──────────────────────────────────────────────
