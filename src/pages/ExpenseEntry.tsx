@@ -5,8 +5,8 @@
 // or whose savings-calculator decision needs to be tied to a real expense.
 //
 // Inserts into `invoices` with `lifecycle_status = 'captured'` and the
-// IRS-required `patient_name` field, matching the wizard's data model so
-// downstream Phase 3 classification + Phase 4 Substantiation-Record output
+// IRS-required patient, selected from the family roster (Workstream D1),
+// matching the wizard's data model so downstream Phase 3 classification + Phase 4 Substantiation-Record output
 // don't care which surface created the row.
 //
 // What this is NOT:
@@ -55,6 +55,8 @@ import {
   Camera,
 } from "lucide-react";
 import { logError } from "@/utils/errorHandler";
+import { useFamilyRoster } from "@/hooks/useFamilyRoster";
+import { PatientPicker } from "@/components/family/PatientPicker";
 
 // Categories match BillUploadWizard so manual-entry and OCR-entry rows
 // look consistent in downstream views.
@@ -89,8 +91,6 @@ const expenseSchema = z.object({
   notes: z.string().max(500).optional(),
 });
 type ExpenseFormValues = z.infer<typeof expenseSchema>;
-
-type PatientChoice = "Self" | "Spouse" | "Other";
 
 interface SavedDecisionState {
   amount?: number | string;
@@ -145,8 +145,11 @@ export default function ExpenseEntry() {
     },
   });
 
-  const [patientChoice, setPatientChoice] = useState<PatientChoice>("Self");
-  const [patientName, setPatientName] = useState("Self");
+  // Workstream D1: the patient is a roster member, not a typed string. The
+  // account holder is preselected because it is by far the commonest case.
+  const { self: rosterSelf } = useFamilyRoster();
+  const [patientId, setPatientId] = useState<string | null>(null);
+  const effectivePatientId = patientId ?? rosterSelf?.id ?? null;
   const [file, setFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
@@ -179,11 +182,6 @@ export default function ExpenseEntry() {
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Please sign in to add an expense.");
 
-      const resolvedPatient =
-        patientChoice === "Other"
-          ? patientName.trim() || "Self"
-          : patientChoice;
-
       const { data: invoice, error: invErr } = await supabase
         .from("invoices")
         .insert({
@@ -201,7 +199,9 @@ export default function ExpenseEntry() {
           claim_state: "unclaimed",
           amount_paid: data.amount,
           reimbursable_amount: data.amount,
-          patient_name: resolvedPatient,
+          // patient_name is kept in step by a database trigger, so the ten
+          // surfaces still reading it keep working while they migrate.
+          patient_id: effectivePatientId,
         })
         .select("id")
         .single();
@@ -377,37 +377,11 @@ export default function ExpenseEntry() {
 
               <div className="space-y-1.5">
                 <Label htmlFor="patient">Patient</Label>
-                <Select
-                  value={patientChoice}
-                  onValueChange={(v) => {
-                    const choice = v as PatientChoice;
-                    setPatientChoice(choice);
-                    setPatientName(
-                      choice === "Other"
-                        ? patientChoice === "Other"
-                          ? patientName
-                          : ""
-                        : choice,
-                    );
-                  }}
-                >
-                  <SelectTrigger id="patient">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Self">Self</SelectItem>
-                    <SelectItem value="Spouse">Spouse</SelectItem>
-                    <SelectItem value="Other">Other…</SelectItem>
-                  </SelectContent>
-                </Select>
-                {patientChoice === "Other" && (
-                  <Input
-                    autoFocus
-                    placeholder="Dependent's name"
-                    value={patientName}
-                    onChange={(e) => setPatientName(e.target.value)}
-                  />
-                )}
+                <PatientPicker
+                  id="patient"
+                  value={effectivePatientId}
+                  onChange={setPatientId}
+                />
               </div>
 
               <div className="space-y-1.5">

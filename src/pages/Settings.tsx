@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
+import { FamilyRosterCard } from "@/components/family/FamilyRosterCard";
 import { SubscriptionManagement } from "@/components/settings/SubscriptionManagement";
 import { EmailForwardingCard } from "@/components/settings/EmailForwardingCard";
 import { useOnboarding } from "@/contexts/OnboardingContext";
@@ -370,6 +371,11 @@ const Settings = () => {
 
         <div className="space-y-6">
           <SubscriptionManagement />
+
+          {/* Workstream D1. High on the page deliberately: an unanswered
+              tax-dependent question blocks reimbursement for that person, and
+              it is not something a user would think to go looking for. */}
+          <FamilyRosterCard />
 
           <Card>
             <CardHeader>

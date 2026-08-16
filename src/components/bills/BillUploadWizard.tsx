@@ -37,6 +37,8 @@ import { cn } from "@/lib/utils";
 import { useDropzone } from "react-dropzone";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { supabase } from "@/integrations/supabase/client";
+import { useFamilyRoster } from "@/hooks/useFamilyRoster";
+import { PatientPicker } from "@/components/family/PatientPicker";
 import { toast } from "sonner";
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -87,8 +89,6 @@ interface FileEntry {
   objectUrl: string;
 }
 
-type PatientChoice = "Self" | "Spouse" | "Other";
-
 // Reclaim Phase 2: shape returned by process-receipt-ocr.
 interface OcrResult {
   amount: number | null;
@@ -120,8 +120,8 @@ interface BillDraft {
   newCollectionTitle: string;
   isCreatingNewCollection: boolean;
   notes: string;
-  patientChoice: PatientChoice;
-  patientName: string;
+  /** Workstream D1: a family_members id, not a typed name. */
+  patientId: string | null;
 }
 
 type Step = "upload" | "details" | "review" | "saving" | "complete" | "error";
@@ -189,6 +189,10 @@ export function BillUploadWizard({
   const isMobile = useIsMobile();
   const [step, setStep] = useState<Step>("upload");
   const [fileEntries, setFileEntries] = useState<FileEntry[]>([]);
+  // Workstream D1: patients come from the family roster. `rosterSelf` is the
+  // fallback when a draft has no explicit choice, since most bills are the
+  // account holder's own.
+  const { members: rosterMembers, self: rosterSelf } = useFamilyRoster();
   const [drafts, setDrafts] = useState<BillDraft[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
 
@@ -382,8 +386,7 @@ export function BillUploadWizard({
       newCollectionTitle: "",
       isCreatingNewCollection: false,
       notes: "",
-      patientChoice: "Self" as PatientChoice,
-      patientName: "Self",
+      patientId: null,
     }));
     setDrafts(newDrafts);
     setCurrentIndex(0);
@@ -522,10 +525,6 @@ export function BillUploadWizard({
         const vendor = d.vendor.trim() || d.file.name.replace(/\.[^.]+$/, "");
         const amount = d.amount !== "" ? parseFloat(d.amount) : 0;
         const date = d.date || new Date().toISOString().split("T")[0];
-        const patientName =
-          d.patientChoice === "Other"
-            ? d.patientName.trim() || "Self"
-            : d.patientChoice;
         // Workstream B: the old `isHsaEligible` (category matching) and
         // `lifecycleStatus` locals are gone — both columns are now derived from
         // the facets set below, and category matching is a guess rather than
@@ -551,7 +550,9 @@ export function BillUploadWizard({
             claim_state: "unclaimed",
             amount_paid: amount,
             reimbursable_amount: amount,
-            patient_name: patientName,
+            // patient_name is kept in step by a database trigger, so the
+            // surfaces still reading it keep working while they migrate.
+            patient_id: d.patientId ?? rosterSelf?.id ?? null,
           })
           .select()
           .single();
@@ -961,43 +962,13 @@ export function BillUploadWizard({
               {/* Patient — required on Reclaim Substantiation Records (IRS Pub 502) */}
               <div className="space-y-1.5">
                 <Label htmlFor={`patient-${currentIndex}`}>Patient</Label>
-                <Select
-                  value={draft.patientChoice}
-                  onValueChange={(v) => {
-                    const choice = v as PatientChoice;
-                    updateDraft(currentIndex, {
-                      patientChoice: choice,
-                      patientName:
-                        choice === "Other"
-                          ? draft.patientChoice === "Other"
-                            ? draft.patientName
-                            : ""
-                          : choice,
-                    });
-                  }}
-                >
-                  <SelectTrigger id={`patient-${currentIndex}`}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Self">Self</SelectItem>
-                    <SelectItem value="Spouse">Spouse</SelectItem>
-                    <SelectItem value="Other">Other…</SelectItem>
-                  </SelectContent>
-                </Select>
-                {draft.patientChoice === "Other" && (
-                  <Input
-                    id={`patient-name-${currentIndex}`}
-                    autoFocus
-                    placeholder="Dependent's name (e.g. Maya, Mom)"
-                    value={draft.patientName}
-                    onChange={(e) =>
-                      updateDraft(currentIndex, {
-                        patientName: e.target.value,
-                      })
-                    }
-                  />
-                )}
+                <PatientPicker
+                  id={`patient-${currentIndex}`}
+                  value={draft.patientId ?? rosterSelf?.id ?? null}
+                  onChange={(patientId) =>
+                    updateDraft(currentIndex, { patientId })
+                  }
+                />
               </div>
 
               {/* Amount + Date */}
@@ -1357,9 +1328,9 @@ export function BillUploadWizard({
                         </p>
                         <p className="text-xs text-muted-foreground mt-0.5">
                           Patient:{" "}
-                          {d.patientChoice === "Other"
-                            ? d.patientName.trim() || "Self"
-                            : d.patientChoice}
+                          {rosterMembers.find(
+                            (m) => m.id === (d.patientId ?? rosterSelf?.id),
+                          )?.name ?? "Not set"}
                         </p>
                       </div>
                       <button

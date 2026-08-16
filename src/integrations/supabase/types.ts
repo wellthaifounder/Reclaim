@@ -245,6 +245,48 @@ export type Database = {
           },
         ];
       };
+      family_members: {
+        Row: {
+          created_at: string;
+          date_of_birth: string | null;
+          id: string;
+          is_active: boolean;
+          name: string;
+          notes: string | null;
+          qualifies_for_hsa: boolean | null;
+          relationship: Database["public"]["Enums"]["family_relationship"];
+          tax_dependent: boolean | null;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          date_of_birth?: string | null;
+          id?: string;
+          is_active?: boolean;
+          name: string;
+          notes?: string | null;
+          qualifies_for_hsa?: boolean | null;
+          relationship: Database["public"]["Enums"]["family_relationship"];
+          tax_dependent?: boolean | null;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          date_of_birth?: string | null;
+          id?: string;
+          is_active?: boolean;
+          name?: string;
+          notes?: string | null;
+          qualifies_for_hsa?: boolean | null;
+          relationship?: Database["public"]["Enums"]["family_relationship"];
+          tax_dependent?: boolean | null;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
       hospital_pricing: {
         Row: {
           additional_generic_notes: string | null;
@@ -572,6 +614,7 @@ export type Database = {
           network_status: string | null;
           notes: string | null;
           npi_number: string | null;
+          patient_id: string | null;
           patient_name: string | null;
           payment_method_id: string | null;
           payment_plan_installments: number | null;
@@ -630,6 +673,7 @@ export type Database = {
           network_status?: string | null;
           notes?: string | null;
           npi_number?: string | null;
+          patient_id?: string | null;
           patient_name?: string | null;
           payment_method_id?: string | null;
           payment_plan_installments?: number | null;
@@ -688,6 +732,7 @@ export type Database = {
           network_status?: string | null;
           notes?: string | null;
           npi_number?: string | null;
+          patient_id?: string | null;
           patient_name?: string | null;
           payment_method_id?: string | null;
           payment_plan_installments?: number | null;
@@ -747,6 +792,13 @@ export type Database = {
             columns: ["collection_id"];
             isOneToOne: false;
             referencedRelation: "collections";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "invoices_patient_id_fkey";
+            columns: ["patient_id"];
+            isOneToOne: false;
+            referencedRelation: "family_members";
             referencedColumns: ["id"];
           },
           {
@@ -2849,6 +2901,10 @@ export type Database = {
         Args: { p_is_flagged: boolean; p_user_id: string };
         Returns: boolean;
       };
+      classify_patient_name: {
+        Args: { p_name: string };
+        Returns: Database["public"]["Enums"]["family_relationship"];
+      };
       compute_collection_status: {
         Args: { p_collection_id: string };
         Returns: Database["public"]["Enums"]["collection_status"];
@@ -2891,6 +2947,14 @@ export type Database = {
       dismiss_duplicate_candidate: {
         Args: { p_candidate_id: string };
         Returns: boolean;
+      };
+      expense_dependency_gate: {
+        Args: { p_invoice_id: string };
+        Returns: {
+          patient: string;
+          reason: string;
+          status: string;
+        }[];
       };
       merge_duplicate_expenses: {
         Args: { p_candidate_id: string; p_keep_id: string };
@@ -2967,6 +3031,7 @@ export type Database = {
       expense_documentation_state: "none" | "partial" | "complete";
       expense_eligibility_state:
         "unknown" | "eligible" | "conditional" | "ineligible";
+      family_relationship: "self" | "spouse" | "child" | "other_dependent";
       inbox_item_status: "pending" | "acted" | "dismissed" | "expired";
       inbox_item_type: "review_transaction" | "confirm_match";
       invoice_lifecycle_status:
@@ -3121,6 +3186,7 @@ export const Constants = {
         "conditional",
         "ineligible",
       ],
+      family_relationship: ["self", "spouse", "child", "other_dependent"],
       inbox_item_status: ["pending", "acted", "dismissed", "expired"],
       inbox_item_type: ["review_transaction", "confirm_match"],
       invoice_lifecycle_status: [
