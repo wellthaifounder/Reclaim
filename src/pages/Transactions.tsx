@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
-import { Plus, Search, CheckCircle2, XCircle } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import {
@@ -14,7 +14,7 @@ import {
 import { TransactionDetailDialog } from "@/components/transactions/TransactionDetailDialog";
 import { TransactionInlineDetail } from "@/components/transactions/TransactionInlineDetail";
 import { QuickAddTransactionDialog } from "@/components/transactions/QuickAddTransactionDialog";
-import { ReviewQueue } from "@/components/transactions/ReviewQueue";
+import { ReviewFeed } from "@/components/transactions/ReviewFeed";
 import {
   AdvancedFilters,
   type FilterCriteria,
@@ -187,8 +187,6 @@ export default function Transactions() {
       filtered = filtered.filter((t) => t.is_medical);
     } else if (activeTab === "non-medical") {
       filtered = filtered.filter((t) => t.is_medical === false);
-    } else if (activeTab === "needs-review") {
-      filtered = filtered.filter((t) => t.needs_review);
     } else if (activeTab === "all") {
       // Show all transactions including ignored ones
       // No filtering needed
@@ -268,26 +266,22 @@ export default function Transactions() {
     try {
       const newIsMedical = !transaction.is_medical;
 
-      // Check if transaction is before HSA opened date
-      let isHsaEligible = newIsMedical;
-      if (newIsMedical && hsaOpenedDate) {
-        const transactionDate = new Date(transaction.transaction_date);
-        const hsaDate = new Date(hsaOpenedDate);
-        if (transactionDate < hsaDate) {
-          isHsaEligible = false;
-          toast.warning(
-            `This transaction occurred before your HSA was opened (${new Date(hsaOpenedDate).toLocaleDateString()}). It's marked as medical but not HSA-eligible.`,
-          );
-        }
-      }
-
+      // Workstream C2: no is_hsa_eligible here, and no HSA-establishment-date
+      // warning. Both decided eligibility at categorization, which is the
+      // wrong step -- eligibility needs date of service, patient and Pub 502
+      // category, none of which are known from a bank transaction. The
+      // establishment-date gate is reported during substantiation instead.
       const { error } = await supabase
         .from("transactions")
         .update({
           is_medical: newIsMedical,
-          is_hsa_eligible: isHsaEligible,
+          needs_review: false,
           category: newIsMedical ? "medical" : transaction.category,
           reconciliation_status: newIsMedical ? "unlinked" : "ignored",
+          classification_reason: "user",
+          classification_explanation: newIsMedical
+            ? "You confirmed this as a medical expense."
+            : "You marked this as not medical.",
         })
         .eq("id", transaction.id);
 
@@ -296,6 +290,10 @@ export default function Transactions() {
         newIsMedical ? "Marked as medical expense" : "Marked as non-medical",
       );
       fetchTransactions();
+      // Workstream C4: rules are reachable from any transaction, including
+      // ones already filed in the archive -- that is how a user corrects a
+      // vendor they disagree with rather than fixing rows one by one.
+      setRuleCandidate({ ...transaction, isMedical: newIsMedical });
     } catch (error) {
       logError("Error toggling medical:", error);
       toast.error("Failed to update transaction");
@@ -308,14 +306,18 @@ export default function Transactions() {
         .from("transactions")
         .update({
           is_medical: true,
-          is_hsa_eligible: true,
+          needs_review: false,
           category: "medical",
+          classification_reason: "user",
+          classification_explanation:
+            "You confirmed this as a medical expense.",
         })
         .eq("id", transaction.id);
 
       if (error) throw error;
       toast.success("Marked as medical expense");
       fetchTransactions();
+      setRuleCandidate({ ...transaction, isMedical: true });
     } catch (error) {
       logError("Error updating transaction:", error);
       toast.error("Failed to update transaction");
@@ -357,56 +359,6 @@ export default function Transactions() {
     setLinkTargetInvoice(invoice);
     setInvoicePickerOpen(false);
     setLinkDialogOpen(true);
-  };
-
-  const handleConfirmMedical = async (transaction: Transaction) => {
-    try {
-      const { error } = await supabase
-        .from("transactions")
-        .update({
-          is_medical: true,
-          needs_review: false,
-          category: "medical",
-          classification_reason: "user",
-          classification_explanation:
-            "You confirmed this as a medical expense.",
-        })
-        .eq("id", transaction.id);
-      if (error) throw error;
-
-      toast.success("Confirmed as medical expense");
-      fetchTransactions();
-      // Workstream C3: this used to silently upsert a vendor preference the
-      // user could never see or undo. Now it offers a rule, shows how many
-      // past transactions it would touch, and is reversible.
-      setRuleCandidate({ ...transaction, isMedical: true });
-    } catch (error) {
-      logError("Error confirming medical transaction:", error);
-      toast.error("Failed to update transaction");
-    }
-  };
-
-  const handleRejectMedical = async (transaction: Transaction) => {
-    try {
-      const { error } = await supabase
-        .from("transactions")
-        .update({
-          is_medical: false,
-          needs_review: false,
-          reconciliation_status: "ignored",
-          classification_reason: "user",
-          classification_explanation: "You marked this as not medical.",
-        })
-        .eq("id", transaction.id);
-      if (error) throw error;
-
-      toast.success("Marked as non-medical");
-      fetchTransactions();
-      setRuleCandidate({ ...transaction, isMedical: false });
-    } catch (error) {
-      logError("Error rejecting medical categorization:", error);
-      toast.error("Failed to update transaction");
-    }
   };
 
   const handleIgnore = async (transaction: Transaction) => {
@@ -581,11 +533,13 @@ export default function Transactions() {
           {/* Tabs */}
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="mb-6">
-              <TabsTrigger value="review">
-                Review Queue {stats.unlinked > 0 && `(${stats.unlinked})`}
-              </TabsTrigger>
-              <TabsTrigger value="needs-review" className="relative">
-                Needs Review
+              {/* One review tab, not two. "Review Queue" (one-at-a-time
+                  swipe) and "Needs Review" (flat list) were two routes to the
+                  same decision, and the flat list still told users confirming
+                  a transaction made it HSA-eligible — which stopped being true
+                  when eligibility moved to substantiation. */}
+              <TabsTrigger value="review" className="relative">
+                Review
                 {stats.needsReview > 0 && (
                   <Badge
                     variant="destructive"
@@ -601,65 +555,7 @@ export default function Transactions() {
             </TabsList>
 
             <TabsContent value="review" className="space-y-4">
-              <ReviewQueue />
-            </TabsContent>
-
-            <TabsContent value="needs-review" className="space-y-3">
-              {filteredTransactions.length === 0 ? (
-                <Card className="p-12 text-center">
-                  <CheckCircle2 className="h-10 w-10 text-green-500 mx-auto mb-3" />
-                  <p className="text-muted-foreground">
-                    All transactions have been reviewed
-                  </p>
-                </Card>
-              ) : (
-                <>
-                  <p className="text-sm text-muted-foreground">
-                    These transactions were auto-detected as medical but need
-                    your confirmation to become HSA-eligible.
-                  </p>
-                  {filteredTransactions.map((transaction) => (
-                    <Card
-                      key={transaction.id}
-                      className="p-4 border-yellow-200 dark:border-yellow-800"
-                    >
-                      <div className="flex items-center justify-between gap-4">
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium truncate">
-                            {transaction.vendor || transaction.description}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            {new Date(
-                              transaction.transaction_date,
-                            ).toLocaleDateString()}{" "}
-                            · ${Number(transaction.amount).toFixed(2)}
-                          </p>
-                        </div>
-                        <div className="flex gap-2 shrink-0">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="text-green-600 border-green-300 hover:bg-green-50"
-                            onClick={() => handleConfirmMedical(transaction)}
-                          >
-                            <CheckCircle2 className="h-4 w-4 mr-1" />
-                            Medical
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="text-red-600 border-red-300 hover:bg-red-50"
-                            onClick={() => handleRejectMedical(transaction)}
-                          >
-                            <XCircle className="h-4 w-4 mr-1" />
-                            Not Medical
-                          </Button>
-                        </div>
-                      </div>
-                    </Card>
-                  ))}
-                </>
-              )}
+              <ReviewFeed />
             </TabsContent>
 
             <TabsContent value={activeTab} className="space-y-4">

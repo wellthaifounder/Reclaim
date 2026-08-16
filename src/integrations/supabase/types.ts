@@ -2259,55 +2259,6 @@ export type Database = {
           },
         ];
       };
-      transaction_invoice_suggestions: {
-        Row: {
-          confidence_score: number;
-          created_at: string;
-          id: string;
-          invoice_id: string;
-          match_reason: string | null;
-          transaction_id: string;
-        };
-        Insert: {
-          confidence_score: number;
-          created_at?: string;
-          id?: string;
-          invoice_id: string;
-          match_reason?: string | null;
-          transaction_id: string;
-        };
-        Update: {
-          confidence_score?: number;
-          created_at?: string;
-          id?: string;
-          invoice_id?: string;
-          match_reason?: string | null;
-          transaction_id?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "transaction_invoice_suggestions_invoice_id_fkey";
-            columns: ["invoice_id"];
-            isOneToOne: false;
-            referencedRelation: "invoices";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "transaction_invoice_suggestions_invoice_id_fkey";
-            columns: ["invoice_id"];
-            isOneToOne: false;
-            referencedRelation: "ledger_entries";
-            referencedColumns: ["invoice_id"];
-          },
-          {
-            foreignKeyName: "transaction_invoice_suggestions_transaction_id_fkey";
-            columns: ["transaction_id"];
-            isOneToOne: false;
-            referencedRelation: "transactions";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
       transaction_splits: {
         Row: {
           amount: number;
@@ -2796,6 +2747,10 @@ export type Database = {
         Args: { p_rule_id: string };
         Returns: number;
       };
+      bulk_review_merchant: {
+        Args: { p_is_medical: boolean; p_merchant_key: string };
+        Returns: number;
+      };
       calculate_fair_pricing_score: {
         Args: { p_provider_id: string };
         Returns: number;
@@ -2836,6 +2791,20 @@ export type Database = {
       revert_categorization_rule: {
         Args: { p_rule_id: string };
         Returns: number;
+      };
+      review_feed_groups: {
+        Args: { p_limit?: number };
+        Returns: {
+          display_name: string;
+          earliest_date: string;
+          explanation: string;
+          latest_date: string;
+          mcc: string;
+          merchant_entity_id: string;
+          merchant_key: string;
+          total_amount: number;
+          txn_count: number;
+        }[];
       };
       suggest_invoice_clusters: {
         Args: { p_user_id: string };
