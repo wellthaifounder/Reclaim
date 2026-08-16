@@ -65,19 +65,21 @@ focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1
 #### 4. Microcopy Updates (31 instances)
 
 **CTAs Updated:**
-| Old Copy | New Copy | Context |
-|----------|----------|---------|
-| "Get Started" | "Start Saving Today" | Navigation - more specific value prop |
-| "Get Started" | "Start Setup Guide" | Empty state - clearer action |
-| "Add Expense Manually" | "Add First Expense" | Empty state - more encouraging |
-| "Submit" | "Create Goal" | Goal setting - more specific |
+
+| Old Copy               | New Copy             | Context                               |
+| ---------------------- | -------------------- | ------------------------------------- |
+| "Get Started"          | "Start Saving Today" | Navigation - more specific value prop |
+| "Get Started"          | "Start Setup Guide"  | Empty state - clearer action          |
+| "Add Expense Manually" | "Add First Expense"  | Empty state - more encouraging        |
+| "Submit"               | "Create Goal"        | Goal setting - more specific          |
 
 **Empty States Updated:**
-| Component | Old | New |
-|-----------|-----|-----|
-| Goals | "No active goals yet" | "No savings goals yet / Create your first goal to start tracking progress" |
+
+| Component        | Old                                 | New                                                                         |
+| ---------------- | ----------------------------------- | --------------------------------------------------------------------------- |
+| Goals            | "No active goals yet"               | "No savings goals yet / Create your first goal to start tracking progress"  |
 | Payment Strategy | "Start using payment strategies..." | "Ready to track your first expense? Add an expense to see your timeline..." |
-| Year-over-Year | "No data available yet..." | "Start tracking expenses to see your year-over-year savings trends..." |
+| Year-over-Year   | "No data available yet..."          | "Start tracking expenses to see your year-over-year savings trends..."      |
 
 **Error Messages:**
 
