@@ -25,7 +25,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { decryptPlaidToken } from "../_shared/encryption.ts";
-import { autoCaptureExpenses, matchDeposits } from "../_shared/autoCapture.ts";
+import {
+  autoCaptureExpenses,
+  detectTransfers,
+  matchDeposits,
+} from "../_shared/autoCapture.ts";
 import {
   syncAccounts,
   syncTransactions,
@@ -187,6 +191,12 @@ serve(async (req) => {
       rules: rules ?? [],
     });
 
+    // ── 4b. Transfer detection (Workstream C5), before capture so a card
+    // payment never becomes a phantom expense.
+    const transferPairs = await detectTransfers(supabase, {
+      userId: connection.user_id,
+    });
+
     // ── 5. Capture + deposit matching (shared with plaid-sync-transactions)
     const captured = await autoCaptureExpenses(supabase, {
       userId: connection.user_id,
@@ -198,7 +208,7 @@ serve(async (req) => {
     });
 
     console.log(
-      `[plaid-webhook] +${counts.added} ~${counts.modified} -${counts.removed} across ${counts.pages} page(s); captured ${captured}, deposit candidates ${depositCandidates}`,
+      `[plaid-webhook] +${counts.added} ~${counts.modified} -${counts.removed} across ${counts.pages} page(s); transfers ${transferPairs}, captured ${captured}, deposit candidates ${depositCandidates}`,
     );
 
     return new Response(

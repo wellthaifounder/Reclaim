@@ -19,6 +19,7 @@ import {
   Split,
   Receipt,
   HelpCircle,
+  ArrowLeftRight,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -42,6 +43,10 @@ export interface TransactionCardProps {
    * actionable rather than mysterious."
    */
   classificationExplanation?: string | null;
+  /** Workstream C5 — money moved between the user's own accounts. */
+  isTransfer?: boolean;
+  transferKind?: string | null;
+  onUnlinkTransfer?: () => void;
   onViewDetails: () => void;
   onMarkMedical?: () => void;
   onLinkToInvoice?: () => void;
@@ -67,6 +72,9 @@ export function TransactionCard({
   splitParentId,
   splitCount,
   classificationExplanation,
+  isTransfer = false,
+  transferKind,
+  onUnlinkTransfer,
   onViewDetails,
   onMarkMedical,
   onLinkToInvoice,
@@ -169,6 +177,18 @@ export function TransactionCard({
                 Part of split
               </Badge>
             )}
+            {isTransfer && (
+              <Badge variant="outline" className="gap-1 text-xs">
+                <ArrowLeftRight className="h-3 w-3" />
+                {transferKind === "card_payment"
+                  ? "Card payment"
+                  : transferKind === "hsa_distribution"
+                    ? "HSA withdrawal"
+                    : transferKind === "hsa_contribution"
+                      ? "HSA contribution"
+                      : "Transfer"}
+              </Badge>
+            )}
           </div>
 
           {classificationExplanation && (
@@ -212,6 +232,13 @@ export function TransactionCard({
                 <Eye className="h-4 w-4 mr-2" />
                 View Details
               </DropdownMenuItem>
+
+              {isTransfer && onUnlinkTransfer && (
+                <DropdownMenuItem onClick={onUnlinkTransfer}>
+                  <ArrowLeftRight className="h-4 w-4 mr-2" />
+                  Not a transfer
+                </DropdownMenuItem>
+              )}
 
               {onMarkMedical && !isMedical && (
                 <DropdownMenuItem onClick={onMarkMedical}>

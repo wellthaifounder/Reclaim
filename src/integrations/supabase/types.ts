@@ -2322,6 +2322,7 @@ export type Database = {
           is_hsa_eligible: boolean | null;
           is_medical: boolean | null;
           is_split: boolean | null;
+          is_transfer: boolean;
           merchant_category_code: string | null;
           merchant_entity_id: string | null;
           merchant_normalized: string | null;
@@ -2338,6 +2339,9 @@ export type Database = {
           source: string | null;
           split_parent_id: string | null;
           transaction_date: string;
+          transfer_counterpart_id: string | null;
+          transfer_detected_at: string | null;
+          transfer_kind: Database["public"]["Enums"]["transfer_kind"] | null;
           updated_at: string;
           user_id: string;
           vendor: string | null;
@@ -2356,6 +2360,7 @@ export type Database = {
           is_hsa_eligible?: boolean | null;
           is_medical?: boolean | null;
           is_split?: boolean | null;
+          is_transfer?: boolean;
           merchant_category_code?: string | null;
           merchant_entity_id?: string | null;
           merchant_normalized?: string | null;
@@ -2372,6 +2377,9 @@ export type Database = {
           source?: string | null;
           split_parent_id?: string | null;
           transaction_date: string;
+          transfer_counterpart_id?: string | null;
+          transfer_detected_at?: string | null;
+          transfer_kind?: Database["public"]["Enums"]["transfer_kind"] | null;
           updated_at?: string;
           user_id: string;
           vendor?: string | null;
@@ -2390,6 +2398,7 @@ export type Database = {
           is_hsa_eligible?: boolean | null;
           is_medical?: boolean | null;
           is_split?: boolean | null;
+          is_transfer?: boolean;
           merchant_category_code?: string | null;
           merchant_entity_id?: string | null;
           merchant_normalized?: string | null;
@@ -2406,6 +2415,9 @@ export type Database = {
           source?: string | null;
           split_parent_id?: string | null;
           transaction_date?: string;
+          transfer_counterpart_id?: string | null;
+          transfer_detected_at?: string | null;
+          transfer_kind?: Database["public"]["Enums"]["transfer_kind"] | null;
           updated_at?: string;
           user_id?: string;
           vendor?: string | null;
@@ -2449,6 +2461,13 @@ export type Database = {
           {
             foreignKeyName: "transactions_split_parent_id_fkey";
             columns: ["split_parent_id"];
+            isOneToOne: false;
+            referencedRelation: "transactions";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "transactions_transfer_counterpart_id_fkey";
+            columns: ["transfer_counterpart_id"];
             isOneToOne: false;
             referencedRelation: "transactions";
             referencedColumns: ["id"];
@@ -2780,6 +2799,15 @@ export type Database = {
           unreimbursed_invoice_ids: string[];
         }[];
       };
+      detect_transfers: {
+        Args: {
+          p_lookback_days?: number;
+          p_tolerance?: number;
+          p_user_id: string;
+          p_window_days?: number;
+        };
+        Returns: number;
+      };
       normalize_merchant_name: { Args: { p_name: string }; Returns: string };
       preview_categorization_rule: {
         Args: {
@@ -2828,6 +2856,7 @@ export type Database = {
         };
         Returns: boolean;
       };
+      unlink_transfer: { Args: { p_transaction_id: string }; Returns: number };
       update_provider_statistics: {
         Args: { p_provider_id: string };
         Returns: undefined;
@@ -2857,6 +2886,8 @@ export type Database = {
       invoice_status:
         "draft" | "unpaid" | "partially_paid" | "fully_paid" | "reimbursed";
       rule_match_type: "merchant_entity" | "mcc" | "name_pattern";
+      transfer_kind:
+        "card_payment" | "internal" | "hsa_distribution" | "hsa_contribution";
     };
     CompositeTypes: {
       [_ in never]: never;
@@ -3013,6 +3044,12 @@ export const Constants = {
         "reimbursed",
       ],
       rule_match_type: ["merchant_entity", "mcc", "name_pattern"],
+      transfer_kind: [
+        "card_payment",
+        "internal",
+        "hsa_distribution",
+        "hsa_contribution",
+      ],
     },
   },
 } as const;

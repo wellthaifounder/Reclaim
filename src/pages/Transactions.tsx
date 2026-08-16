@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
-import { Plus, Search } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Plus, Search, ArrowLeftRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import {
@@ -427,6 +428,22 @@ export default function Transactions() {
   // separate EXPENSES — the mixed-basket case ($12 of Tylenol in an $87
   // Walmart run) and the bundled-payment case (one hospital charge covering
   // several visits for different family members).
+  const handleUnlinkTransfer = async (transaction: Transaction) => {
+    try {
+      const { error } = await supabase.rpc("unlink_transfer", {
+        p_transaction_id: transaction.id,
+      });
+      if (error) throw error;
+      // Both halves come back, so say so — the user clicked on one row but two
+      // reappear in the review queue.
+      toast.success("Transfer undone. Both transactions are back for review.");
+      fetchTransactions();
+    } catch (error) {
+      logError("Error unlinking transfer:", error);
+      toast.error("Failed to undo the transfer");
+    }
+  };
+
   const handleSplitIntoExpenses = (transaction: Transaction) => {
     const check = canSplitIntoExpenses(transaction);
     if (!check.canSplit) {
@@ -437,16 +454,25 @@ export default function Transactions() {
     setExpenseSplitOpen(true);
   };
 
+  // Workstream C5: transfers are excluded from every total. Moving $500 from
+  // checking to a credit card is not $1,000 of spending, and counting it as
+  // any spending at all is what makes the app's own numbers visibly wrong.
+  const spending = transactions.filter((t) => !t.is_transfer);
+  const cardPayments = transactions.filter(
+    (t) => t.transfer_kind === "card_payment",
+  );
+
   const stats = {
-    total: transactions.length,
-    medical: transactions.filter((t) => t.is_medical).length,
-    unlinked: transactions.filter((t) => t.reconciliation_status === "unlinked")
+    total: spending.length,
+    medical: spending.filter((t) => t.is_medical).length,
+    unlinked: spending.filter((t) => t.reconciliation_status === "unlinked")
       .length,
-    needsReview: transactions.filter((t) => t.needs_review).length,
-    totalAmount: transactions.reduce((sum, t) => sum + Number(t.amount), 0),
-    medicalAmount: transactions
+    needsReview: spending.filter((t) => t.needs_review).length,
+    totalAmount: spending.reduce((sum, t) => sum + Number(t.amount), 0),
+    medicalAmount: spending
       .filter((t) => t.is_medical)
       .reduce((sum, t) => sum + Number(t.amount), 0),
+    transfers: transactions.length - spending.length,
   };
 
   if (loading) {
@@ -469,6 +495,28 @@ export default function Transactions() {
       <AuthenticatedLayout unreviewedTransactions={stats.unlinked}>
         <div className="container mx-auto px-4 py-8 max-w-6xl">
           {!hsaOpenedDate && <MissingHSADateBanner onDateSet={fetchHSADate} />}
+
+          {/* Workstream C5. The spec asks for this warning explicitly: a card
+              payment is not a reimbursable expense, and users who reimburse it
+              instead of the underlying charges either double-claim or claim
+              something that was never a medical purchase. */}
+          {cardPayments.length > 0 && (
+            <Alert className="mb-6">
+              <ArrowLeftRight className="h-4 w-4" />
+              <AlertTitle>
+                Credit card payments aren&rsquo;t expenses
+              </AlertTitle>
+              <AlertDescription>
+                We found {cardPayments.length} payment
+                {cardPayments.length === 1 ? "" : "s"} to your credit card and
+                left {cardPayments.length === 1 ? "it" : "them"} out of your
+                totals. Claim the original charges on the card &mdash; the
+                pharmacy, the doctor &mdash; not the payment that settles the
+                balance. Claiming the payment would either double up on those
+                charges or claim something that was never a medical purchase.
+              </AlertDescription>
+            </Alert>
+          )}
 
           <div className="flex items-center justify-between sticky top-0 z-10 bg-background py-2 mb-4">
             <div>
@@ -604,6 +652,11 @@ export default function Transactions() {
                           isSplit={transaction.is_split ?? false}
                           classificationExplanation={
                             transaction.classification_explanation
+                          }
+                          isTransfer={transaction.is_transfer ?? false}
+                          transferKind={transaction.transfer_kind}
+                          onUnlinkTransfer={() =>
+                            handleUnlinkTransfer(transaction)
                           }
                           invoiceId={transaction.invoice_id}
                           splitParentId={transaction.split_parent_id}

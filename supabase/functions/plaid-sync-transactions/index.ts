@@ -24,7 +24,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { decryptPlaidToken } from "../_shared/encryption.ts";
-import { autoCaptureExpenses, matchDeposits } from "../_shared/autoCapture.ts";
+import {
+  autoCaptureExpenses,
+  detectTransfers,
+  matchDeposits,
+} from "../_shared/autoCapture.ts";
 import {
   syncAccounts,
   syncTransactions,
@@ -307,6 +311,15 @@ serve(async (req) => {
       );
     }
 
+    // ── 3b. Transfer detection (Workstream C5) ────────────────────────────
+    // Before capture, deliberately: a card payment out of checking can carry
+    // the card's name and classify as medical, and capturing it first creates
+    // a phantom expense on top of the double-counted spend.
+    const transferPairs = await detectTransfers(supabase, {
+      userId: user.id,
+      requestId,
+    });
+
     // ── 4. Auto-capture ───────────────────────────────────────────────────
     // Shared with plaid-webhook. `classification` now travels with each
     // ingested row, so the Pub 502 rule id is available — the previous
@@ -383,6 +396,7 @@ serve(async (req) => {
         removed: counts.removed,
         medical_detected: medicalDetected,
         auto_linked: autoLinkedCount,
+        transfers_matched: transferPairs,
         captured: capturedCount,
         window_days: windowDays,
         institution_name: connection.institution_name,

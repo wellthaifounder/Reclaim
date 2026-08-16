@@ -14,6 +14,37 @@ import { findReimbursementMatches } from "./depositMatcher.ts";
 import type { IngestedTransaction } from "./plaidSync.ts";
 
 /**
+ * Workstream C5 — pair up money moved between the user's own accounts.
+ *
+ * MUST run before autoCaptureExpenses. A credit-card payment from checking can
+ * carry the card's name in the descriptor and classify as medical; capture it
+ * first and the user gets a phantom expense for money that was never spent at
+ * a provider, on top of the double-count in their totals.
+ *
+ * Failure is logged and swallowed. Transfer detection is an accuracy
+ * improvement, not a precondition for ingesting transactions, and a sync that
+ * aborts here would lose the cursor advance for the whole batch.
+ */
+export async function detectTransfers(
+  supabase: SupabaseClient,
+  opts: { userId: string; requestId?: string },
+): Promise<number> {
+  const tag = opts.requestId ? `[${opts.requestId}] ` : "";
+  const { data, error } = await supabase.rpc("detect_transfers", {
+    p_user_id: opts.userId,
+  });
+  if (error) {
+    console.warn(`${tag}[transfers] detection failed: ${error.message}`);
+    return 0;
+  }
+  const pairs = data ?? 0;
+  if (pairs > 0) {
+    console.log(`${tag}[transfers] matched ${pairs} movement(s)`);
+  }
+  return pairs;
+}
+
+/**
  * Create CAPTURED invoices for medical transactions that aren't already linked
  * to one, and back-link the transaction row.
  *
@@ -33,12 +64,45 @@ export async function autoCaptureExpenses(
   const tag = opts.requestId ? `[${opts.requestId}] ` : "";
   let captured = 0;
 
-  const unlinkedMedical = opts.ingested.filter(
+  const candidates = opts.ingested.filter(
     (t) =>
       t.is_medical &&
       t.reconciliation_status !== "linked_to_invoice" &&
       !t.invoice_id,
   );
+
+  // Re-read is_transfer rather than trusting the ingested snapshot: those rows
+  // were classified before detectTransfers ran, so a credit-card payment still
+  // looks medical in that array. Without this the transfer is excluded from
+  // totals but still spawns a phantom expense.
+  let transferIds = new Set<string>();
+  if (candidates.length > 0) {
+    const { data: transfers, error: transferErr } = await supabase
+      .from("transactions")
+      .select("id")
+      .eq("user_id", opts.userId)
+      .eq("is_transfer", true)
+      .in(
+        "id",
+        candidates.map((t) => t.id),
+      );
+    if (transferErr) {
+      // Capturing a transfer as an expense is the worse outcome, but so is
+      // dropping every capture because one query failed. Log and proceed.
+      console.warn(
+        `${tag}[capture] could not check transfer status: ${transferErr.message}`,
+      );
+    } else {
+      transferIds = new Set((transfers ?? []).map((t) => t.id as string));
+    }
+  }
+
+  const unlinkedMedical = candidates.filter((t) => !transferIds.has(t.id));
+  if (transferIds.size > 0) {
+    console.log(
+      `${tag}[capture] skipped ${transferIds.size} transfer(s) — money moved, not spent`,
+    );
+  }
 
   for (const txn of unlinkedMedical) {
     const c = txn.classification;
