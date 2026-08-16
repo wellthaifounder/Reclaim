@@ -88,9 +88,7 @@ export function useInboxKeyboardShortcuts({
             }
           } else if (focused) {
             // Confirm suggested action on focused item
-            if (focused.item_type === "confirm_match") {
-              onActOnItem(focused, "confirm");
-            } else if (focused.item_type === "review_transaction") {
+            if (focused.item_type === "review_transaction") {
               onActOnItem(focused, "medical");
             }
           }

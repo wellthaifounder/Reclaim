@@ -10,8 +10,9 @@ import { useAuthUser } from "@/hooks/useAuthUser";
 // error — virtual items still render and the rest of the page stays usable.
 const SCHEMA_MISSING_CODES = new Set(["PGRST205", "42P01"]);
 
+// `confirm_match` was removed in 20260815170000 — see the migration for why.
 export type InboxItemType =
-  "review_transaction" | "confirm_match" | "overdue_unpaid" | "hsa_claimable";
+  "review_transaction" | "overdue_unpaid" | "hsa_claimable";
 
 export interface InboxItem {
   id: string;
@@ -165,15 +166,23 @@ export function useInboxItems(): UseInboxItemsReturn {
       // Merge and sort by priority
       const allItems: InboxItem[] = [
         ...virtualItems,
-        ...(safeDbItems || []).map((item) => ({
-          ...item,
-          amount: item.amount ? Number(item.amount) : null,
-          suggested_action: item.suggested_action as Record<
-            string,
-            unknown
-          > | null,
-          isVirtual: false,
-        })),
+        // The inbox_item_type enum still carries 'confirm_match' for historical
+        // rows; 20260815170000 expired the pending ones. Filtered here so a
+        // stale row can never render against a feature that no longer exists.
+        ...(safeDbItems || [])
+          .filter(
+            (item): item is typeof item & { item_type: InboxItemType } =>
+              item.item_type !== "confirm_match",
+          )
+          .map((item) => ({
+            ...item,
+            amount: item.amount ? Number(item.amount) : null,
+            suggested_action: item.suggested_action as Record<
+              string,
+              unknown
+            > | null,
+            isVirtual: false,
+          })),
       ].sort((a, b) => b.priority_score - a.priority_score);
 
       return allItems;
@@ -236,47 +245,10 @@ export function useInboxItems(): UseInboxItemsReturn {
           toast.success(
             isMedical ? "Marked as medical expense" : "Marked as not medical",
           );
-        } else if (item.item_type === "confirm_match") {
-          const sa = item.suggested_action;
-          if (!sa || sa.action !== "link") return;
-
-          const transactionId = sa.transaction_id as string;
-          const invoiceId = sa.invoice_id as string;
-
-          // Create payment_transaction to link them
-          const { error: paymentError } = await supabase
-            .from("payment_transactions")
-            .insert({
-              invoice_id: invoiceId,
-              transaction_id: transactionId,
-              user_id: user.id,
-              payment_date: new Date().toISOString().split("T")[0],
-              amount: item.amount || 0,
-              payment_source: "out_of_pocket",
-              notes: "Confirmed from attention queue",
-            });
-
-          if (paymentError) throw paymentError;
-
-          // Update transaction status
-          const { error: txnError } = await supabase
-            .from("transactions")
-            .update({
-              invoice_id: invoiceId,
-              reconciliation_status: "linked_to_invoice",
-            })
-            .eq("id", transactionId);
-
-          if (txnError) throw txnError;
-
-          // Mark inbox item as acted
-          await supabase
-            .from("inbox_items")
-            .update({ status: "acted", acted_at: new Date().toISOString() })
-            .eq("id", item.id);
-
-          toast.success("Match confirmed — transaction linked to bill");
         }
+        // The confirm_match branch was removed in 20260815170000 along with
+        // the suggestion table that fed it. Bidirectional matching is deferred
+        // to v1.1; manual linking covers the receipt-first case in v1.
 
         invalidateQueries();
       } catch (error) {

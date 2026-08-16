@@ -155,7 +155,6 @@ serve(async (req) => {
 
     const matchStartTime = Date.now();
     let autoLinkedCount = 0;
-    let suggestedCount = 0;
     let exceptionCount = 0;
     let capturedCount = 0;
 
@@ -293,27 +292,18 @@ serve(async (req) => {
             exceptionCount++;
           }
         }
-        // Tier 2: suggestion
-        else if (bestMatch.confidence >= 0.7) {
-          await supabase.from("transaction_invoice_suggestions").upsert(
-            {
-              transaction_id: txn.id,
-              invoice_id: bestMatch.invoiceId,
-              confidence_score: Math.round(bestMatch.confidence * 100),
-              match_reason: `Vendor + amount + date match (${Math.round(bestMatch.confidence * 100)}%)`,
-            },
-            { onConflict: "transaction_id,invoice_id" },
-          );
-          suggestedCount++;
-        }
-        // Tier 3: exception
+        // Tier 2 used to write a transaction_invoice_suggestion for the user
+        // to confirm. That feature is removed (20260815170000): it is the
+        // bidirectional matching the workflow spec defers to v1.1, and the
+        // inbox item it fed had never once been generated. A middling match
+        // is now simply an exception, the same as a weak one.
         else {
           exceptionCount++;
         }
       }
 
       console.log(
-        `[${requestId}] Auto-matching: ${autoLinkedCount} auto-linked, ${suggestedCount} suggested, ${exceptionCount} exceptions`,
+        `[${requestId}] Auto-matching: ${autoLinkedCount} auto-linked, ${exceptionCount} exceptions`,
       );
     }
 
@@ -345,7 +335,8 @@ serve(async (req) => {
       trigger_source: "plaid_sync",
       transactions_processed: medicalTransactions.length,
       auto_linked_count: autoLinkedCount,
-      suggested_count: suggestedCount,
+      // suggested_count omitted — defaults to 0. Match suggestions were
+      // removed in 20260815170000.
       exception_count: exceptionCount,
       duration_ms: Date.now() - matchStartTime,
     });
@@ -392,7 +383,6 @@ serve(async (req) => {
         removed: counts.removed,
         medical_detected: medicalDetected,
         auto_linked: autoLinkedCount,
-        suggested_matches: suggestedCount,
         captured: capturedCount,
         window_days: windowDays,
         institution_name: connection.institution_name,

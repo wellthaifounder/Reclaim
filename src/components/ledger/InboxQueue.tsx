@@ -9,7 +9,6 @@ import {
   ChevronDown,
   ChevronUp,
   Wallet,
-  Link2,
   AlertCircle,
   ShieldCheck,
   CheckCircle2,
@@ -28,11 +27,6 @@ const ITEM_TYPE_CONFIG: Record<
     icon: Wallet,
     color: "text-blue-600",
     bgColor: "bg-blue-500/10",
-  },
-  confirm_match: {
-    icon: Link2,
-    color: "text-green-600",
-    bgColor: "bg-green-500/10",
   },
   overdue_unpaid: {
     icon: AlertCircle,
@@ -145,20 +139,6 @@ function InboxItemCard({
                 </Button>
               </>
             )}
-            {item.item_type === "confirm_match" && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-7 text-xs px-2 border-green-500/30 text-green-600 hover:bg-green-500/10"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onAct("confirm");
-                }}
-              >
-                <CheckCircle2 className="h-3 w-3 mr-1" />
-                Confirm
-              </Button>
-            )}
             {item.isVirtual && item.suggested_action?.path && (
               <Button
                 size="sm"
@@ -195,19 +175,15 @@ function InboxItemCard({
 function BatchActionBar({
   selectedCount,
   hasReviewItems,
-  hasMatchItems,
   onBatchMedical,
   onBatchNotMedical,
-  onBatchConfirm,
   onBatchDismiss,
   onClearSelection,
 }: {
   selectedCount: number;
   hasReviewItems: boolean;
-  hasMatchItems: boolean;
   onBatchMedical: () => void;
   onBatchNotMedical: () => void;
-  onBatchConfirm: () => void;
   onBatchDismiss: () => void;
   onClearSelection: () => void;
 }) {
@@ -234,16 +210,6 @@ function BatchActionBar({
               Not Medical
             </Button>
           </>
-        )}
-        {hasMatchItems && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7 text-xs border-green-500/30 text-green-600"
-            onClick={onBatchConfirm}
-          >
-            Confirm All
-          </Button>
         )}
         <Button
           size="sm"
@@ -402,9 +368,6 @@ export function InboxQueue() {
   const hasReviewItems = selectedItems.some(
     (i) => i.item_type === "review_transaction",
   );
-  const hasMatchItems = selectedItems.some(
-    (i) => i.item_type === "confirm_match",
-  );
 
   return (
     <Card className="overflow-hidden border-blue-500/20 bg-blue-500/5">
@@ -476,7 +439,6 @@ export function InboxQueue() {
             <BatchActionBar
               selectedCount={selectedIds.size}
               hasReviewItems={hasReviewItems}
-              hasMatchItems={hasMatchItems}
               onBatchMedical={() =>
                 handleBatchAct(
                   selectedItems.filter(
@@ -491,12 +453,6 @@ export function InboxQueue() {
                     (i) => i.item_type === "review_transaction",
                   ),
                   "not_medical",
-                )
-              }
-              onBatchConfirm={() =>
-                handleBatchAct(
-                  selectedItems.filter((i) => i.item_type === "confirm_match"),
-                  "confirm",
                 )
               }
               onBatchDismiss={() => handleBatchDismiss(selectedItems)}
