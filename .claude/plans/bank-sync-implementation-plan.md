@@ -37,7 +37,7 @@ The good news: the **Pub 502 rules table, the AI expense classifier, the substan
 
 Both ingest paths read `txn.mcc`, so **the classifier's MCC tier has never fired in production.** Consequences, all previously invisible:
 
-- Every transaction fell through to the Plaid-category or keyword tier, both of which set `needsReview: true` — so *every* medical transaction landed in the review queue. The flooded-queue problem is not just bad keywords; it is structural.
+- Every transaction fell through to the Plaid-category or keyword tier, both of which set `needsReview: true` — so _every_ medical transaction landed in the review queue. The flooded-queue problem is not just bad keywords; it is structural.
 - `pub502RuleId` was always undefined, so every auto-captured expense got `lifecycle_status: 'captured'` and never `pending_review`.
 - The entire `mcc_codes` table and its `default_pub_502_rule_id` mapping (`20260521140000_phase2_mcc_codes.sql`) is dead code.
 - This also masked defect S5: the `pub502RuleId` carry-through bug was unobservable because the value was always undefined regardless.
