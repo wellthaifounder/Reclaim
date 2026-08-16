@@ -2,6 +2,8 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const allowedOrigins = [
+  "https://reclaim.health",
+  "https://www.reclaim.health",
   "https://wellth-ai.app",
   "https://www.wellth-ai.app",
   Deno.env.get("ALLOWED_ORIGIN"),
@@ -92,7 +94,7 @@ serve(async (req) => {
         user: {
           client_user_id: user.id,
         },
-        client_name: "Wellth",
+        client_name: "Reclaim",
         products: ["transactions"],
         country_codes: ["US"],
         language: "en",

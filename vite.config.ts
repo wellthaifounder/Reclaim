@@ -15,12 +15,12 @@ export default defineConfig(({ mode }) => ({
     mode === "development" && componentTagger(),
     VitePWA({
       registerType: "autoUpdate",
-      includeAssets: ["wellth-icon.png", "robots.txt"],
+      includeAssets: ["reclaim-icon.png", "robots.txt"],
       manifest: {
-        name: "Wellth.ai - HSA & Healthcare Financial Manager",
-        short_name: "Wellth",
+        name: "Reclaim - Unclaimed HSA Reimbursements & IRS-Ready Records",
+        short_name: "Reclaim",
         description:
-          "Optimize medical spending, maximize HSA benefits and credit card rewards with AI-powered insights",
+          "Find healthcare expenses you can still reimburse from your HSA and generate IRS-ready Substantiation Records.",
         theme_color: "#14b8a6",
         background_color: "#ffffff",
         display: "standalone",
@@ -29,13 +29,13 @@ export default defineConfig(({ mode }) => ({
         start_url: "/",
         icons: [
           {
-            src: "/wellth-icon.png",
+            src: "/reclaim-icon.png",
             sizes: "192x192",
             type: "image/png",
             purpose: "any maskable",
           },
           {
-            src: "/wellth-icon.png",
+            src: "/reclaim-icon.png",
             sizes: "512x512",
             type: "image/png",
             purpose: "any maskable",
@@ -44,7 +44,7 @@ export default defineConfig(({ mode }) => ({
         categories: ["finance", "health", "productivity"],
         screenshots: [
           {
-            src: "/wellth-icon.png",
+            src: "/reclaim-icon.png",
             sizes: "540x720",
             type: "image/png",
             form_factor: "narrow",

@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="Reclaim — Substantiation Seal concept">
+  <!-- Concept C: Substantiation Seal (R-monogram)
+       A confident geometric R seated in an official seal/notch = the audit-trail moat
+       made visual (proof, verified, timestamped). Strongest trust/officialdom read;
+       doubles as the stamp on the Substantiation Record PDF. -->
+  <title>Reclaim — Substantiation Seal (R-monogram)</title>
+
+  <!-- palette: teal=#0e9b94  gold=#e0b03f  navy=#1a2238 -->
+  <!-- seal ring with a notched checkmark gap at lower-right -->
+  <path d="M128 36 A92 92 0 1 1 188 196"
+        fill="none" stroke="#0e9b94" stroke-width="14" stroke-linecap="round" />
+  <!-- verification check growing out of the notch -->
+  <path d="M170 188 l18 18 l34 -42"
+        fill="none" stroke="#e0b03f" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" />
+
+  <!-- geometric R monogram -->
+  <g fill="#1a2238">
+    <path d="M92 78 h44 a30 30 0 0 1 0 60 h-20 l36 40 h-26 l-36 -40 V78 Z M108 96 v28 h26 a14 14 0 0 0 0 -28 Z" />
+  </g>
+</svg>
