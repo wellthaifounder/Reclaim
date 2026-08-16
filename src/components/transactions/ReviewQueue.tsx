@@ -104,14 +104,16 @@ export function ReviewQueue() {
   };
 
   /**
-   * "Remember this choice" creates a categorization rule and applies it to
-   * matching past transactions. That retroactive apply is the point — the
-   * user has just told us how they think about this merchant, and leaving
-   * their history untouched wastes the answer.
+   * "Remember this choice" creates a rule for FUTURE transactions only.
    *
-   * Unlike the old savePreference this is visible and reversible: the rule
-   * appears in Settings → Categorization rules with an undo that restores
-   * every transaction it touched.
+   * It deliberately does not re-label past transactions. The checkbox says
+   * "remember this choice", which promises nothing about history, and
+   * rewriting a user's past categorizations is only ever done when they tick
+   * a box that says so in as many words. To apply this rule to old
+   * transactions they go to Settings → Categorization rules and press Apply,
+   * which shows the count first.
+   *
+   * Unlike the old savePreference, the rule is visible and reversible.
    */
   const saveRule = async (transaction: TransactionType, isMedical: boolean) => {
     try {
@@ -138,12 +140,6 @@ export function ReviewQueue() {
         .select("id, match_type, match_value, is_medical, display_label")
         .single();
       if (error) throw error;
-
-      const { error: applyError } = await supabase.rpc(
-        "apply_categorization_rule",
-        { p_rule_id: rule.id },
-      );
-      if (applyError) throw applyError;
 
       setRules((prev) => [
         ...prev.filter((r) => r.id !== rule.id),
@@ -184,7 +180,7 @@ export function ReviewQueue() {
 
       if (rememberChoice) {
         await saveRule(transaction, true);
-        toast.success("Marked as medical and saved a rule for this merchant");
+        toast.success("Marked as medical. Future transactions will match too.");
       } else {
         toast.success("Marked as medical expense");
       }
@@ -217,7 +213,7 @@ export function ReviewQueue() {
       if (rememberChoice) {
         await saveRule(transaction, false);
         toast.success(
-          "Marked as not medical and saved a rule for this merchant",
+          "Marked as not medical. Future transactions will match too.",
         );
       } else {
         toast.success("Marked as not medical");

@@ -2,6 +2,31 @@
 
 > This file is institutional memory for Claude Code and all AI coding agents. It serves as the **operationalized information security policy** for this codebase. Every agent working on this project must follow these rules before committing any code.
 
+## How to Talk to the Project Owner
+
+**The person you are working with is not an engineer.** They are the founder and the product decision-maker. Write every message to them in plain English.
+
+This applies to all conversation, summaries, explanations, and questions. It does **not** apply to code, code comments, or commit messages — those are written for engineers and should stay precise and technical.
+
+**Do this:**
+
+- Lead with what changed for the user or the business, not what changed in the code.
+- Spell out a term the first time you use it, or pick a plainer word instead.
+- When you need a decision, state the choice, the trade-off, and your recommendation in a few sentences. No decision should require reading code to understand.
+- Say what broke and what it meant in practice — "the app was only importing the first 100 transactions, so anyone with more than that was silently missing history" — not just the mechanism.
+- Keep file and function names when they're genuinely the subject. Naming `plaidSync.ts` is fine; explaining a change only in terms of type variance is not.
+
+**Avoid:**
+
+- Jargon where a normal word works: prefer "check" over "assertion", "database column" over "generated column" (unless the distinction is the point), "runs before saving" over "BEFORE trigger".
+- Acronyms without expansion. MCC, PFC, RLS, RPC, FK — expand on first use in a message.
+- Explaining a fix purely in terms of the type system, schema internals, or framework mechanics. Translate it into what a user would have experienced.
+- Long code excerpts in a message when a sentence would do.
+
+**When precision genuinely matters** — an IRS rule, a security boundary, a money calculation — be exact, and then add a plain-language sentence saying what it means. Simplicity must never come at the cost of being accurate about regulated behavior, PHI handling, or anything involving someone's money.
+
+---
+
 ## External Security Documentation
 
 For third-party security questionnaires (e.g., Plaid, Stripe partner reviews), use the formal policy document at `docs/ACCESS_CONTROL_POLICY.md`. That document is written for external audiences and safe to upload. **Do not upload this CLAUDE.md file** — it contains internal implementation details and code.
@@ -172,17 +197,20 @@ serve(async (req) => {
 
 ## Secrets & Key Management
 
-| Secret                          | Where it lives                 | Notes                                                                                  |
-| ------------------------------- | ------------------------------ | -------------------------------------------------------------------------------------- |
-| `VITE_SUPABASE_URL`             | Vercel env vars                | Public — safe to expose                                                                |
-| `VITE_SUPABASE_PUBLISHABLE_KEY` | Vercel env vars                | Anon key — safe to expose                                                              |
-| `VITE_STRIPE_PUBLISHABLE_KEY`   | Vercel env vars                | Publishable key — safe to expose                                                       |
-| `STRIPE_SECRET_KEY`             | Supabase Edge Function Secrets | Never in frontend or Vercel                                                            |
-| `PLAID_CLIENT_ID`               | Supabase Edge Function Secrets | Never in frontend                                                                      |
-| `PLAID_SECRET`                  | Supabase Edge Function Secrets | Never in frontend                                                                      |
-| `PLAID_ENCRYPTION_KEY`          | Supabase Edge Function Secrets | Base64-encoded 32-byte key; rotate on compromise                                       |
-| `GEMINI_API_KEY`                | Supabase Edge Function Secrets | Google AI Studio key for OCR. Phase 6: migrate to Vertex AI service-account auth (BAA) |
-| `SUPABASE_SERVICE_ROLE_KEY`     | Auto-injected by Supabase      | Never commit; never expose to frontend                                                 |
+| Secret                          | Where it lives                 | Notes                                                                                       |
+| ------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------- |
+| `VITE_SUPABASE_URL`             | Vercel env vars                | Public — safe to expose                                                                     |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | Vercel env vars                | Anon key — safe to expose                                                                   |
+| `VITE_STRIPE_PUBLISHABLE_KEY`   | Vercel env vars                | Publishable key — safe to expose                                                            |
+| `STRIPE_SECRET_KEY`             | Supabase Edge Function Secrets | Never in frontend or Vercel                                                                 |
+| `PLAID_CLIENT_ID`               | Supabase Edge Function Secrets | Never in frontend                                                                           |
+| `PLAID_SECRET`                  | Supabase Edge Function Secrets | Never in frontend                                                                           |
+| `PLAID_ENCRYPTION_KEY`          | Supabase Edge Function Secrets | Base64-encoded 32-byte key; rotate on compromise                                            |
+| `GOOGLE_SA_CLIENT_EMAIL`        | Supabase Edge Function Secrets | Vertex AI service-account email (OCR + classifier). BAA-covered                             |
+| `GOOGLE_SA_PRIVATE_KEY`         | Supabase Edge Function Secrets | Vertex AI service-account private key (PEM/PKCS#8). Never in frontend; rotate on compromise |
+| `GCP_PROJECT`                   | Supabase Edge Function Secrets | GCP project id hosting Vertex AI                                                            |
+| `VERTEX_REGION`                 | Supabase Edge Function Secrets | Vertex AI region, e.g. `us-central1`                                                        |
+| `SUPABASE_SERVICE_ROLE_KEY`     | Auto-injected by Supabase      | Never commit; never expose to frontend                                                      |
 
 **Rotation schedule:** Rotate all API keys every 90 days. Rotate immediately on suspected compromise.
 
@@ -356,13 +384,13 @@ Check subscription with `useSubscription()` hook from `src/contexts/Subscription
 
 ---
 
-## AI Integration (Gemini via Google AI direct)
+## AI Integration (Gemini via Vertex AI — BAA-covered)
 
-- Model: `gemini-2.5-flash` (via `generativelanguage.googleapis.com`)
-- Used for: Receipt OCR (`process-receipt-ocr`), Wellbie chat (deferred to v1.1 per brief)
+- Model: `gemini-2.5-flash` via **Vertex AI** (`{region}-aiplatform.googleapis.com`)
+- Used for: Receipt OCR (`process-receipt-ocr`) and the Pub 502 expense classifier (`classify-expense` / `_shared/expenseClassifier.ts`). Wellbie chat is deferred to v1.1 (and hidden behind `FF.WELLBIE_ENABLED`) — its own Vertex migration is deferred with it.
 - Always redact PHI before sending to AI — use `sanitizePHI()` from `src/utils/errorHandler.ts`
-- AI key (`GEMINI_API_KEY`) lives in Supabase Edge Function Secrets only
-- **BAA path:** the direct Google AI Studio endpoint is _not_ BAA-eligible. Phase 6 production cutover migrates this to **Vertex AI** (Google Cloud BAA-covered). Same prompts, same response shape — only the endpoint and auth header change.
+- **Auth:** service-account OAuth2 token minted in `_shared/vertexAuth.ts` from `GOOGLE_SA_CLIENT_EMAIL` / `GOOGLE_SA_PRIVATE_KEY` (+ `GCP_PROJECT` / `VERTEX_REGION`). No API key — the direct AI Studio endpoint is _not_ BAA-eligible, so receipt images and medical expense context must never hit `generativelanguage.googleapis.com`.
+- **Setup (out-of-repo):** sign the Google Cloud BAA, enable the Vertex AI API, create a service account with `roles/aiplatform.user`, and load the four secrets above into Supabase Edge Function Secrets.
 
 ---
 

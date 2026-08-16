@@ -174,12 +174,22 @@ export function useCategorizationRules() {
   });
 
   const updateRule = useMutation({
-    mutationFn: async (input: { id: string; isMedical: boolean }) => {
+    mutationFn: async (input: {
+      id: string;
+      isMedical: boolean;
+    }): Promise<number> => {
       // Flipping the verdict makes every past application wrong, so revert
-      // first and re-apply under the new verdict. Updating in place would
-      // leave already-categorized transactions holding the old answer with no
-      // indication they disagree with the rule that supposedly governs them.
-      const { error: revertError } = await supabase.rpc(
+      // first: each affected transaction goes back to exactly what it was
+      // before the rule ran. Leaving them alone would mean the rule says one
+      // thing while the transactions it supposedly governs say another.
+      //
+      // It deliberately does NOT re-apply under the new verdict. Re-labelling
+      // past transactions is only ever something the user asks for outright,
+      // and the rules screen now shows an Apply button (with a count) for
+      // exactly that. Auto-applying here would also quietly widen the rule's
+      // reach, since apply matches every transaction the rule fits — including
+      // ones the user had since categorized by hand.
+      const { data: reverted, error: revertError } = await supabase.rpc(
         "revert_categorization_rule",
         { p_rule_id: input.id },
       );
@@ -191,12 +201,7 @@ export function useCategorizationRules() {
         .eq("id", input.id);
       if (error) throw error;
 
-      const { data, error: applyError } = await supabase.rpc(
-        "apply_categorization_rule",
-        { p_rule_id: input.id },
-      );
-      if (applyError) throw applyError;
-      return data ?? 0;
+      return reverted ?? 0;
     },
     onSuccess: invalidate,
     onError: (error) => logError("Failed to update categorization rule", error),

@@ -149,7 +149,11 @@ export function CategorizationRulesManager() {
       {
         onSuccess: (count) =>
           toast.success(
-            `Rule updated — ${count} transaction${count === 1 ? "" : "s"} recategorized`,
+            count === 0
+              ? "Rule updated"
+              : `Rule updated. ${count} transaction${
+                  count === 1 ? " was" : "s were"
+                } put back to how it was before — press Apply to use the new setting on them.`,
           ),
         onError: () => toast.error("Could not update the rule"),
       },
@@ -196,9 +200,10 @@ export function CategorizationRulesManager() {
           Categorization rules
         </CardTitle>
         <CardDescription>
-          Rules decide medical vs. non-medical automatically. Every rule can be
-          undone, and undoing restores each transaction to exactly what it was
-          before the rule ran.
+          Rules decide medical vs. non-medical automatically for new
+          transactions. They never change transactions you have already
+          categorized unless you press Apply — and Apply can always be undone,
+          which puts every transaction back exactly as it was.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">

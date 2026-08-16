@@ -50,7 +50,11 @@ export function CreateRulePrompt({
   onCreated,
 }: CreateRulePromptProps) {
   const { previewImpact, createRule } = useCategorizationRules();
-  const [applyRetroactively, setApplyRetroactively] = useState(true);
+  // Defaults OFF. Re-labelling a user's past transactions only ever happens
+  // because they ticked this box themselves — never as a side effect of
+  // saving a rule, and never pre-selected so a fast click applies it by
+  // accident.
+  const [applyRetroactively, setApplyRetroactively] = useState(false);
   const [pastCount, setPastCount] = useState<number | null>(null);
   const [counting, setCounting] = useState(false);
 
@@ -65,7 +69,7 @@ export function CreateRulePrompt({
     }
     let cancelled = false;
     setCounting(true);
-    setApplyRetroactively(true);
+    setApplyRetroactively(false);
     previewImpact(key.matchType, key.matchValue)
       .then((n) => {
         if (!cancelled) setPastCount(n);
@@ -162,17 +166,19 @@ export function CreateRulePrompt({
                     Checking past transactions&hellip;
                   </span>
                 ) : pastCount === null ? (
-                  "Also apply to past transactions from this merchant"
+                  "Also re-label past transactions from this merchant"
                 ) : pastCount === 0 ? (
-                  "No past transactions from this merchant to update"
+                  "No past transactions from this merchant to re-label"
                 ) : (
-                  `Also apply to ${pastCount} past transaction${
+                  `Also re-label ${pastCount} past transaction${
                     pastCount === 1 ? "" : "s"
                   }`
                 )}
               </Label>
               <p className="text-xs text-muted-foreground">
-                You can undo this at any time from Categorization rules.
+                {pastCount && pastCount > 0
+                  ? "This changes transactions you have already categorized. You can undo it at any time from Settings → Categorization rules."
+                  : "Leave this unticked and the rule only affects transactions from here on."}
               </p>
             </div>
           </div>
