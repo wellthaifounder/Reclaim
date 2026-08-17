@@ -226,21 +226,17 @@ export async function classifyAndPersist(
     ? parsed.warnings.filter((w): w is string => typeof w === "string")
     : [];
 
-  // Receipt count for the lifecycle decision.
-  const { count: receiptCount } = await supabase
-    .from("receipts")
-    .select("*", { head: true, count: "exact" })
-    .eq("invoice_id", input.invoiceId);
-
   // Workstream B: `lifecycle_status` is now derived from the three facets by
   // trg_invoices_sync_lifecycle, so writing it directly would be overwritten.
-  // Set the facet instead. Classification produces a Pub 502 basis and a
-  // confidence — it does NOT confirm eligibility, because explicit user
-  // confirmation is the audit-trail event that earns 'eligible'. So the
-  // eligibility facet is deliberately left untouched here; only documentation
-  // state is recorded, which is what drives needs_receipt vs pending_review.
-  const documentationState = (receiptCount ?? 0) > 0 ? "complete" : "none";
-
+  // Classification produces a Pub 502 basis and a confidence — it does NOT
+  // confirm eligibility, because explicit user confirmation is the audit-trail
+  // event that earns 'eligible'. So the eligibility facet is deliberately left
+  // untouched here.
+  //
+  // Workstream D6: documentation_state is no longer written here either. It is
+  // maintained by trg_receipts_documentation, which sees every attach and
+  // detach rather than only the ones that happen to run through this path —
+  // and which knows a mileage log substantiates a trip that has no receipt.
   const { error: updateErr } = await supabase
     .from("invoices")
     .update({
@@ -249,7 +245,6 @@ export async function classifyAndPersist(
       classification_reasoning: reasoning,
       classification_warnings: warnings,
       classified_at: new Date().toISOString(),
-      documentation_state: documentationState,
     })
     .eq("id", input.invoiceId);
   if (updateErr) {

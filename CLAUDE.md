@@ -291,8 +291,10 @@ When the IRS publishes new limits (typically November/December):
 
 1. Update `src/lib/regulatoryLimits.ts` — add a new year constant object and update the `_CURRENT` aliases
 2. Update `CURRENT_TAX_YEAR` in the same file
-3. Review `supabase/functions/wellbie-chat/index.ts` system prompt for stale limit references
-4. Run `npm run build` to confirm no TypeScript errors
+3. **Add the new medical mileage period to `MEDICAL_MILEAGE_RATES`** in the same file, and set `confirmed: true` on the prior year's provisional entry once verified against the IRS notice. Mileage entry shows a "provisional rate" warning for any unconfirmed period, and refuses to price a date with no period at all — so a missed January leaves users unable to log driving.
+4. Watch for **mid-year** rate changes (2022 had one). `MEDICAL_MILEAGE_RATES` is a list of date ranges precisely so a mid-year notice can be added as a new period rather than overwriting the year.
+5. Review `supabase/functions/wellbie-chat/index.ts` system prompt for stale limit references
+6. Run `npm run build` to confirm no TypeScript errors
 
 ---
 

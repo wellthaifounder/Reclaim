@@ -1,4 +1,14 @@
-// Reclaim Phase 2 W4 — manual expense entry fallback.
+// Manual entry — Workstream D6.
+//
+// Not an escape hatch. The spec is explicit that bank sync structurally cannot
+// see medical mileage, cash payments or certain premiums, so this surface is a
+// peer of the sync path rather than a fallback from it. Two modes:
+//
+//   A payment — something you paid for that your bank did not record.
+//   Driving   — the per-mile claim, which has no dollar transaction at all.
+//
+// Both create an Expense directly, skipping Step 1 (categorize) exactly as the
+// spec calls for.
 //
 // Lightweight no-file-required entry path for users whose expense doesn't
 // fit the BillUploadWizard (no receipt, cash purchase, retroactive entry)
@@ -57,6 +67,8 @@ import {
 import { logError } from "@/utils/errorHandler";
 import { useFamilyRoster } from "@/hooks/useFamilyRoster";
 import { PatientPicker } from "@/components/family/PatientPicker";
+import { MileageEntryForm } from "@/components/expense/MileageEntryForm";
+import { Car, Receipt } from "lucide-react";
 
 // Categories match BillUploadWizard so manual-entry and OCR-entry rows
 // look consistent in downstream views.
@@ -153,6 +165,10 @@ export default function ExpenseEntry() {
   const [file, setFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
+  // A payment and a car trip are different enough that one form serving both
+  // would be mostly disabled fields. A savings-calculator hand-off is always a
+  // payment, so it never lands on the driving tab.
+  const [mode, setMode] = useState<"payment" | "mileage">("payment");
 
   const watchedCategory = watch("category");
 
@@ -189,13 +205,23 @@ export default function ExpenseEntry() {
           vendor: data.vendor.trim(),
           amount: data.amount,
           date: data.date,
+          // Workstream D6: the field above is labelled "date of service" and
+          // was only ever written to `date`, which is the PAYMENT date. Every
+          // gate and the substantiation checklist read `service_date`, so a
+          // user who filled the field in was still told the date of care was
+          // missing — and the HSA establishment cliff, which turns on date of
+          // service, was being tested against the wrong day.
+          service_date: data.date,
           category: data.category,
           notes: data.notes?.trim() || null,
+          // Workstream C6: without this, a hand-entered expense had no
+          // provenance at all, so the duplicate comparison could not tell the
+          // user which of two records they had typed themselves.
+          source: "manual",
           // Workstream B: is_hsa_eligible and lifecycle_status are derived and
           // reject writes. Category matching is a guess, not a user
           // determination, so eligibility stays 'unknown' until substantiation.
           eligibility_state: "unknown",
-          documentation_state: "none",
           claim_state: "unclaimed",
           amount_paid: data.amount,
           reimbursable_amount: data.amount,
@@ -222,6 +248,10 @@ export default function ExpenseEntry() {
             "Expense saved, but the receipt couldn't be uploaded. You can attach it later from the bill detail page.",
           );
         } else {
+          // Workstream D6: documentation_state used to be set to 'none' at
+          // insert and never revisited, so attaching a receipt here left the
+          // expense reporting that it had none. trg_receipts_documentation now
+          // owns that column and sees this insert.
           await supabase.from("receipts").insert({
             invoice_id: invoice.id,
             user_id: user.id,
@@ -296,7 +326,35 @@ export default function ExpenseEntry() {
           </button>
         </div>
 
-        <Card>
+        {/* Workstream D6. Driving is given equal billing rather than buried in
+            a category dropdown: it is the claim users most often do not know
+            they have, and no amount of bank connecting will ever surface it. */}
+        <div className="mb-4 grid grid-cols-2 gap-2">
+          <Button
+            type="button"
+            variant={mode === "payment" ? "default" : "outline"}
+            onClick={() => setMode("payment")}
+            className="justify-start gap-2"
+          >
+            <Receipt className="h-4 w-4" />
+            Something I paid for
+          </Button>
+          <Button
+            type="button"
+            variant={mode === "mileage" ? "default" : "outline"}
+            onClick={() => setMode("mileage")}
+            className="justify-start gap-2"
+          >
+            <Car className="h-4 w-4" />
+            Driving to care
+          </Button>
+        </div>
+
+        {mode === "mileage" && <MileageEntryForm />}
+
+        {/* Hidden rather than unmounted: switching tabs to check the other
+            form should not throw away what has already been typed. */}
+        <Card className={mode === "mileage" ? "hidden" : undefined}>
           <CardHeader>
             <CardTitle>Log an expense</CardTitle>
             <CardDescription>

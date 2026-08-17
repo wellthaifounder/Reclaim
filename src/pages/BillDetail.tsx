@@ -365,6 +365,22 @@ export default function BillDetail() {
                 serviceDate={bill.service_date ?? null}
                 serviceDateEnd={bill.service_date_end ?? null}
                 patientId={bill.patient_id ?? null}
+                mileage={
+                  bill.mileage_miles == null
+                    ? null
+                    : {
+                        miles: Number(bill.mileage_miles),
+                        rate: Number(bill.mileage_rate ?? 0),
+                        trips:
+                          bill.mileage_trips == null
+                            ? null
+                            : Number(bill.mileage_trips),
+                        parkingAndTolls:
+                          bill.mileage_parking_tolls == null
+                            ? null
+                            : Number(bill.mileage_parking_tolls),
+                      }
+                }
                 onSaved={refetch}
               />
             </div>

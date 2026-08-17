@@ -5,7 +5,6 @@ export type Json =
   | null
   | { [key: string]: Json | undefined }
   | Json[];
-
 export type Database = {
   graphql_public: {
     Tables: {
@@ -656,6 +655,10 @@ export type Database = {
           is_hsa_eligible: boolean | null;
           is_reimbursed: boolean | null;
           lifecycle_status: Database["public"]["Enums"]["invoice_lifecycle_status"];
+          mileage_miles: number | null;
+          mileage_parking_tolls: number | null;
+          mileage_rate: number | null;
+          mileage_trips: number | null;
           network_status: string | null;
           notes: string | null;
           npi_number: string | null;
@@ -718,6 +721,10 @@ export type Database = {
           is_hsa_eligible?: boolean | null;
           is_reimbursed?: boolean | null;
           lifecycle_status?: Database["public"]["Enums"]["invoice_lifecycle_status"];
+          mileage_miles?: number | null;
+          mileage_parking_tolls?: number | null;
+          mileage_rate?: number | null;
+          mileage_trips?: number | null;
           network_status?: string | null;
           notes?: string | null;
           npi_number?: string | null;
@@ -780,6 +787,10 @@ export type Database = {
           is_hsa_eligible?: boolean | null;
           is_reimbursed?: boolean | null;
           lifecycle_status?: Database["public"]["Enums"]["invoice_lifecycle_status"];
+          mileage_miles?: number | null;
+          mileage_parking_tolls?: number | null;
+          mileage_rate?: number | null;
+          mileage_trips?: number | null;
           network_status?: string | null;
           notes?: string | null;
           npi_number?: string | null;
@@ -3160,6 +3171,10 @@ export type Database = {
           vendor: string;
         }[];
       };
+      sync_expense_documentation_state: {
+        Args: { p_invoice_id: string };
+        Returns: undefined;
+      };
       transaction_matches_rule: {
         Args: {
           p_match_type: Database["public"]["Enums"]["rule_match_type"];
@@ -3211,14 +3226,11 @@ export type Database = {
     };
   };
 };
-
 type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">;
-
 type DefaultSchema = DatabaseWithoutInternals[Extract<
   keyof Database,
   "public"
 >];
-
 export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
@@ -3247,7 +3259,6 @@ export type Tables<
       ? R
       : never
     : never;
-
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
@@ -3271,7 +3282,6 @@ export type TablesInsert<
       ? I
       : never
     : never;
-
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
@@ -3295,7 +3305,6 @@ export type TablesUpdate<
       ? U
       : never
     : never;
-
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     keyof DefaultSchema["Enums"] | { schema: keyof DatabaseWithoutInternals },
@@ -3311,7 +3320,6 @@ export type Enums<
   : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
     ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
     : never;
-
 export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
@@ -3328,7 +3336,6 @@ export type CompositeTypes<
   : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
     ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
     : never;
-
 export const Constants = {
   graphql_public: {
     Enums: {},

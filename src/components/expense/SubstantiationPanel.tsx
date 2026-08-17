@@ -37,6 +37,14 @@ import {
   useSubstantiationStatus,
 } from "@/hooks/useExpenseTags";
 
+/** Workstream D6: present only when this expense is a car trip, not a payment. */
+export interface MileageBreakdown {
+  miles: number;
+  rate: number;
+  trips: number | null;
+  parkingAndTolls: number | null;
+}
+
 export interface SubstantiationPanelProps {
   invoiceId: string;
   amountPaid: number;
@@ -44,6 +52,7 @@ export interface SubstantiationPanelProps {
   serviceDate: string | null;
   serviceDateEnd: string | null;
   patientId: string | null;
+  mileage?: MileageBreakdown | null;
   onSaved?: () => void;
 }
 
@@ -54,6 +63,7 @@ export function SubstantiationPanel({
   serviceDate,
   serviceDateEnd,
   patientId,
+  mileage,
   onSaved,
 }: SubstantiationPanelProps) {
   const queryClient = useQueryClient();
@@ -255,11 +265,28 @@ export function SubstantiationPanel({
         {/* Reimbursable amount */}
         <div className="space-y-2">
           <Label htmlFor="reimbursable">How much can you claim?</Label>
-          <p className="text-xs text-muted-foreground">
-            You paid ${amountPaid.toFixed(2)}. Lower this if some of it came
-            back to you &mdash; an insurance refund, say. You can never claim
-            more than you paid.
-          </p>
+          {mileage ? (
+            // Show the arithmetic. This figure was never a receipt, so if it
+            // is ever queried the only defence is the working behind it.
+            <p className="text-xs text-muted-foreground">
+              {mileage.miles.toFixed(1)} miles
+              {mileage.trips && mileage.trips > 1
+                ? ` over ${mileage.trips} trips`
+                : ""}{" "}
+              at {(mileage.rate * 100).toFixed(0)}&cent; a mile
+              {mileage.parkingAndTolls
+                ? `, plus $${mileage.parkingAndTolls.toFixed(2)} in parking and tolls`
+                : ""}{" "}
+              &mdash; ${amountPaid.toFixed(2)}. Lower it if part of the driving
+              wasn&rsquo;t for medical care.
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              You paid ${amountPaid.toFixed(2)}. Lower this if some of it came
+              back to you &mdash; an insurance refund, say. You can never claim
+              more than you paid.
+            </p>
+          )}
           <div className="flex items-center gap-2">
             <Input
               id="reimbursable"
@@ -368,11 +395,23 @@ export function SubstantiationPanel({
         <Alert>
           <Info className="h-4 w-4" />
           <AlertDescription className="text-xs">
-            <strong>What the IRS would want to see:</strong> an itemised
-            statement or receipt showing the provider, the date of service, the
-            patient, what was done, and the amount. A card statement alone
-            usually isn&rsquo;t enough on its own &mdash; but record the expense
-            anyway and add the paperwork when you have it.
+            {mileage ? (
+              <>
+                <strong>What the IRS would want to see:</strong> a mileage log
+                &mdash; the dates you drove, where you went, why the trip was
+                for medical care, and the miles. That&rsquo;s what this record
+                is, so there&rsquo;s no receipt to chase. Keep parking and toll
+                receipts if you claimed them.
+              </>
+            ) : (
+              <>
+                <strong>What the IRS would want to see:</strong> an itemised
+                statement or receipt showing the provider, the date of service,
+                the patient, what was done, and the amount. A card statement
+                alone usually isn&rsquo;t enough on its own &mdash; but record
+                the expense anyway and add the paperwork when you have it.
+              </>
+            )}
           </AlertDescription>
         </Alert>
       </CardContent>
