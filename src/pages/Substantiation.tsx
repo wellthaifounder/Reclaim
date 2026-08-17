@@ -112,6 +112,40 @@ function taxYearOf(dateOfService: string): number {
   return Number(dateOfService.slice(0, 4));
 }
 
+/**
+ * Turn a claim-lock refusal into something a person can act on.
+ *
+ * Workstream E2. These are not developer errors — the lock fires in ordinary
+ * use, most often because the same expense is already in a claim built in
+ * another tab or a moment earlier. "Something went wrong" would leave the user
+ * with no idea that their money is already accounted for.
+ */
+function explainClaimFailure(err: unknown): string {
+  const message =
+    err instanceof Error
+      ? err.message
+      : typeof err === "object" && err && "message" in err
+        ? String((err as { message: unknown }).message)
+        : "";
+
+  if (/CLAIM_HSA_CARD_PAID/.test(message)) {
+    return "One of these was paid with your HSA card, so the money has already come out of your HSA. It needs documenting but can't be reimbursed again.";
+  }
+  if (/CLAIM_NOTHING_REMAINING/.test(message)) {
+    return "One of these has already been reimbursed in full, so there's nothing left to claim on it.";
+  }
+  if (/CLAIM_WRONG_OWNER|CLAIM_NO_EXPENSE|CLAIM_NO_RECORD/.test(message)) {
+    return "One of these expenses could not be found. Please reload and try again.";
+  }
+  // The lock itself is a unique-index violation rather than a raised message.
+  if (
+    /idx_record_items_one_live_claim|duplicate key value|23505/.test(message)
+  ) {
+    return "One of these expenses is already in an open claim — possibly one you built in another tab. We've refreshed the list; anything still claimable is shown.";
+  }
+  return "Could not generate the record. Please try again.";
+}
+
 export default function Substantiation() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -166,17 +200,12 @@ export default function Substantiation() {
           .eq("user_id", user.id)
           .order("generated_at", { ascending: false })
           .limit(50),
-        supabase
-          .from("invoices")
-          .select(
-            `id, vendor, date, amount, category, patient_name, confirmed_at,
-               eligibility_basis_rule_id,
-               rule:pub_502_rules!eligibility_basis_rule_id ( name, section_ref ),
-               receipts ( file_path )`,
-          )
-          .eq("user_id", user.id)
-          .eq("lifecycle_status", "eligible")
-          .order("date", { ascending: true }),
+        // Workstream E2: what is claimable is defined once, in the database,
+        // by claimable_expenses() — eligible AND unclaimed AND remaining > 0
+        // AND not already inside a live claim. Assembling that filter here as
+        // well is how the screen and the lock drift apart, and the screen is
+        // the half that cannot enforce anything.
+        supabase.rpc("claimable_expenses"),
         // Reclaim Phase 4 W3: pending deposit → record match candidates.
         supabase
           .from("reimbursement_match_candidates")
@@ -207,29 +236,25 @@ export default function Substantiation() {
       );
 
       const rows: EligibleExpense[] = (expenseRows ?? []).map((r: unknown) => {
-        const row = r as Record<string, unknown> & {
-          rule:
-            | { name: string; section_ref: string | null }
-            | { name: string; section_ref: string | null }[]
-            | null;
-          receipts: { file_path: string }[] | null;
-        };
-        const rule = Array.isArray(row.rule)
-          ? (row.rule[0] ?? null)
-          : (row.rule ?? null);
+        const row = r as Record<string, unknown>;
         return {
-          id: row.id as string,
+          id: row.invoice_id as string,
           vendor: row.vendor as string,
-          date: row.date as string,
-          amount: Number(row.amount),
+          // Date of SERVICE, not of payment. The IRS ties an expense to when
+          // the care happened, and that is what decides its tax year.
+          date: row.service_date as string,
+          // Workstream E2: what is left to claim, not the billed amount. This
+          // used to read invoices.amount, so an expense whose claimable amount
+          // had been lowered after an insurance refund (D5) still went to the
+          // custodian asking for the full original figure.
+          amount: Number(row.remaining_amount),
           category: (row.category as string | null) ?? null,
           patient_name: (row.patient_name as string | null) ?? null,
           confirmed_at: (row.confirmed_at as string | null) ?? "",
-          eligibility_basis_rule_id:
-            (row.eligibility_basis_rule_id as string | null) ?? null,
-          rule_name: rule?.name ?? null,
-          rule_section_ref: rule?.section_ref ?? null,
-          receipt_paths: (row.receipts ?? []).map((rc) => rc.file_path),
+          eligibility_basis_rule_id: (row.rule_id as string | null) ?? null,
+          rule_name: (row.rule_name as string | null) ?? null,
+          rule_section_ref: (row.rule_section_ref as string | null) ?? null,
+          receipt_paths: (row.receipt_paths as string[] | null) ?? [],
         };
       });
       setEligible(rows);
@@ -520,7 +545,19 @@ export default function Substantiation() {
       const { error: itemsErr } = await supabase
         .from("substantiation_record_items")
         .insert(itemRows);
-      if (itemsErr) throw itemsErr;
+      if (itemsErr) {
+        // Workstream E2. Now that the claim lock is real, this is a failure
+        // path that happens in normal use — a second tab, a double-submit, a
+        // retry after a dropped connection. The record row is already written
+        // at this point, so leaving it would strand an empty claim carrying a
+        // total it does not contain, and that claim would then hold a number
+        // in the user's history that means nothing.
+        await supabase
+          .from("substantiation_records")
+          .delete()
+          .eq("id", recordId);
+        throw itemsErr;
+      }
 
       // 3. Transition invoices to SUBMITTED. Only set submitted_record_id
       // for invoices that don't already have one (first record wins the
@@ -597,8 +634,12 @@ export default function Substantiation() {
       setPhase("list");
     } catch (err) {
       logError("Substantiation: generate", err);
-      toast.error("Could not generate the record. Please try again.");
+      toast.error(explainClaimFailure(err), { duration: 10000 });
+      // Reload: whatever the lock refused, this screen's idea of what is
+      // claimable is now out of date, and offering it again would just fail
+      // the same way.
       setPhase("generate");
+      await load();
     } finally {
       setProgress("");
     }
