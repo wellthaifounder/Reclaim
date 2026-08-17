@@ -1330,6 +1330,7 @@ export type Database = {
           full_name: string | null;
           has_hsa: boolean | null;
           has_seen_insurance_prompt: boolean | null;
+          hsa_custodian: string | null;
           hsa_opened_date: string | null;
           id: string;
           insurance_plan: Json | null;
@@ -1348,6 +1349,7 @@ export type Database = {
           full_name?: string | null;
           has_hsa?: boolean | null;
           has_seen_insurance_prompt?: boolean | null;
+          hsa_custodian?: string | null;
           hsa_opened_date?: string | null;
           id: string;
           insurance_plan?: Json | null;
@@ -1366,6 +1368,7 @@ export type Database = {
           full_name?: string | null;
           has_hsa?: boolean | null;
           has_seen_insurance_prompt?: boolean | null;
+          hsa_custodian?: string | null;
           hsa_opened_date?: string | null;
           id?: string;
           insurance_plan?: Json | null;
@@ -2211,6 +2214,8 @@ export type Database = {
           confirmed_at_at_submission: string;
           created_at: string;
           date_at_submission: string;
+          document_manifest_at_submission: Json;
+          documentation_state_at_submission: string | null;
           eligibility_basis_rule_id_at_submission: string | null;
           id: string;
           invoice_id: string;
@@ -2225,6 +2230,8 @@ export type Database = {
           confirmed_at_at_submission: string;
           created_at?: string;
           date_at_submission: string;
+          document_manifest_at_submission?: Json;
+          documentation_state_at_submission?: string | null;
           eligibility_basis_rule_id_at_submission?: string | null;
           id?: string;
           invoice_id: string;
@@ -2239,6 +2246,8 @@ export type Database = {
           confirmed_at_at_submission?: string;
           created_at?: string;
           date_at_submission?: string;
+          document_manifest_at_submission?: Json;
+          documentation_state_at_submission?: string | null;
           eligibility_basis_rule_id_at_submission?: string | null;
           id?: string;
           invoice_id?: string;
@@ -2280,8 +2289,11 @@ export type Database = {
       };
       substantiation_records: {
         Row: {
+          attested_at: string | null;
+          attested_no_double_benefit: boolean;
           created_at: string;
           csv_storage_path: string | null;
+          custodian: string | null;
           expense_count: number;
           formats_generated: string[];
           generated_at: string;
@@ -2298,8 +2310,11 @@ export type Database = {
           user_id: string;
         };
         Insert: {
+          attested_at?: string | null;
+          attested_no_double_benefit?: boolean;
           created_at?: string;
           csv_storage_path?: string | null;
+          custodian?: string | null;
           expense_count: number;
           formats_generated?: string[];
           generated_at?: string;
@@ -2316,8 +2331,11 @@ export type Database = {
           user_id: string;
         };
         Update: {
+          attested_at?: string | null;
+          attested_no_double_benefit?: boolean;
           created_at?: string;
           csv_storage_path?: string | null;
+          custodian?: string | null;
           expense_count?: number;
           formats_generated?: string[];
           generated_at?: string;
@@ -2894,7 +2912,8 @@ export type Database = {
         Returns: {
           category: string;
           confirmed_at: string;
-          document_count: number;
+          documentation_state: string;
+          documents: Json;
           invoice_id: string;
           patient_name: string;
           remaining_amount: number;
@@ -3056,6 +3075,23 @@ export type Database = {
         Returns: {
           blocked: number;
           restored: number;
+        }[];
+      };
+      record_packet_items: {
+        Args: { p_record_id: string };
+        Returns: {
+          amount: number;
+          category: string;
+          confirmed_at: string;
+          documentation_state: string;
+          documents: Json;
+          invoice_id: string;
+          patient_name: string;
+          rule_id: string;
+          rule_name: string;
+          rule_section_ref: string;
+          service_date: string;
+          vendor: string;
         }[];
       };
       relink_pending_expense: {

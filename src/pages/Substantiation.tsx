@@ -29,6 +29,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import type { Json } from "@/integrations/supabase/types";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -37,10 +38,18 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Loader2,
   ArrowLeft,
   FileText,
   FileSpreadsheet,
+  FileArchive,
   Sparkles,
   Download,
   CheckCircle2,
@@ -54,9 +63,14 @@ import {
   generateSubstantiationRecordPDF,
   generateSubstantiationRecordCSV,
   downloadBlob,
+  fetchReceiptBlob,
+  orderForPacket,
+  type ClaimDocument,
   type SubstantiationExpenseInput,
   type SubstantiationHeader,
 } from "@/lib/substantiationRecord";
+import { buildClaimPacket, type ClaimPacketReport } from "@/lib/claimPacket";
+import { HSA_CUSTODIANS } from "@/lib/custodianInstructions";
 
 interface EligibleExpense {
   id: string;
@@ -69,7 +83,8 @@ interface EligibleExpense {
   eligibility_basis_rule_id: string | null;
   rule_name: string | null;
   rule_section_ref: string | null;
-  receipt_paths: string[];
+  documentation_state: string | null;
+  documents: ClaimDocument[];
 }
 
 interface PastRecord {
@@ -81,6 +96,9 @@ interface PastRecord {
   expense_count: number;
   formats_generated: string[];
   status: "generated" | "reimbursed" | "voided";
+  custodian: string | null;
+  attested_no_double_benefit: boolean;
+  attested_at: string | null;
 }
 
 interface PendingMatch {
@@ -146,6 +164,94 @@ function explainClaimFailure(err: unknown): string {
   return "Could not generate the record. Please try again.";
 }
 
+/**
+ * Build and download the chosen formats.
+ *
+ * Workstream E3. Shared by first generation and by re-downloading a past
+ * record, because the two must produce the same packet — the second copy of a
+ * claim contradicting the first is worse than having no second copy.
+ *
+ * The ZIP contains the PDF and the CSV, so the PDF is built whenever either the
+ * packet or the standalone PDF was asked for, and built once.
+ */
+async function producePacket(
+  header: SubstantiationHeader,
+  expenses: SubstantiationExpenseInput[],
+  opts: {
+    zip: boolean;
+    pdf: boolean;
+    csv: boolean;
+    onProgress?: (message: string) => void;
+  },
+): Promise<ClaimPacketReport | null> {
+  const ordered = orderForPacket(expenses);
+  const csv = generateSubstantiationRecordCSV(header, ordered);
+
+  let pdfBlob: Blob | null = null;
+  if (opts.zip || opts.pdf) {
+    opts.onProgress?.("Building the claim summary…");
+    pdfBlob = await generateSubstantiationRecordPDF(header, ordered);
+  }
+
+  let report: ClaimPacketReport | null = null;
+  if (opts.zip && pdfBlob) {
+    report = await buildClaimPacket(header, ordered, {
+      coverPdf: pdfBlob,
+      csv,
+      fetchDocument: fetchReceiptBlob,
+      onProgress: opts.onProgress,
+    });
+    downloadBlob(`${header.recordNumber}-claim-packet.zip`, report.blob);
+  }
+  if (opts.pdf && pdfBlob) {
+    downloadBlob(`${header.recordNumber}.pdf`, pdfBlob);
+  }
+  if (opts.csv) {
+    downloadBlob(
+      `${header.recordNumber}.csv`,
+      new Blob([csv], { type: "text/csv;charset=utf-8" }),
+    );
+  }
+  return report;
+}
+
+/**
+ * Tell the user what the packet actually contains — including what it doesn't.
+ *
+ * A packet quietly short a receipt the user attached is the failure that costs
+ * them a rejected claim weeks later, so anything omitted is said out loud here
+ * as well as written into MISSING-DOCUMENTS.txt inside the archive.
+ */
+function reportPacket(recordNumber: string, report: ClaimPacketReport | null) {
+  if (!report) {
+    toast.success(`Substantiation Record ${recordNumber} generated.`);
+    return;
+  }
+  const documents = `${report.documentCount} document${report.documentCount === 1 ? "" : "s"}`;
+  if (report.truncated) {
+    toast.warning(
+      `${recordNumber} packet downloaded with ${documents}, but it hit the size limit and some files were left out. They're listed in MISSING-DOCUMENTS.txt inside the ZIP — claiming fewer expenses at a time will fit everything.`,
+      { duration: 14000 },
+    );
+    return;
+  }
+  if (report.omissions.length > 0) {
+    toast.warning(
+      `${recordNumber} packet downloaded with ${documents}. ${report.omissions.length} file${report.omissions.length === 1 ? "" : "s"} couldn't be retrieved — see MISSING-DOCUMENTS.txt inside the ZIP.`,
+      { duration: 14000 },
+    );
+    return;
+  }
+  if (report.undocumented.length > 0) {
+    toast.warning(
+      `${recordNumber} packet downloaded with ${documents}. ${report.undocumented.length} expense${report.undocumented.length === 1 ? " has" : "s have"} no supporting document attached — your custodian may ask for one.`,
+      { duration: 12000 },
+    );
+    return;
+  }
+  toast.success(`${recordNumber} packet downloaded with ${documents}.`);
+}
+
 export default function Substantiation() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -166,9 +272,13 @@ export default function Substantiation() {
   // Generate-flow state
   const [taxYear, setTaxYear] = useState<number>(CURRENT_TAX_YEAR);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [formatPdf, setFormatPdf] = useState(true);
-  const [formatCsv, setFormatCsv] = useState(true);
+  const [formatZip, setFormatZip] = useState(true);
+  const [formatPdf, setFormatPdf] = useState(false);
+  const [formatCsv, setFormatCsv] = useState(false);
+  const [custodian, setCustodian] = useState<string>("");
+  const [attested, setAttested] = useState(false);
   const [progress, setProgress] = useState<string>("");
+  const [redownloadingId, setRedownloadingId] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -189,13 +299,13 @@ export default function Substantiation() {
       ] = await Promise.all([
         supabase
           .from("profiles")
-          .select("full_name")
+          .select("full_name, hsa_custodian")
           .eq("id", user.id)
           .maybeSingle(),
         supabase
           .from("substantiation_records")
           .select(
-            "id, record_number, tax_year, generated_at, total_amount, expense_count, formats_generated, status",
+            "id, record_number, tax_year, generated_at, total_amount, expense_count, formats_generated, status, custodian, attested_no_double_benefit, attested_at",
           )
           .eq("user_id", user.id)
           .order("generated_at", { ascending: false })
@@ -221,6 +331,9 @@ export default function Substantiation() {
       ]);
 
       if (profileRow?.full_name) setUserName(profileRow.full_name);
+      // Workstream E3: remembered from the last claim, so the packet's
+      // submission instructions don't have to be re-picked every time.
+      if (profileRow?.hsa_custodian) setCustodian(profileRow.hsa_custodian);
 
       setPastRecords(
         (recordRows ?? []).map((r) => ({
@@ -232,6 +345,9 @@ export default function Substantiation() {
           expense_count: r.expense_count as number,
           formats_generated: (r.formats_generated as string[]) ?? [],
           status: r.status as "generated" | "reimbursed" | "voided",
+          custodian: (r.custodian as string | null) ?? null,
+          attested_no_double_benefit: Boolean(r.attested_no_double_benefit),
+          attested_at: (r.attested_at as string | null) ?? null,
         })),
       );
 
@@ -254,7 +370,9 @@ export default function Substantiation() {
           eligibility_basis_rule_id: (row.rule_id as string | null) ?? null,
           rule_name: (row.rule_name as string | null) ?? null,
           rule_section_ref: (row.rule_section_ref as string | null) ?? null,
-          receipt_paths: (row.receipt_paths as string[] | null) ?? [],
+          documentation_state:
+            (row.documentation_state as string | null) ?? null,
+          documents: (row.documents as ClaimDocument[] | null) ?? [],
         };
       });
       setEligible(rows);
@@ -436,6 +554,75 @@ export default function Substantiation() {
     }
   }
 
+  // ── Re-download a past packet ────────────────────────────────────────────
+
+  /**
+   * Rebuild the claim packet for a record that was already generated.
+   *
+   * Workstream E3. This page has always told users their records can be
+   * re-downloaded at any time; until now there was no button, so the promise
+   * was empty. Everything comes from the SNAPSHOT rows, never the live
+   * expenses — a second copy of a claim has to say what the custodian was
+   * originally sent, even if the underlying expense has since been edited.
+   */
+  async function redownloadPacket(record: PastRecord) {
+    setRedownloadingId(record.id);
+    try {
+      const { data, error } = await supabase.rpc("record_packet_items", {
+        p_record_id: record.id,
+      });
+      if (error) throw error;
+
+      const rows = (data ?? []) as unknown[];
+      if (rows.length === 0) {
+        toast.error("That record has no expenses left in it to bundle.");
+        return;
+      }
+
+      const expenses: SubstantiationExpenseInput[] = rows.map((r) => {
+        const row = r as Record<string, unknown>;
+        return {
+          invoiceId: row.invoice_id as string,
+          vendor: row.vendor as string,
+          date: row.service_date as string,
+          patientName: (row.patient_name as string | null) ?? null,
+          category: (row.category as string | null) ?? null,
+          amount: Number(row.amount),
+          ruleName: (row.rule_name as string | null) ?? null,
+          ruleSectionRef: (row.rule_section_ref as string | null) ?? null,
+          confirmedAt: (row.confirmed_at as string | null) ?? "",
+          documents: (row.documents as ClaimDocument[] | null) ?? [],
+          documentationState:
+            (row.documentation_state as string | null) ?? null,
+        };
+      });
+
+      const header: SubstantiationHeader = {
+        recordNumber: record.record_number,
+        taxYear: record.tax_year,
+        generatedAt: record.generated_at,
+        userName,
+        totalAmount: record.total_amount,
+        expenseCount: record.expense_count,
+        custodian: record.custodian,
+        attestedNoDoubleBenefit: record.attested_no_double_benefit,
+        attestedAt: record.attested_at,
+      };
+
+      const report = await producePacket(header, expenses, {
+        zip: true,
+        pdf: false,
+        csv: false,
+      });
+      reportPacket(record.record_number, report);
+    } catch (err) {
+      logError("Substantiation.redownloadPacket", err);
+      toast.error("Couldn't rebuild that packet. Please try again.");
+    } finally {
+      setRedownloadingId(null);
+    }
+  }
+
   useEffect(() => {
     load();
   }, []);
@@ -476,8 +663,17 @@ export default function Substantiation() {
   }
 
   async function handleGenerate() {
-    if (!formatPdf && !formatCsv) {
+    if (!formatZip && !formatPdf && !formatCsv) {
       toast.error("Pick at least one format.");
+      return;
+    }
+    // Spec Gate 4. Reclaim cannot verify this and does not try — but a claim
+    // that asserts nothing about whether the same expense was already deducted
+    // or reimbursed elsewhere is exactly the claim that costs the user later.
+    if (!attested) {
+      toast.error(
+        "Please confirm that none of these expenses were deducted on Schedule A or reimbursed by an FSA or HRA.",
+      );
       return;
     }
     const includedIds = Array.from(selectedIds).filter((id) =>
@@ -504,10 +700,12 @@ export default function Substantiation() {
       const total = included.reduce((s, e) => s + e.amount, 0);
 
       const formats: string[] = [];
+      if (formatZip) formats.push("claim_packet_zip");
       if (formatPdf) formats.push("irs_pdf");
       if (formatCsv) formats.push("csv");
 
       const generatedAt = new Date().toISOString();
+      const chosenCustodian = custodian || null;
 
       // 1. Insert record
       setProgress("Writing substantiation record…");
@@ -522,6 +720,12 @@ export default function Substantiation() {
           expense_count: included.length,
           formats_generated: formats,
           status: "generated",
+          // Snapshotted: the record is an account of what was submitted where,
+          // so changing custodians later must not rewrite where an old claim
+          // went.
+          custodian: chosenCustodian,
+          attested_no_double_benefit: true,
+          attested_at: generatedAt,
         })
         .select("id")
         .single();
@@ -541,6 +745,11 @@ export default function Substantiation() {
         category_at_submission: e.category,
         eligibility_basis_rule_id_at_submission: e.eligibility_basis_rule_id,
         confirmed_at_at_submission: e.confirmed_at,
+        // Workstream E3: the document list is snapshotted like every other
+        // field, so this record can rebuild the packet the custodian received
+        // even after a document is deleted or reattached elsewhere.
+        document_manifest_at_submission: e.documents as unknown as Json,
+        documentation_state_at_submission: e.documentation_state,
       }));
       const { error: itemsErr } = await supabase
         .from("substantiation_record_items")
@@ -590,7 +799,18 @@ export default function Substantiation() {
         })
         .in("id", includedIds);
 
-      // 4. Build files + download
+      // 4. Remember the custodian for next time. Best-effort: the claim is
+      // already written, and failing to save a preference must not look like a
+      // failed claim.
+      if (chosenCustodian) {
+        const { error: prefErr } = await supabase
+          .from("profiles")
+          .update({ hsa_custodian: chosenCustodian })
+          .eq("id", user.id);
+        if (prefErr) logError("Substantiation: save custodian", prefErr);
+      }
+
+      // 5. Build files + download
       const header: SubstantiationHeader = {
         recordNumber,
         taxYear,
@@ -598,6 +818,9 @@ export default function Substantiation() {
         userName,
         totalAmount: total,
         expenseCount: included.length,
+        custodian: chosenCustodian,
+        attestedNoDoubleBenefit: true,
+        attestedAt: generatedAt,
       };
       const expenseInputs: SubstantiationExpenseInput[] = included.map((e) => ({
         invoiceId: e.id,
@@ -609,27 +832,18 @@ export default function Substantiation() {
         ruleName: e.rule_name,
         ruleSectionRef: e.rule_section_ref,
         confirmedAt: e.confirmed_at,
-        receiptPaths: e.receipt_paths,
+        documents: e.documents,
+        documentationState: e.documentation_state,
       }));
 
-      if (formatPdf) {
-        setProgress("Generating IRS-style PDF (fetching receipts)…");
-        const pdfBlob = await generateSubstantiationRecordPDF(
-          header,
-          expenseInputs,
-        );
-        downloadBlob(`${recordNumber}.pdf`, pdfBlob);
-      }
-      if (formatCsv) {
-        setProgress("Generating CSV…");
-        const csv = generateSubstantiationRecordCSV(header, expenseInputs);
-        downloadBlob(
-          `${recordNumber}.csv`,
-          new Blob([csv], { type: "text/csv;charset=utf-8" }),
-        );
-      }
+      const report = await producePacket(header, expenseInputs, {
+        zip: formatZip,
+        pdf: formatPdf,
+        csv: formatCsv,
+        onProgress: setProgress,
+      });
 
-      toast.success(`Substantiation Record ${recordNumber} generated.`);
+      reportPacket(recordNumber, report);
       await load();
       setPhase("list");
     } catch (err) {
@@ -695,9 +909,9 @@ export default function Substantiation() {
               Generate a Substantiation Record
             </h1>
             <p className="text-sm text-muted-foreground">
-              The document protects your HSA reimbursement in an audit. We
-              include the IRS Pub 502 basis and your confirmation timestamp for
-              each expense.
+              You'll get one file to send your custodian: a summary of every
+              expense with its IRS Publication 502 basis and the date you
+              confirmed it, plus every supporting document attached to it.
             </p>
           </div>
 
@@ -725,16 +939,55 @@ export default function Substantiation() {
                 </div>
               </div>
 
+              <div>
+                <Label htmlFor="custodian">Send this claim to</Label>
+                <Select
+                  value={custodian}
+                  onValueChange={(v) => setCustodian(v)}
+                >
+                  <SelectTrigger id="custodian" className="w-full sm:w-72 mt-1">
+                    <SelectValue placeholder="Choose your HSA custodian" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {HSA_CUSTODIANS.map((c) => (
+                      <SelectItem key={c} value={c}>
+                        {c}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1.5">
+                  We'll include their submission steps in the packet where we
+                  have them, and remember your choice for next time.
+                </p>
+              </div>
+
               <div className="space-y-2">
-                <Label>Formats</Label>
-                <div className="flex flex-col sm:flex-row gap-3">
+                <Label>What to download</Label>
+                <div className="space-y-2">
+                  <label className="flex items-start gap-2 text-sm">
+                    <Checkbox
+                      className="mt-0.5"
+                      checked={formatZip}
+                      onCheckedChange={(v) => setFormatZip(v === true)}
+                    />
+                    <FileArchive className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                    <span>
+                      Claim packet (ZIP)
+                      <span className="block text-xs text-muted-foreground">
+                        Everything in one file: the summary, the spreadsheet,
+                        and every supporting document. This is what you send
+                        your custodian.
+                      </span>
+                    </span>
+                  </label>
                   <label className="flex items-center gap-2 text-sm">
                     <Checkbox
                       checked={formatPdf}
                       onCheckedChange={(v) => setFormatPdf(v === true)}
                     />
                     <FileText className="h-4 w-4 text-muted-foreground" />
-                    IRS-style PDF (primary)
+                    Summary PDF on its own
                   </label>
                   <label className="flex items-center gap-2 text-sm">
                     <Checkbox
@@ -742,9 +995,32 @@ export default function Substantiation() {
                       onCheckedChange={(v) => setFormatCsv(v === true)}
                     />
                     <FileSpreadsheet className="h-4 w-4 text-muted-foreground" />
-                    CSV
+                    Spreadsheet (CSV) on its own
                   </label>
                 </div>
+              </div>
+
+              {/* Spec Gate 4 — the honor-system one. Nothing here can be
+                  checked by Reclaim, which is exactly why the user has to say
+                  it themselves, once, on the claim. */}
+              <div className="rounded-md border bg-muted/40 p-3">
+                <label className="flex items-start gap-2 text-sm">
+                  <Checkbox
+                    className="mt-0.5"
+                    checked={attested}
+                    onCheckedChange={(v) => setAttested(v === true)}
+                  />
+                  <span>
+                    None of these expenses were claimed as a medical deduction
+                    on Schedule A, or reimbursed by an FSA, HRA, or any other
+                    plan.
+                    <span className="block text-xs text-muted-foreground mt-1">
+                      Required. Each expense can only be claimed once — this
+                      confirmation goes into the record with the date you made
+                      it.
+                    </span>
+                  </span>
+                </label>
               </div>
             </CardContent>
           </Card>
@@ -841,7 +1117,9 @@ export default function Substantiation() {
             <Button
               onClick={handleGenerate}
               disabled={
-                selectedTotals.count === 0 || (!formatPdf && !formatCsv)
+                selectedTotals.count === 0 ||
+                (!formatZip && !formatPdf && !formatCsv) ||
+                !attested
               }
               className="flex-1"
             >
@@ -961,8 +1239,12 @@ export default function Substantiation() {
               onClick={() => {
                 setTaxYear(CURRENT_TAX_YEAR);
                 setSelectedIds(new Set(eligibleNow.map((e) => e.id)));
-                setFormatPdf(true);
-                setFormatCsv(true);
+                setFormatZip(true);
+                setFormatPdf(false);
+                setFormatCsv(false);
+                // Never carried over from a previous claim: an attestation is
+                // about the expenses in front of the user right now.
+                setAttested(false);
                 setPhase("generate");
               }}
             >
@@ -1019,12 +1301,33 @@ export default function Substantiation() {
                       {r.total_amount.toFixed(2)}
                     </p>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Formats: {r.formats_generated.join(", ") || "—"}
+                      {r.custodian
+                        ? `Sent to ${r.custodian}`
+                        : "No custodian recorded"}
+                      {r.attested_no_double_benefit ? " · attested" : ""}
                     </p>
                   </div>
-                  {r.status === "generated" && (
-                    <CheckCircle2 className="h-5 w-5 text-amber-500 shrink-0" />
-                  )}
+                  <div className="flex items-center gap-2 shrink-0">
+                    {/* Workstream E3: the page has always said records can be
+                        re-downloaded at any time. This is the button that
+                        makes that true. */}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => redownloadPacket(r)}
+                      disabled={redownloadingId !== null}
+                    >
+                      {redownloadingId === r.id ? (
+                        <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                      ) : (
+                        <FileArchive className="h-3.5 w-3.5 mr-1.5" />
+                      )}
+                      Packet
+                    </Button>
+                    {r.status === "generated" && (
+                      <CheckCircle2 className="h-5 w-5 text-amber-500" />
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             ))}
@@ -1032,9 +1335,9 @@ export default function Substantiation() {
         )}
 
         <p className="text-xs text-muted-foreground mt-6 text-center max-w-md mx-auto">
-          Generated PDFs and CSVs are not stored on Reclaim's servers. Your
-          confirmation timestamps and the underlying expense data are — you can
-          re-download a record from those at any time.
+          Claim packets are built on your device and never stored on Reclaim's
+          servers. Your documents, confirmation timestamps and expense data are
+          — so you can rebuild any packet from this list at any time.
         </p>
       </div>
     </AuthenticatedLayout>
