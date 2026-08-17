@@ -2954,10 +2954,28 @@ export type Database = {
         Args: { p_candidate_id: string };
         Returns: boolean;
       };
+      expense_blocking_gate_reason: {
+        Args: {
+          p_hsa_date: string;
+          p_qualifies: boolean;
+          p_service_date: string;
+        };
+        Returns: string;
+      };
       expense_dependency_gate: {
         Args: { p_invoice_id: string };
         Returns: {
           patient: string;
+          reason: string;
+          status: string;
+        }[];
+      };
+      expense_eligibility_gates: {
+        Args: { p_invoice_id: string };
+        Returns: {
+          gate: string;
+          is_blocking: boolean;
+          is_permanent: boolean;
           reason: string;
           status: string;
         }[];
@@ -2972,6 +2990,7 @@ export type Database = {
           uses_payment_date: boolean;
         }[];
       };
+      gate_owned_reasons: { Args: never; Returns: string[] };
       hsa_establishment_date: { Args: { p_user_id: string }; Returns: string };
       merge_duplicate_expenses: {
         Args: { p_candidate_id: string; p_keep_id: string };
@@ -2984,6 +3003,13 @@ export type Database = {
           p_match_value: string;
         };
         Returns: number;
+      };
+      recompute_expense_eligibility: {
+        Args: { p_invoice_ids?: string[]; p_user_id: string };
+        Returns: {
+          blocked: number;
+          restored: number;
+        }[];
       };
       recompute_timing_eligibility: {
         Args: { p_user_id: string };
