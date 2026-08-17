@@ -59,7 +59,7 @@ export function getNextAction(stats: DashboardStats): DashboardAction {
       title: "Claim Money from Your HSA",
       description: `You have $${stats.hsaClaimableAmount.toFixed(2)} ready to reimburse`,
       buttonText: `Claim $${stats.hsaClaimableAmount.toFixed(2)}`,
-      route: "/hsa-reimbursement",
+      route: "/substantiation",
       icon: DollarSign,
       timeEstimate: "~3 minutes",
     };

@@ -11,7 +11,6 @@ import {
   ChevronDown,
   ChevronRight,
   FolderHeart,
-  ClipboardList,
   HelpCircle,
   LayoutDashboard,
   Building2,
@@ -90,12 +89,6 @@ const moreMenuItems: MenuItem[] = [
     icon: Building2,
     label: "Bank Accounts",
     path: "/bank-accounts",
-    badgeKey: null,
-  },
-  {
-    icon: ClipboardList,
-    label: "HSA Claims",
-    path: "/reimbursement-requests",
     badgeKey: null,
   },
   {

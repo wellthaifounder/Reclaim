@@ -64,7 +64,7 @@ export function QuickActionBar({
           <Button
             variant="outline"
             className="h-auto min-h-[44px] py-3 flex-col gap-1"
-            onClick={() => navigate("/reimbursement-requests")}
+            onClick={() => navigate("/substantiation")}
           >
             <DollarSign className="h-5 w-5" />
             <span className="text-xs">Claim from HSA</span>

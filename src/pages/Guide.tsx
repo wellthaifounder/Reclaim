@@ -313,7 +313,7 @@ const Guide = () => {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => navigate("/reimbursement-requests")}
+                      onClick={() => navigate("/substantiation")}
                     >
                       View HSA Claims
                       <ArrowRight className="h-3.5 w-3.5 ml-1" />

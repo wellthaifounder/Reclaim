@@ -32,11 +32,6 @@ const BillDetail = lazy(() => import("./pages/BillDetail"));
 const Transactions = lazy(() => import("./pages/Transactions"));
 const PrePurchaseDecision = lazy(() => import("./pages/PrePurchaseDecision"));
 const HSAEligibility = lazy(() => import("./pages/HSAEligibility"));
-const ReimbursementRequests = lazy(
-  () => import("./pages/ReimbursementRequests"),
-);
-const ReimbursementDetails = lazy(() => import("./pages/ReimbursementDetails"));
-const HSAReimbursement = lazy(() => import("./pages/HSAReimbursement"));
 const BankAccounts = lazy(() => import("./pages/BankAccounts"));
 const HistoricalImport = lazy(() => import("./pages/HistoricalImport"));
 const ExpenseEntry = lazy(() => import("./pages/ExpenseEntry"));
@@ -243,35 +238,23 @@ const App = () => (
                           </ProtectedRoute>
                         }
                       />
+                      {/* Workstream E1. The legacy reimbursement path is
+                          gone; these three routes redirect rather than 404.
+                          They have been live long enough to be bookmarked, to
+                          sit in the installed app's history, and to appear in
+                          old emails — and a dead link is how a user concludes
+                          their reimbursement history was deleted. */}
                       <Route
                         path="/reimbursement-requests"
-                        element={
-                          <ProtectedRoute>
-                            <ErrorBoundary>
-                              <ReimbursementRequests />
-                            </ErrorBoundary>
-                          </ProtectedRoute>
-                        }
+                        element={<Navigate to="/substantiation" replace />}
                       />
                       <Route
                         path="/reimbursement/:id"
-                        element={
-                          <ProtectedRoute>
-                            <ErrorBoundary>
-                              <ReimbursementDetails />
-                            </ErrorBoundary>
-                          </ProtectedRoute>
-                        }
+                        element={<Navigate to="/substantiation" replace />}
                       />
                       <Route
                         path="/hsa-reimbursement"
-                        element={
-                          <ProtectedRoute>
-                            <ErrorBoundary>
-                              <HSAReimbursement />
-                            </ErrorBoundary>
-                          </ProtectedRoute>
-                        }
+                        element={<Navigate to="/substantiation" replace />}
                       />
 
                       {/* Payment Routes */}

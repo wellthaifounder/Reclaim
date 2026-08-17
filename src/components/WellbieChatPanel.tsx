@@ -58,7 +58,7 @@ const quickActionsByPage: Record<string, string[]> = {
   "/dashboard": ["What should I do next?", "Explain my savings potential"],
   "/expenses/new": ["What documents do I need?", "Is this HSA eligible?"],
   "/reports": ["How can I optimize my strategy?", "Explain these charts"],
-  "/hsa-reimbursement": ["When should I reimburse?", "What's the tax impact?"],
+  "/substantiation": ["When should I reimburse?", "What's the tax impact?"],
   "/payment-methods": ["Which card should I use?", "How do rewards work?"],
 };
 

@@ -35,7 +35,7 @@ export function TotalValueCard({
           {/* Ready to Claim */}
           <Card
             className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20 cursor-pointer hover:border-primary/40 transition-colors"
-            onClick={() => navigate("/reimbursement-requests")}
+            onClick={() => navigate("/substantiation")}
           >
             <CardContent className="pt-5 pb-5">
               <div className="flex items-start justify-between">

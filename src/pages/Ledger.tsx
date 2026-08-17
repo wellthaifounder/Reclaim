@@ -36,7 +36,6 @@ import { logError } from "@/utils/errorHandler";
 import { withQueryTimeout } from "@/lib/queryHelpers";
 import { InboxQueue } from "@/components/ledger/InboxQueue";
 import { CreateCareEventDialog } from "@/components/ledger/CreateCareEventDialog";
-import { ClaimHSADialog } from "@/components/ledger/ClaimHSADialog";
 import { useClusterSuggestions } from "@/hooks/useClusterSuggestions";
 import { useClaimableEvents } from "@/hooks/useClaimableEvents";
 import { WorkflowGuideBanner } from "@/components/ledger/WorkflowGuideBanner";
@@ -157,10 +156,6 @@ const Ledger = ({ embedded = false }: LedgerProps = {}) => {
     null,
   );
   const [clusterDismissed, setClusterDismissed] = useState(false);
-  const [claimDialogOpen, setClaimDialogOpen] = useState(false);
-  const [claimableEventIds, setClaimableEventIds] = useState<string[] | null>(
-    null,
-  );
   const [claimableDismissed, setClaimableDismissed] = useState(false);
 
   const { hasSeenTransactions, markAsSeen } = useOnboarding();
@@ -338,36 +333,29 @@ const Ledger = ({ embedded = false }: LedgerProps = {}) => {
     [entries, filtered, selectedEntries, clusterForDialog],
   );
 
-  // Entries for HSA claim dialog — either from a claimable event or from selection
-  const claimEntriesForDialog = useMemo(() => {
-    if (claimableEventIds) {
-      return (
-        entries
-          ?.filter((e) => claimableEventIds.includes(e.invoice_id))
-          .map((e) => ({
-            invoice_id: e.invoice_id,
-            vendor: e.vendor,
-            category: e.category,
-            service_date: e.service_date,
-            amount: e.billed_amount,
-          })) || []
-      );
-    }
-    return filtered
-      .filter(
-        (e) =>
-          selectedEntries.has(e.invoice_id) &&
-          e.is_hsa_eligible &&
-          !e.is_reimbursed,
-      )
-      .map((e) => ({
-        invoice_id: e.invoice_id,
-        vendor: e.vendor,
-        category: e.category,
-        service_date: e.service_date,
-        amount: e.billed_amount,
-      }));
-  }, [entries, filtered, selectedEntries, claimableEventIds]);
+  // Workstream E1. This used to open a dialog that wrote a legacy
+  // reimbursement request and marked every expense 'reimbursed' the moment the
+  // PDF downloaded — before the claim had been sent, let alone paid. It now
+  // hands the selection to the substantiation screen, which is the spec's
+  // second entry point into the same flow ("multi-select from the expense
+  // list, or the dedicated tab"), and which locks rather than settles.
+  const startClaim = (invoiceIds: string[]) => {
+    if (invoiceIds.length === 0) return;
+    navigate("/substantiation", { state: { preselectInvoiceIds: invoiceIds } });
+  };
+
+  const selectedClaimableIds = useMemo(
+    () =>
+      filtered
+        .filter(
+          (e) =>
+            selectedEntries.has(e.invoice_id) &&
+            e.is_hsa_eligible &&
+            !e.is_reimbursed,
+        )
+        .map((e) => e.invoice_id),
+    [filtered, selectedEntries],
+  );
 
   // Whether selected entries include any HSA-claimable bills
   const hasHSAClaimable = useMemo(
@@ -551,10 +539,7 @@ const Ledger = ({ embedded = false }: LedgerProps = {}) => {
                         size="sm"
                         variant="outline"
                         className="h-7 text-xs border-green-500/30 text-green-600 hover:bg-green-500/10"
-                        onClick={() => {
-                          setClaimableEventIds(evt.unreimbursed_invoice_ids);
-                          setClaimDialogOpen(true);
-                        }}
+                        onClick={() => startClaim(evt.unreimbursed_invoice_ids)}
                       >
                         <ShieldCheck className="h-3 w-3 mr-1" />
                         Claim HSA
@@ -939,10 +924,7 @@ const Ledger = ({ embedded = false }: LedgerProps = {}) => {
                       size="sm"
                       variant="outline"
                       className="border-purple-500/30 text-purple-600 hover:bg-purple-500/10"
-                      onClick={() => {
-                        setClaimableEventIds(null);
-                        setClaimDialogOpen(true);
-                      }}
+                      onClick={() => startClaim(selectedClaimableIds)}
                     >
                       <ShieldCheck className="h-4 w-4 mr-2" />
                       Claim HSA
@@ -973,20 +955,6 @@ const Ledger = ({ embedded = false }: LedgerProps = {}) => {
         onSuccess={() => {
           setSelectedEntries(new Set());
           setClusterForDialog(null);
-        }}
-      />
-
-      {/* Claim HSA Dialog */}
-      <ClaimHSADialog
-        open={claimDialogOpen}
-        onOpenChange={(open) => {
-          setClaimDialogOpen(open);
-          if (!open) setClaimableEventIds(null);
-        }}
-        entries={claimEntriesForDialog}
-        onSuccess={() => {
-          setSelectedEntries(new Set());
-          setClaimableEventIds(null);
         }}
       />
     </Outer>

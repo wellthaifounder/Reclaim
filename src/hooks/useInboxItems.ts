@@ -153,7 +153,7 @@ export function useInboxItems(): UseInboxItemsReturn {
             amount: hsaTotal,
             suggested_action: {
               action: "navigate",
-              path: "/hsa-reimbursement",
+              path: "/substantiation",
             },
             priority_score: 20,
             status: "pending",

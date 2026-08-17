@@ -39,7 +39,6 @@ import {
 import { format } from "date-fns";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
 import { CollectionTimeline } from "@/components/collections/CollectionTimeline";
-import { ClaimHSADialog } from "@/components/ledger/ClaimHSADialog";
 
 interface Collection {
   id: string;
@@ -88,7 +87,6 @@ export default function CollectionDetail() {
   const queryClient = useQueryClient();
   const [isEditingBalance, setIsEditingBalance] = useState(false);
   const [manualBalance, setManualBalance] = useState("");
-  const [claimDialogOpen, setClaimDialogOpen] = useState(false);
 
   // Fetch collection details
   const { data: collection, isLoading: collectionLoading } = useQuery({
@@ -297,7 +295,15 @@ export default function CollectionDetail() {
                 <Button
                   variant="outline"
                   className="border-purple-500/30 text-purple-600 hover:bg-purple-500/10"
-                  onClick={() => setClaimDialogOpen(true)}
+                  onClick={() =>
+                    navigate("/substantiation", {
+                      state: {
+                        preselectInvoiceIds: (invoices ?? [])
+                          .filter((i) => i.is_hsa_eligible && !i.is_reimbursed)
+                          .map((i) => i.id),
+                      },
+                    })
+                  }
                 >
                   <ShieldCheck className="h-4 w-4 mr-2" />
                   Claim HSA
@@ -623,30 +629,6 @@ export default function CollectionDetail() {
           </TabsContent>
         </Tabs>
       </div>
-
-      {/* Claim HSA Dialog */}
-      <ClaimHSADialog
-        open={claimDialogOpen}
-        onOpenChange={setClaimDialogOpen}
-        entries={
-          invoices
-            ?.filter((i) => i.is_hsa_eligible && !i.is_reimbursed)
-            .map((i) => ({
-              invoice_id: i.id,
-              vendor: i.vendor,
-              category: i.category,
-              service_date: i.date,
-              amount: i.total_amount || i.amount,
-            })) || []
-        }
-        collectionId={id}
-        collectionTitle={collection?.title}
-        onSuccess={() => {
-          queryClient.invalidateQueries({
-            queryKey: ["collection-invoices", id],
-          });
-        }}
-      />
     </AuthenticatedLayout>
   );
 }

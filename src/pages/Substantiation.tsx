@@ -9,6 +9,13 @@
 //     generate client-side, download, and mark the underlying invoices
 //     SUBMITTED.
 //
+// Workstream E1: this is now the ONLY way to build a reimbursement claim. The
+// legacy path (/hsa-reimbursement and the ledger's Claim HSA dialog) is gone,
+// and those surfaces hand their selection here through router state instead.
+// That mattered for more than tidiness: the old flow marked expenses
+// 'reimbursed' the instant the PDF downloaded, before the custodian had seen
+// the claim. This one locks them and waits for the deposit.
+//
 // SUBMITTED transition (the W2 piece):
 //   - On successful generation, every included invoice gets
 //     lifecycle_status='submitted', submitted_at=now(), submitted_record_id
@@ -20,7 +27,7 @@
 //     canonical for the lifecycle.
 
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
 import { Button } from "@/components/ui/button";
@@ -93,8 +100,26 @@ type Phase = "list" | "generate" | "working";
 
 const CURRENT_TAX_YEAR = new Date().getFullYear();
 
+/**
+ * Tax year of a date-of-service.
+ *
+ * Read off the calendar string rather than via `new Date(...)`. A YYYY-MM-DD
+ * string parses as UTC midnight, so anywhere west of Greenwich `getFullYear()`
+ * returns the PREVIOUS year for a 1 January expense — filing it under the wrong
+ * tax year and then hiding it from the record that should contain it.
+ */
+function taxYearOf(dateOfService: string): number {
+  return Number(dateOfService.slice(0, 4));
+}
+
 export default function Substantiation() {
   const navigate = useNavigate();
+  const location = useLocation();
+  // Workstream E1: the ledger and care-event screens hand their selection over
+  // rather than building a claim themselves.
+  const preselectInvoiceIds = (
+    location.state as { preselectInvoiceIds?: string[] } | null
+  )?.preselectInvoiceIds;
   const [phase, setPhase] = useState<Phase>("list");
   const [loading, setLoading] = useState(true);
 
@@ -208,7 +233,39 @@ export default function Substantiation() {
         };
       });
       setEligible(rows);
-      setSelectedIds(new Set(rows.map((r) => r.id)));
+
+      // Workstream E1. Arriving with a selection already made elsewhere.
+      // Anything in it that is not actually claimable is dropped — those
+      // screens select against a looser filter than this one does.
+      const handedOver = (preselectInvoiceIds ?? []).filter((id) =>
+        rows.some((r) => r.id === id),
+      );
+      if (handedOver.length > 0) {
+        setSelectedIds(new Set(handedOver));
+
+        // A record covers one tax year. Land on the year holding most of the
+        // handover and say so if the rest had to be left behind, rather than
+        // filtering them out in silence — the user picked those expenses and
+        // would otherwise watch them vanish.
+        const years = handedOver.map((id) =>
+          taxYearOf(rows.find((r) => r.id === id)!.date),
+        );
+        const counts = new Map<number, number>();
+        for (const y of years) counts.set(y, (counts.get(y) ?? 0) + 1);
+        const [bestYear, bestCount] = [...counts.entries()].sort(
+          (a, b) => b[1] - a[1] || b[0] - a[0],
+        )[0];
+        setTaxYear(bestYear);
+        setPhase("generate");
+        if (bestCount < handedOver.length) {
+          toast.info(
+            `${handedOver.length - bestCount} of those expenses are from a different tax year. A record covers one year, so claim ${bestYear} now and the rest separately.`,
+            { duration: 9000 },
+          );
+        }
+      } else {
+        setSelectedIds(new Set(rows.map((r) => r.id)));
+      }
 
       // Pending match candidates → flatten the joined shape into PendingMatch.
       const matches: PendingMatch[] = ((matchRows ?? []) as unknown[]).flatMap(
@@ -367,7 +424,7 @@ export default function Substantiation() {
   }, [eligible, selectedIds]);
 
   const eligibleForYear = useMemo(
-    () => eligible.filter((e) => new Date(e.date).getFullYear() === taxYear),
+    () => eligible.filter((e) => taxYearOf(e.date) === taxYear),
     [eligible, taxYear],
   );
 
