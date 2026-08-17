@@ -5,6 +5,7 @@ export type Json =
   | null
   | { [key: string]: Json | undefined }
   | Json[];
+
 export type Database = {
   graphql_public: {
     Tables: {
@@ -242,6 +243,49 @@ export type Database = {
             isOneToOne: false;
             referencedRelation: "ledger_entries";
             referencedColumns: ["invoice_id"];
+          },
+        ];
+      };
+      expense_tags: {
+        Row: {
+          created_at: string;
+          invoice_id: string;
+          tag_id: string;
+          user_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          invoice_id: string;
+          tag_id: string;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          invoice_id?: string;
+          tag_id?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "expense_tags_invoice_id_fkey";
+            columns: ["invoice_id"];
+            isOneToOne: false;
+            referencedRelation: "invoices";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "expense_tags_invoice_id_fkey";
+            columns: ["invoice_id"];
+            isOneToOne: false;
+            referencedRelation: "ledger_entries";
+            referencedColumns: ["invoice_id"];
+          },
+          {
+            foreignKeyName: "expense_tags_tag_id_fkey";
+            columns: ["tag_id"];
+            isOneToOne: false;
+            referencedRelation: "tags";
+            referencedColumns: ["id"];
           },
         ];
       };
@@ -628,6 +672,7 @@ export type Database = {
           reimbursement_reminder_date: string | null;
           reimbursement_strategy: string | null;
           service_date: string | null;
+          service_date_end: string | null;
           source: string | null;
           source_email_message_id: string | null;
           source_email_received_at: string | null;
@@ -689,6 +734,7 @@ export type Database = {
           reimbursement_reminder_date?: string | null;
           reimbursement_strategy?: string | null;
           service_date?: string | null;
+          service_date_end?: string | null;
           source?: string | null;
           source_email_message_id?: string | null;
           source_email_received_at?: string | null;
@@ -750,6 +796,7 @@ export type Database = {
           reimbursement_reminder_date?: string | null;
           reimbursement_strategy?: string | null;
           service_date?: string | null;
+          service_date_end?: string | null;
           source?: string | null;
           source_email_message_id?: string | null;
           source_email_received_at?: string | null;
@@ -2385,6 +2432,27 @@ export type Database = {
           },
         ];
       };
+      tags: {
+        Row: {
+          created_at: string;
+          id: string;
+          name: string;
+          user_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          name: string;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          name?: string;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
       transaction_splits: {
         Row: {
           amount: number;
@@ -3009,6 +3077,17 @@ export type Database = {
           status: string;
         }[];
       };
+      expense_substantiation_status: {
+        Args: { p_invoice_id: string };
+        Returns: {
+          blocking_gate: string;
+          document_count: number;
+          has_patient: boolean;
+          has_service_date: boolean;
+          is_complete: boolean;
+          missing: string[];
+        }[];
+      };
       expense_timing_gate: {
         Args: { p_invoice_id: string };
         Returns: {
@@ -3132,11 +3211,14 @@ export type Database = {
     };
   };
 };
+
 type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">;
+
 type DefaultSchema = DatabaseWithoutInternals[Extract<
   keyof Database,
   "public"
 >];
+
 export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
@@ -3165,6 +3247,7 @@ export type Tables<
       ? R
       : never
     : never;
+
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
@@ -3188,6 +3271,7 @@ export type TablesInsert<
       ? I
       : never
     : never;
+
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
@@ -3211,6 +3295,7 @@ export type TablesUpdate<
       ? U
       : never
     : never;
+
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     keyof DefaultSchema["Enums"] | { schema: keyof DatabaseWithoutInternals },
@@ -3226,6 +3311,7 @@ export type Enums<
   : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
     ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
     : never;
+
 export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
@@ -3242,6 +3328,7 @@ export type CompositeTypes<
   : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
     ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
     : never;
+
 export const Constants = {
   graphql_public: {
     Enums: {},

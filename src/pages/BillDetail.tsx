@@ -23,7 +23,7 @@ import {
 import { toast } from "sonner";
 import { FileText, CreditCard, Upload, Link2, Plus } from "lucide-react";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
-import { EligibilityGates } from "@/components/hsa/EligibilityGates";
+import { SubstantiationPanel } from "@/components/expense/SubstantiationPanel";
 import { logError } from "@/utils/errorHandler";
 import { ReceiptGallery } from "@/components/expense/ReceiptGallery";
 import { MultiFileUpload } from "@/components/expense/MultiFileUpload";
@@ -348,14 +348,24 @@ export default function BillDetail() {
         </div>
 
         <div className="max-w-5xl mx-auto">
-          {/* Workstream D2/D3, Gates 1 and 2. Above the bill itself because
-              either can be a hard no, and finding that out below the fold is
-              finding it out too late. */}
+          {/* Workstream D5. The substantiation step, above the bill record
+              itself: the gates inside it can be a hard no, and finding that
+              out below the fold is finding it out too late. */}
           {!isNewBill && bill?.id && (
             <div className="mb-4">
-              <EligibilityGates
+              <SubstantiationPanel
                 invoiceId={bill.id}
+                amountPaid={Number(bill.amount_paid ?? bill.amount ?? 0)}
+                reimbursableAmount={
+                  bill.reimbursable_amount === null ||
+                  bill.reimbursable_amount === undefined
+                    ? null
+                    : Number(bill.reimbursable_amount)
+                }
                 serviceDate={bill.service_date ?? null}
+                serviceDateEnd={bill.service_date_end ?? null}
+                patientId={bill.patient_id ?? null}
+                onSaved={refetch}
               />
             </div>
           )}
