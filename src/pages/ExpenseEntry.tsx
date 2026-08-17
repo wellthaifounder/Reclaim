@@ -232,17 +232,10 @@ export default function ExpenseEntry() {
         }
       }
 
-      // Reclaim Phase 3: fire classify-expense (fire-and-forget). The
-      // expense lands in the review queue (PENDING_REVIEW or NEEDS_RECEIPT)
-      // by the time the user navigates there next.
-      supabase.functions
-        .invoke("classify-expense", { body: { invoice_id: invoice.id } })
-        .catch((err) =>
-          console.warn(
-            "[ExpenseEntry] classify-expense invocation failed:",
-            err?.message,
-          ),
-        );
+      // Workstream D4: classification moved to substantiation. Deciding the
+      // Pub 502 category from a vendor string and a dropdown, before any
+      // document or date of service exists, produced a confident-looking
+      // answer built on the weakest possible evidence.
 
       // Workstream C6: the spec requires duplicate detection to fire on manual
       // entry against already-synced transactions, not only on sync. This is

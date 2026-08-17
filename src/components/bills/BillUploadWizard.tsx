@@ -617,20 +617,12 @@ export function BillUploadWizard({
       if (onComplete && results.length > 0) onComplete(results[0].id);
       setStep("complete");
 
-      // Reclaim Phase 3: fire classify-expense for each saved invoice.
-      // Intentionally fire-and-forget — the UI moves to "complete" while
-      // classifications run in parallel; results land in the user's review
-      // queue when they next visit /review.
-      for (const r of results) {
-        supabase.functions
-          .invoke("classify-expense", { body: { invoice_id: r.id } })
-          .catch((err) =>
-            console.warn(
-              "[BillUploadWizard] classify-expense invocation failed:",
-              err?.message,
-            ),
-          );
-      }
+      // Workstream D4: classification deliberately does NOT run here any more.
+      // Gate 3 asks what KIND of expense this is under Pub 502, and at capture
+      // time the answer rests on a vendor name and a category the user picked
+      // from a dropdown. The date of service, the patient and the documents --
+      // the things that actually decide it -- arrive during substantiation, so
+      // that is where it runs now.
     } catch (error) {
       const msg =
         error instanceof Error

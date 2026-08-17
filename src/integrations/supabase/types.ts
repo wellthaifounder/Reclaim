@@ -1688,6 +1688,7 @@ export type Database = {
           eligibility_status: string;
           examples: string[] | null;
           id: string;
+          lmn_prompt: string | null;
           name: string;
           notes: string | null;
           section_ref: string | null;
@@ -1701,6 +1702,7 @@ export type Database = {
           eligibility_status: string;
           examples?: string[] | null;
           id: string;
+          lmn_prompt?: string | null;
           name: string;
           notes?: string | null;
           section_ref?: string | null;
@@ -1714,6 +1716,7 @@ export type Database = {
           eligibility_status?: string;
           examples?: string[] | null;
           id?: string;
+          lmn_prompt?: string | null;
           name?: string;
           notes?: string | null;
           section_ref?: string | null;
@@ -2973,10 +2976,36 @@ export type Database = {
       expense_eligibility_gates: {
         Args: { p_invoice_id: string };
         Returns: {
+          action_prompt: string;
           gate: string;
           is_blocking: boolean;
           is_permanent: boolean;
           reason: string;
+          status: string;
+        }[];
+      };
+      expense_gate_verdict: {
+        Args: {
+          p_has_lmn: boolean;
+          p_hsa_date: string;
+          p_qualifies: boolean;
+          p_rule_status: string;
+          p_service_date: string;
+        };
+        Returns: {
+          reason: string;
+          state: Database["public"]["Enums"]["expense_eligibility_state"];
+        }[];
+      };
+      expense_pub502_gate: {
+        Args: { p_invoice_id: string };
+        Returns: {
+          confidence: number;
+          has_lmn: boolean;
+          lmn_prompt: string;
+          reason: string;
+          rule_id: string;
+          rule_name: string;
           status: string;
         }[];
       };

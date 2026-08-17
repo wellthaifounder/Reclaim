@@ -13,8 +13,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { logError } from "@/utils/errorHandler";
 
-export type GateName = "timing" | "dependency";
-export type GateStatus = "eligible" | "ineligible" | "unknown";
+export type GateName = "timing" | "dependency" | "pub502";
+export type GateStatus = "eligible" | "ineligible" | "conditional" | "unknown";
 
 export interface EligibilityGate {
   gate: GateName;
@@ -23,6 +23,11 @@ export interface EligibilityGate {
   is_blocking: boolean;
   /** True only for timing: nothing the user does can clear it. */
   is_permanent: boolean;
+  /**
+   * What to go and get. Populated only for a conditional Pub 502 rule that
+   * has no letter of medical necessity attached yet.
+   */
+  action_prompt: string | null;
 }
 
 export function useEligibilityGates(invoiceId: string | null) {
@@ -53,8 +58,48 @@ export function useEligibilityGates(invoiceId: string | null) {
     primaryBlocker: blocking.find((g) => g.is_permanent) ?? blocking[0] ?? null,
     /** Gates still awaiting an answer — not refusals, just undetermined. */
     unresolved: gates.filter((g) => g.status === "unknown"),
+    /**
+     * Claimable once the user supplies something. Kept separate from
+     * `blocking` on purpose: "go and get this letter" and "this can never be
+     * claimed" are different messages and must not be shown the same way.
+     */
+    conditional: gates.filter((g) => g.status === "conditional"),
+    pub502: gates.find((g) => g.gate === "pub502") ?? null,
     isLoading: query.isLoading,
   };
+}
+
+/**
+ * Work out what kind of expense this is under Pub 502 — Gate 3.
+ *
+ * Workstream D4 moved this off the capture path. It used to fire the moment an
+ * expense was saved, when the only evidence was a vendor string and a category
+ * the user picked from a dropdown; the date of service, the patient and the
+ * documents all arrive later. Running it during substantiation means the
+ * answer rests on the evidence that actually decides it.
+ *
+ * A database trigger re-runs the gates when the rule changes, so the verdict
+ * follows automatically.
+ */
+export function useClassifyExpense() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (invoiceId: string) => {
+      const { error } = await supabase.functions.invoke("classify-expense", {
+        body: { invoice_id: invoiceId },
+      });
+      if (error) throw error;
+    },
+    onSuccess: (_data, invoiceId) => {
+      queryClient.invalidateQueries({
+        queryKey: ["eligibility-gates", invoiceId],
+      });
+      queryClient.invalidateQueries({ queryKey: ["bill", invoiceId] });
+      queryClient.invalidateQueries({ queryKey: ["invoices"] });
+    },
+    onError: (error) => logError("Classifying expense failed", error),
+  });
 }
 
 /**
