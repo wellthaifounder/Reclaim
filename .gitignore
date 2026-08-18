@@ -59,3 +59,10 @@ tests/ux-review/_artifacts/
 
 # Claude Code session state — holds a live pid and session id, not source
 .claude/scheduled_tasks.lock
+
+# done-checks bookkeeping: which files a turn touched, and the retry counter.
+# Per-session scratch, meaningless to anyone else. .done-checks-off is the
+# local escape hatch for switching the Stop hook off without editing settings.
+.claude/.done-checks-pending
+.claude/.done-checks-state.json
+.claude/.done-checks-off

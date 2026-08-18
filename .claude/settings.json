@@ -47,7 +47,8 @@
       "Bash(MSYS_NO_PATHCONV=1 rtk docker exec supabase_db_fzmdfhdfvayaalhogskm psql -U postgres -d postgres -c \"SELECT column_name, data_type, column_default FROM information_schema.columns WHERE table_name='profiles' AND column_name LIKE '%reimburse%' OR table_name='profiles' AND column_name LIKE '%strategy%';\")",
       "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\(JSON.stringify\\(p.scripts,null,1\\)\\); console.log\\('vitest:', !!\\(p.devDependencies&&p.devDependencies.vitest\\), 'jest:', !!\\(p.devDependencies&&p.devDependencies.jest\\)\\);\")",
       "Bash(MSYS_NO_PATHCONV=1 docker cp e6_test.sql supabase_db_fzmdfhdfvayaalhogskm:/tmp/e6_test.sql)",
-      "Bash(MSYS_NO_PATHCONV=1 rtk docker exec supabase_db_fzmdfhdfvayaalhogskm psql -U postgres -d postgres -f /tmp/e6_test.sql)"
+      "Bash(MSYS_NO_PATHCONV=1 rtk docker exec supabase_db_fzmdfhdfvayaalhogskm psql -U postgres -d postgres -f /tmp/e6_test.sql)",
+      "WebFetch(domain:www.irs.gov)"
     ],
     "deny": [
       "Bash(rm -rf /)",
@@ -68,7 +69,19 @@
         "hooks": [
           {
             "type": "command",
-            "command": "npx prettier --write \"$CLAUDE_FILE_PATH\" 2>/dev/null || true"
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/on-file-change.mjs\"",
+            "timeout": 60
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/done-checks.mjs\"",
+            "timeout": 240
           }
         ]
       }

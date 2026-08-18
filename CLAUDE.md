@@ -372,6 +372,27 @@ Before committing any changes:
 6. For Plaid changes: use sandbox environment (`PLAID_ENV=sandbox`)
 7. For new edge functions: verify OPTIONS → 200, unauthenticated POST → 401, valid POST → expected response
 
+### The done-checks hook (automated — steps 1, 2 and part of the security policy)
+
+`.claude/hooks/done-checks.mjs` runs as a Claude Code **Stop** hook: at the end of any turn that wrote a file, it checks **only the files that turn touched** and refuses to let the turn end if they fail. `.claude/hooks/on-file-change.mjs` (PostToolUse) formats each written file with prettier and records its path for the Stop hook to read.
+
+| Check                                                                                                   | Applies to                                                 | Blocking?                        |
+| ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- | -------------------------------- |
+| `tsc --noEmit -p tsconfig.app.json`                                                                     | any changed `src/**/*.{ts,tsx}`                            | yes                              |
+| `eslint` on the changed files only                                                                      | any changed `src/**/*.{ts,tsx}`                            | yes, on errors                   |
+| Credential scan (private keys, Stripe/Supabase/Plaid tokens, pasted JWTs, secret assigned to a literal) | every changed file, plus `.claude/settings.json` every run | yes                              |
+| `CREATE TABLE` without `ENABLE ROW LEVEL SECURITY`; `SECURITY DEFINER` without `SET search_path`        | changed `supabase/migrations/*.sql`                        | yes                              |
+| `SELECT *`; migration filename format; "run a db reset" reminder                                        | changed `supabase/migrations/*.sql`                        | advisory                         |
+| Wildcard CORS, missing `getCorsHeaders`, missing `auth.getUser()`                                       | changed `supabase/functions/*/index.ts`                    | yes                              |
+| `import.meta.env.X` where X is neither `VITE_*` nor a Vite builtin                                      | changed `src/**`                                           | yes                              |
+| `MEDICAL_MILEAGE_RATES` gaps, overlaps, unconfirmed periods, no coverage for the current year           | changed `regulatoryLimits.ts`                              | gaps/overlaps yes, rest advisory |
+
+**Scoped to changed files on purpose.** The repo carries ~140 pre-existing lint problems; a whole-repo gate would fail on every turn and get switched off within a day.
+
+**It does not run `vite build` or `supabase db reset`** — the first adds a minute to prove what `tsc` already proved, the second means 89 migrations against Docker. When migrations change, the hook says to run `npx supabase db reset --no-seed` and leaves that call to a human.
+
+**It cannot trap a session.** The same failing batch blocks at most twice, then reports and lets the turn end — with an explicit instruction that the failures still have to be surfaced to the user rather than passed over. To silence it: `RECLAIM_SKIP_DONE_CHECKS=1`, or create `.claude/.done-checks-off` (gitignored).
+
 ---
 
 ## Subscription Tiers
