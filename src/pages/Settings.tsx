@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -95,6 +96,7 @@ interface BankConnection {
 
 const Settings = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const onboarding = useOnboarding();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -189,6 +191,15 @@ const Settings = () => {
         { onConflict: "id" },
       );
       if (upsertError) throw upsertError;
+
+      // Workstream E6: the strategy is cached for five minutes by
+      // useReimbursementStrategy, so without this the user changes the setting,
+      // navigates to the dashboard, and finds it unchanged — which reads as the
+      // preference not working rather than as a stale cache.
+      await queryClient.invalidateQueries({
+        queryKey: ["reimbursement-strategy"],
+      });
+      await queryClient.invalidateQueries({ queryKey: ["attention-items"] });
 
       if (hsaDateChanged) {
         // Workstream D2. Was two hand-written bulk updates, both filtered on
@@ -502,8 +513,10 @@ const Settings = () => {
                     )}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Shoebox mode relabels your eligible balance and pauses
-                    monthly submission reminders.
+                    Shoebox mode treats a documented, unclaimed expense as
+                    finished rather than outstanding: Reclaim stops prompting
+                    you to claim, and shows the balance as banked. You can still
+                    file a claim at any time.
                   </p>
                 </div>
                 <Button type="submit" disabled={saving}>

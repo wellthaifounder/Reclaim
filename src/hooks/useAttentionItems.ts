@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { logError } from "@/utils/errorHandler";
 import { useAuthUser } from "@/hooks/useAuthUser";
+import { useReimbursementStrategy } from "@/hooks/useReimbursementStrategy";
 
 export interface AttentionSummary {
   totalCount: number;
@@ -9,12 +10,14 @@ export interface AttentionSummary {
   unlinkedMedical: number;
   overdueUnpaid: number;
   hsaClaimable: number;
+  isShoebox: boolean;
   isLoading: boolean;
 }
 
 export function useAttentionItems(): AttentionSummary {
   const { user } = useAuthUser();
   const userId = user?.id;
+  const { isShoebox, isLoading: strategyLoading } = useReimbursementStrategy();
 
   const { data, isLoading } = useQuery({
     queryKey: ["attention-items", userId],
@@ -91,7 +94,18 @@ export function useAttentionItems(): AttentionSummary {
   const unreviewedTransactions = data?.unreviewedTransactions ?? 0;
   const unlinkedMedical = data?.unlinkedMedical ?? 0;
   const overdueUnpaid = data?.overdueUnpaid ?? 0;
-  const hsaClaimable = data?.hsaClaimable ?? 0;
+
+  // Workstream E6. A shoebox user has deliberately chosen not to claim, so
+  // "$12,400 ready to claim" with a Claim button is not a helpful nudge — it
+  // is the app telling them their completed work is unfinished. Zeroed at the
+  // source rather than hidden in the banner, so anything else that reads this
+  // summary inherits the suppression instead of having to remember it.
+  //
+  // Only this figure is suppressed. Unreviewed transactions and unlinked
+  // medical spend are still real work for a shoebox user: the documentation is
+  // the entire point of the strategy, and letting it rot is the one thing that
+  // actually costs them the deduction decades later.
+  const hsaClaimable = isShoebox ? 0 : (data?.hsaClaimable ?? 0);
 
   return {
     totalCount: unreviewedTransactions + unlinkedMedical + overdueUnpaid,
@@ -99,6 +113,7 @@ export function useAttentionItems(): AttentionSummary {
     unlinkedMedical,
     overdueUnpaid,
     hsaClaimable,
-    isLoading,
+    isShoebox,
+    isLoading: isLoading || strategyLoading,
   };
 }

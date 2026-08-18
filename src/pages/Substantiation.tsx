@@ -81,6 +81,7 @@ import {
   type SubstantiationHeader,
 } from "@/lib/substantiationRecord";
 import { buildClaimPacket, type ClaimPacketReport } from "@/lib/claimPacket";
+import { useReimbursementStrategy } from "@/hooks/useReimbursementStrategy";
 import { HSA_CUSTODIANS } from "@/lib/custodianInstructions";
 
 interface EligibleExpense {
@@ -300,6 +301,9 @@ export default function Substantiation() {
   const preselectInvoiceIds = (
     location.state as { preselectInvoiceIds?: string[] } | null
   )?.preselectInvoiceIds;
+  // Workstream E6: the same expenses, described as what the user decided they
+  // are — a filed task or a finished one.
+  const { isShoebox } = useReimbursementStrategy();
   const [phase, setPhase] = useState<Phase>("list");
   const [loading, setLoading] = useState(true);
 
@@ -1422,12 +1426,21 @@ export default function Substantiation() {
           </div>
         )}
 
-        {/* Ready-to-submit hero */}
-        <Card className="mb-6 border-primary/30">
+        {/* Workstream E6 — the same money, framed as what the user decided it
+            is. For someone on the shoebox strategy a documented unclaimed
+            expense is FINISHED: the receipt is banked, the tax-free compounding
+            is the plan, and the claim can be made in thirty years. Calling that
+            "ready to submit" with a prominent button tells them their completed
+            work is an outstanding task. The claim path is not removed — the
+            spec is explicit that they claim "whenever you want" — it simply
+            stops being the thing the page is asking for. */}
+        <Card
+          className={`mb-6 ${isShoebox ? "border-emerald-300 bg-emerald-50/40" : "border-primary/30"}`}
+        >
           <CardContent className="p-5 flex items-center gap-4">
             <div className="flex-1">
               <p className="text-sm font-medium uppercase tracking-wide text-muted-foreground mb-1">
-                Ready to submit
+                {isShoebox ? "Substantiated & banked" : "Ready to submit"}
               </p>
               <p className="text-3xl font-bold tabular-nums">
                 ${eligibleNowTotal.toFixed(2)}
@@ -1436,9 +1449,16 @@ export default function Substantiation() {
                 {eligibleNow.length} eligible expense
                 {eligibleNow.length === 1 ? "" : "s"} for {CURRENT_TAX_YEAR}
               </p>
+              {isShoebox && (
+                <p className="text-sm text-emerald-800 mt-2">
+                  Documented and yours to claim whenever you want — there's no
+                  deadline. Your HSA keeps compounding until you do.
+                </p>
+              )}
             </div>
             <Button
               size="lg"
+              variant={isShoebox ? "outline" : "default"}
               disabled={eligible.length === 0}
               onClick={() => {
                 setTaxYear(CURRENT_TAX_YEAR);
@@ -1453,7 +1473,7 @@ export default function Substantiation() {
               }}
             >
               <FileText className="h-4 w-4 mr-2" />
-              New record
+              {isShoebox ? "Claim anyway" : "New record"}
             </Button>
           </CardContent>
         </Card>

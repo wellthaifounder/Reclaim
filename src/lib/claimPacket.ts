@@ -390,9 +390,9 @@ export async function buildClaimPacket(
       attempted++;
       onProgress?.(`Collecting documents… (${attempted} of ${totalDocuments})`);
 
-      // eslint-disable-next-line no-await-in-loop -- sequential by design: one
-      // document in memory at a time, and fflate's writer takes one stream at a
-      // time.
+      // Sequential by design: one document in memory at a time, and fflate's
+      // writer takes one stream at a time. That is what keeps peak memory to
+      // roughly one document plus the archive so far.
       const blob = await fetchDocument(doc.path);
       if (!blob) {
         omissions.push(
@@ -412,7 +412,6 @@ export async function buildClaimPacket(
       }
 
       try {
-        // eslint-disable-next-line no-await-in-loop -- see above
         const bytes = new Uint8Array(await blob.arrayBuffer());
         writer.store(
           `${folder}/${documentName(d + 1, doc, extensionFor(blob.type, doc.path))}`,
