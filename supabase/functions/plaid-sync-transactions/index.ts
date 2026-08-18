@@ -336,7 +336,7 @@ serve(async (req) => {
     // ── 5. Deposit → Substantiation Record matching ───────────────────────
     const depositCandidates = await matchDeposits(supabase, {
       userId: user.id,
-      ingested,
+      requestId,
     });
     if (depositCandidates > 0) {
       console.log(

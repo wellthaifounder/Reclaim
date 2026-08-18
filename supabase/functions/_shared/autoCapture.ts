@@ -224,26 +224,25 @@ export async function autoCaptureExpenses(
 }
 
 /**
- * Surface reimbursement-deposit candidates for credits.
+ * Workstream E4 — surface deposits that may close an open claim.
  *
- * Reads the stored `signed_amount` (Plaid convention: negative = money into
- * the account) rather than the raw API payload, so this no longer has to run
- * inside the same request that fetched the transaction.
+ * MUST run after detectTransfers. The strongest signal the matcher has is C5's
+ * verdict that the money came out of the HSA, and that is the signal that lets
+ * a fee-sized gap be shown at all rather than discarded. Run this first and
+ * every match is scored as though the deposit came from nowhere.
+ *
+ * No longer a loop over this batch's credits: the scan covers every unresolved
+ * deposit against every open record, which is what finally catches the deposit
+ * that posted before the record it pays for was generated.
  */
 export async function matchDeposits(
   supabase: SupabaseClient,
-  opts: { userId: string; ingested: IngestedTransaction[] },
+  opts: { userId: string; requestId?: string },
 ): Promise<number> {
-  let candidates = 0;
-  for (const txn of opts.ingested) {
-    if (txn.signed_amount >= 0) continue;
-    const { matched } = await findReimbursementMatches({
-      supabase,
-      userId: opts.userId,
-      transactionRowId: txn.id,
-      rawTxnAmount: txn.signed_amount,
-    });
-    candidates += matched;
-  }
-  return candidates;
+  const { matched } = await findReimbursementMatches({
+    supabase,
+    userId: opts.userId,
+    requestId: opts.requestId,
+  });
+  return matched;
 }

@@ -108,10 +108,39 @@ interface PendingMatch {
   transaction_id: string;
   transaction_vendor: string;
   transaction_date: string;
+  transaction_amount: number;
   record_id: string;
   record_number: string;
   record_total: number;
   record_expense_count: number;
+  // Workstream E4. How far the deposit was from the total, and how sure the
+  // matcher is. Both are shown: a user confirming that money arrived is
+  // asserting something about their own bank account, and they can only do
+  // that honestly if we say what we actually saw.
+  amount_gap: number;
+  confidence: number;
+  signals: string[];
+  // Set when one deposit covers several claims. Members are confirmed and
+  // dismissed together — the amounts only add up as a set.
+  group_id: string | null;
+}
+
+/**
+ * Matches sharing one deposit, kept together.
+ *
+ * A custodian paying two claims in one transfer is one question to the user,
+ * not two. Splitting it into separate prompts would invite them to confirm one
+ * and dismiss the other, which describes money that never moved.
+ */
+function groupMatches(matches: PendingMatch[]): PendingMatch[][] {
+  const groups = new Map<string, PendingMatch[]>();
+  for (const m of matches) {
+    const key = m.group_id ?? m.id;
+    const existing = groups.get(key);
+    if (existing) existing.push(m);
+    else groups.set(key, [m]);
+  }
+  return [...groups.values()];
 }
 
 type Phase = "list" | "generate" | "working";
@@ -295,7 +324,6 @@ export default function Substantiation() {
         { data: profileRow },
         { data: recordRows },
         { data: expenseRows },
-        { data: matchRows },
       ] = await Promise.all([
         supabase
           .from("profiles")
@@ -316,19 +344,26 @@ export default function Substantiation() {
         // well is how the screen and the lock drift apart, and the screen is
         // the half that cannot enforce anything.
         supabase.rpc("claimable_expenses"),
-        // Reclaim Phase 4 W3: pending deposit → record match candidates.
-        supabase
-          .from("reimbursement_match_candidates")
-          .select(
-            `id, match_amount, match_reason, transaction_id,
-             transaction:transactions ( vendor, transaction_date ),
-             substantiation_record_id,
-             record:substantiation_records ( id, record_number, total_amount, expense_count )`,
-          )
-          .eq("user_id", user.id)
-          .eq("status", "pending")
-          .order("created_at", { ascending: false }),
+        // Workstream E4: re-scan before reading. The Plaid sync only ever
+        // matched the deposits of the batch that delivered them, so a record
+        // generated after its deposit posted was never matched by anything.
+        // The scan is idempotent and never revives a dismissed match, so
+        // running it on every visit is safe and is what closes that gap.
+        supabase.rpc("match_reimbursement_deposits", { p_user_id: user.id }),
       ]);
+
+      const { data: matchRows } = await supabase
+        .from("reimbursement_match_candidates")
+        .select(
+          `id, match_amount, match_reason, transaction_id, match_group_id,
+           amount_gap, match_confidence, match_signals,
+           transaction:transactions ( vendor, transaction_date, signed_amount ),
+           substantiation_record_id,
+           record:substantiation_records ( id, record_number, total_amount, expense_count )`,
+        )
+        .eq("user_id", user.id)
+        .eq("status", "pending")
+        .order("match_confidence", { ascending: false });
 
       if (profileRow?.full_name) setUserName(profileRow.full_name);
       // Workstream E3: remembered from the last claim, so the packet's
@@ -413,11 +448,13 @@ export default function Substantiation() {
       // Pending match candidates → flatten the joined shape into PendingMatch.
       const matches: PendingMatch[] = ((matchRows ?? []) as unknown[]).flatMap(
         (m) => {
+          type TxnShape = {
+            vendor: string | null;
+            transaction_date: string;
+            signed_amount: number | string | null;
+          };
           const row = m as Record<string, unknown> & {
-            transaction:
-              | { vendor: string | null; transaction_date: string }
-              | { vendor: string | null; transaction_date: string }[]
-              | null;
+            transaction: TxnShape | TxnShape[] | null;
             record:
               | {
                   id: string;
@@ -448,10 +485,18 @@ export default function Substantiation() {
               transaction_id: row.transaction_id as string,
               transaction_vendor: txn.vendor ?? "Deposit",
               transaction_date: txn.transaction_date,
+              // signed_amount follows Plaid: negative is money in. The user
+              // thinks of a deposit as a positive number, so flip it here
+              // rather than showing them a minus sign on money they received.
+              transaction_amount: Math.abs(Number(txn.signed_amount ?? 0)),
               record_id: rec.id,
               record_number: rec.record_number,
               record_total: Number(rec.total_amount),
               record_expense_count: rec.expense_count,
+              amount_gap: Number(row.amount_gap ?? 0),
+              confidence: Number(row.match_confidence ?? 0),
+              signals: (row.match_signals as string[] | null) ?? [],
+              group_id: (row.match_group_id as string | null) ?? null,
             },
           ];
         },
@@ -467,65 +512,56 @@ export default function Substantiation() {
 
   // ── Match candidate handlers ─────────────────────────────────────────────
 
+  /**
+   * Workstream E4 — the money has landed; close the claim.
+   *
+   * One database call. This used to be four sequential writes from the browser
+   * with no transaction around them: mark the candidate, close the record,
+   * cascade the expenses, dismiss the siblings. If the third failed, the
+   * record read "reimbursed" while its expenses stayed locked inside a claim
+   * that was already closed — unclaimable, and with nothing on screen to
+   * suggest anything had gone wrong.
+   *
+   * It also never wrote `reimbursed_amount`, so the money model insisted the
+   * user had been reimbursed nothing. That is fixed inside the function.
+   */
   async function confirmMatch(match: PendingMatch) {
     setMatchActingId(match.id);
     try {
-      const now = new Date().toISOString();
+      const { data, error } = await supabase.rpc("confirm_deposit_match", {
+        p_candidate_id: match.id,
+      });
+      if (error) throw error;
 
-      // 1. Mark candidate resolved.
-      const { error: candErr } = await supabase
-        .from("reimbursement_match_candidates")
-        .update({ status: "confirmed", resolved_at: now })
-        .eq("id", match.id);
-      if (candErr) throw candErr;
+      const closed = (data ?? []) as {
+        record_id: string;
+        record_number: string;
+        expenses_closed: number;
+      }[];
+      const closedIds = new Set(closed.map((c) => c.record_id));
+      const expenses = closed.reduce((n, c) => n + c.expenses_closed, 0);
 
-      // 2. Close out the record.
-      const { error: recErr } = await supabase
-        .from("substantiation_records")
-        .update({
-          status: "reimbursed",
-          reimbursed_at: now,
-          reimbursed_transaction_id: match.transaction_id,
-        })
-        .eq("id", match.record_id);
-      if (recErr) throw recErr;
-
-      // 3. Cascade REIMBURSED through every invoice bundled into that record.
-      const { data: items } = await supabase
-        .from("substantiation_record_items")
-        .select("invoice_id")
-        .eq("substantiation_record_id", match.record_id);
-      const invoiceIds = (items ?? []).map((i) => i.invoice_id);
-      if (invoiceIds.length > 0) {
-        await supabase
-          .from("invoices")
-          // Workstream B: lifecycle_status is derived from the facets; set
-          // claim_state instead. This also releases the double-claim lock,
-          // since the lock keys on claim_state = 'locked_in_request'.
-          .update({ claim_state: "reimbursed", reimbursed_at: now })
-          .in("id", invoiceIds);
-      }
-
-      // 4. Dismiss any sibling candidates for the same record — once it's
-      // reimbursed, no other deposit should be pending for it.
-      await supabase
-        .from("reimbursement_match_candidates")
-        .update({ status: "dismissed", resolved_at: now })
-        .eq("substantiation_record_id", match.record_id)
-        .eq("status", "pending")
-        .neq("id", match.id);
-
+      // A batch closes several records at once, so clear by what came back
+      // rather than by the one card the user clicked.
       setPendingMatches((prev) =>
-        prev.filter((p) => p.record_id !== match.record_id),
+        prev.filter(
+          (p) =>
+            !closedIds.has(p.record_id) &&
+            p.transaction_id !== match.transaction_id,
+        ),
       );
       setPastRecords((prev) =>
         prev.map((r) =>
-          r.id === match.record_id ? { ...r, status: "reimbursed" } : r,
+          closedIds.has(r.id) ? { ...r, status: "reimbursed" as const } : r,
         ),
       );
+      // The claimable list needs no pruning: these expenses were already
+      // locked into the record, so claimable_expenses() never returned them.
 
       toast.success(
-        `${match.record_number} closed. ${invoiceIds.length} expense${invoiceIds.length === 1 ? "" : "s"} marked reimbursed.`,
+        closed.length > 1
+          ? `${closed.length} records closed — ${expenses} expense${expenses === 1 ? "" : "s"} marked reimbursed.`
+          : `${closed[0]?.record_number ?? match.record_number} closed. ${expenses} expense${expenses === 1 ? "" : "s"} marked reimbursed.`,
       );
     } catch (err) {
       logError("Substantiation.confirmMatch", err);
@@ -538,14 +574,18 @@ export default function Substantiation() {
   async function dismissMatch(match: PendingMatch) {
     setMatchActingId(match.id);
     try {
-      const now = new Date().toISOString();
-      const { error } = await supabase
-        .from("reimbursement_match_candidates")
-        .update({ status: "dismissed", resolved_at: now })
-        .eq("id", match.id);
+      const { error } = await supabase.rpc("dismiss_deposit_match", {
+        p_candidate_id: match.id,
+      });
       if (error) throw error;
-      setPendingMatches((prev) => prev.filter((p) => p.id !== match.id));
-      toast.success("Dismissed.");
+      // Dismissing a batch dismisses all of it: the amounts add up to the
+      // deposit together and to nothing apart.
+      setPendingMatches((prev) =>
+        prev.filter((p) =>
+          match.group_id ? p.group_id !== match.group_id : p.id !== match.id,
+        ),
+      );
+      toast.success("Dismissed. We won't ask about that deposit again.");
     } catch (err) {
       logError("Substantiation.dismissMatch", err);
       toast.error("Couldn't dismiss.");
@@ -1160,61 +1200,146 @@ export default function Substantiation() {
           </p>
         </div>
 
-        {/* Reclaim Phase 4 W3: deposit-match prompts. Loop closure happens
-            here — confirming cascades REIMBURSED through the record + items. */}
+        {/* Workstream E4: deposit-match prompts. Confirming is the moment the
+            loop closes — the money lands in the ledger, the record closes, and
+            every expense inside it becomes reimbursed. Because that is not
+            reversible from here, the card says what the matcher actually saw:
+            the deposit, the total it was compared against, and any gap between
+            them. A user confirming money arrived is asserting something about
+            their own bank account, and can only do that honestly if we show
+            them the number rather than a verdict. */}
         {pendingMatches.length > 0 && (
           <div className="space-y-2 mb-6">
-            {pendingMatches.map((m) => (
-              <Card key={m.id} className="border-emerald-200 bg-emerald-50/50">
-                <CardContent className="p-4 space-y-3">
-                  <div className="flex items-start gap-3">
-                    <div className="rounded-full bg-emerald-100 p-2 mt-0.5">
-                      <Banknote className="h-4 w-4 text-emerald-700" />
+            {groupMatches(pendingMatches).map((group) => {
+              const head = group[0];
+              const batched = group.length > 1;
+              const acting = group.some((g) => matchActingId === g.id);
+              // Anything the matcher is not confident about is asked more
+              // cautiously and coloured as a question, not an answer.
+              const unsure = head.confidence < 0.75;
+              return (
+                <Card
+                  key={head.group_id ?? head.id}
+                  className={
+                    unsure
+                      ? "border-amber-200 bg-amber-50/50"
+                      : "border-emerald-200 bg-emerald-50/50"
+                  }
+                >
+                  <CardContent className="p-4 space-y-3">
+                    <div className="flex items-start gap-3">
+                      <div
+                        className={`rounded-full p-2 mt-0.5 ${
+                          unsure ? "bg-amber-100" : "bg-emerald-100"
+                        }`}
+                      >
+                        <Banknote
+                          className={`h-4 w-4 ${
+                            unsure ? "text-amber-700" : "text-emerald-700"
+                          }`}
+                        />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium">
+                          Did this ${head.transaction_amount.toFixed(2)} deposit
+                          pay{" "}
+                          {batched ? (
+                            <>these {group.length} claims?</>
+                          ) : (
+                            <>
+                              <span className="tabular-nums">
+                                {head.record_number}
+                              </span>
+                              ?
+                            </>
+                          )}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {head.transaction_vendor} ·{" "}
+                          {new Date(
+                            head.transaction_date + "T00:00:00",
+                          ).toLocaleDateString()}
+                        </p>
+
+                        {batched ? (
+                          <ul className="mt-2 space-y-1">
+                            {group.map((g) => (
+                              <li
+                                key={g.id}
+                                className="text-xs flex justify-between gap-3"
+                              >
+                                <span className="tabular-nums">
+                                  {g.record_number}
+                                </span>
+                                <span className="tabular-nums text-muted-foreground">
+                                  ${g.record_total.toFixed(2)} ·{" "}
+                                  {g.record_expense_count} expense
+                                  {g.record_expense_count === 1 ? "" : "s"}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {head.record_expense_count} expense
+                            {head.record_expense_count === 1 ? "" : "s"},
+                            claimed at ${head.record_total.toFixed(2)}.
+                          </p>
+                        )}
+
+                        {/* The gap is never rounded away. "$2.00 less than you
+                            claimed" is the difference between a custodian fee
+                            and a partly denied claim, and only the user knows
+                            which — so they have to be told there is one. */}
+                        {head.amount_gap > 0.01 && (
+                          <p className="text-xs mt-2 font-medium text-amber-800">
+                            That is ${head.amount_gap.toFixed(2)} less than the
+                            $ {batched ? "total claimed" : "amount claimed"}.
+                            Confirm only if you're happy that settles it.
+                          </p>
+                        )}
+                        {head.signals.includes("hsa_transfer") && (
+                          <p className="text-xs mt-1 text-muted-foreground">
+                            We matched this to money leaving your HSA.
+                          </p>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium">
-                        Did this ${m.match_amount.toFixed(2)} deposit close{" "}
-                        <span className="tabular-nums">{m.record_number}</span>?
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {m.transaction_vendor} ·{" "}
-                        {new Date(
-                          m.transaction_date + "T00:00:00",
-                        ).toLocaleDateString()}{" "}
-                        · matches your {m.record_expense_count}-expense record
-                        ($
-                        {m.record_total.toFixed(2)}).
-                      </p>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() => confirmMatch(head)}
+                        disabled={acting}
+                        className={`flex-1 ${
+                          unsure
+                            ? "bg-amber-700 hover:bg-amber-800"
+                            : "bg-emerald-700 hover:bg-emerald-800"
+                        }`}
+                      >
+                        {acting ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <CheckCircle2 className="mr-2 h-4 w-4" />
+                        )}
+                        {batched
+                          ? `Yes, close all ${group.length}`
+                          : "Yes, close this record"}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => dismissMatch(head)}
+                        disabled={acting}
+                        className="flex-1"
+                      >
+                        <X className="mr-2 h-4 w-4" />
+                        No, this isn't it
+                      </Button>
                     </div>
-                  </div>
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <Button
-                      size="sm"
-                      onClick={() => confirmMatch(m)}
-                      disabled={matchActingId === m.id}
-                      className="flex-1 bg-emerald-700 hover:bg-emerald-800"
-                    >
-                      {matchActingId === m.id ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <CheckCircle2 className="mr-2 h-4 w-4" />
-                      )}
-                      Yes, close this record
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => dismissMatch(m)}
-                      disabled={matchActingId === m.id}
-                      className="flex-1"
-                    >
-                      <X className="mr-2 h-4 w-4" />
-                      Not this one
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         )}
 

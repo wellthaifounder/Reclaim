@@ -205,7 +205,6 @@ serve(async (req) => {
     });
     const depositCandidates = await matchDeposits(supabase, {
       userId: connection.user_id,
-      ingested,
     });
 
     // ── 5b. Duplicate detection (Workstream C6), after capture — the expense

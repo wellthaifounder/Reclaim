@@ -1985,11 +1985,14 @@ export type Database = {
       };
       reimbursement_match_candidates: {
         Row: {
+          amount_gap: number | null;
           created_at: string;
           id: string;
           match_amount: number;
           match_confidence: number;
+          match_group_id: string | null;
           match_reason: string | null;
+          match_signals: string[];
           resolved_at: string | null;
           status: string;
           substantiation_record_id: string;
@@ -1997,11 +2000,14 @@ export type Database = {
           user_id: string;
         };
         Insert: {
+          amount_gap?: number | null;
           created_at?: string;
           id?: string;
           match_amount: number;
           match_confidence: number;
+          match_group_id?: string | null;
           match_reason?: string | null;
+          match_signals?: string[];
           resolved_at?: string | null;
           status?: string;
           substantiation_record_id: string;
@@ -2009,11 +2015,14 @@ export type Database = {
           user_id: string;
         };
         Update: {
+          amount_gap?: number | null;
           created_at?: string;
           id?: string;
           match_amount?: number;
           match_confidence?: number;
+          match_group_id?: string | null;
           match_reason?: string | null;
+          match_signals?: string[];
           resolved_at?: string | null;
           status?: string;
           substantiation_record_id?: string;
@@ -2937,6 +2946,15 @@ export type Database = {
         Args: { p_invoice_id: string };
         Returns: Database["public"]["Enums"]["invoice_status"];
       };
+      confirm_deposit_match: {
+        Args: { p_candidate_id: string };
+        Returns: {
+          amount_applied: number;
+          expenses_closed: number;
+          record_id: string;
+          record_number: string;
+        }[];
+      };
       detect_claimable_care_events: {
         Args: { p_threshold?: number; p_user_id: string };
         Returns: {
@@ -2966,6 +2984,10 @@ export type Database = {
           p_user_id: string;
           p_window_days?: number;
         };
+        Returns: number;
+      };
+      dismiss_deposit_match: {
+        Args: { p_candidate_id: string };
         Returns: number;
       };
       dismiss_duplicate_candidate: {
@@ -3051,6 +3073,10 @@ export type Database = {
       };
       gate_owned_reasons: { Args: never; Returns: string[] };
       hsa_establishment_date: { Args: { p_user_id: string }; Returns: string };
+      match_reimbursement_deposits: {
+        Args: { p_lookback_days?: number; p_user_id?: string };
+        Returns: number;
+      };
       merge_duplicate_expenses: {
         Args: { p_candidate_id: string; p_keep_id: string };
         Returns: string;
