@@ -143,10 +143,23 @@ export const MEDICAL_MILEAGE_RATES: readonly MileageRatePeriod[] = [
   },
   {
     start: "2026-01-01",
-    end: "2026-12-31",
+    end: "2026-06-30",
     ratePerMile: 0.205,
     confirmed: true,
-    source: "IRS medical mileage rate for 2026",
+    source: "IRS Notice 2026-10",
+  },
+  {
+    // Second mid-year increase in the table's history, fuel-driven like 2022's.
+    // Announcement 2026-11 modified Notice 2026-10 prospectively: it applies to
+    // transportation "paid or incurred ... on or after July 1, 2026", and the
+    // Notice 2026-10 rate "continue[s] to apply" before that date. So this is a
+    // split, never a correction of the first half — a January trip is still
+    // 20.5c and always will be.
+    start: "2026-07-01",
+    end: "2026-12-31",
+    ratePerMile: 0.235,
+    confirmed: true,
+    source: "IRS Announcement 2026-11",
   },
 ] as const;
 
