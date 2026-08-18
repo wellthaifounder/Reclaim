@@ -2317,6 +2317,8 @@ export type Database = {
           total_amount: number;
           updated_at: string;
           user_id: string;
+          void_reason: string | null;
+          voided_at: string | null;
         };
         Insert: {
           attested_at?: string | null;
@@ -2338,6 +2340,8 @@ export type Database = {
           total_amount: number;
           updated_at?: string;
           user_id: string;
+          void_reason?: string | null;
+          voided_at?: string | null;
         };
         Update: {
           attested_at?: string | null;
@@ -2359,6 +2363,8 @@ export type Database = {
           total_amount?: number;
           updated_at?: string;
           user_id?: string;
+          void_reason?: string | null;
+          voided_at?: string | null;
         };
         Relationships: [
           {
@@ -3172,6 +3178,14 @@ export type Database = {
       update_provider_statistics: {
         Args: { p_provider_id: string };
         Returns: undefined;
+      };
+      void_substantiation_record: {
+        Args: { p_reason?: string; p_record_id: string };
+        Returns: {
+          amount_released: number;
+          expenses_released: number;
+          record_number: string;
+        }[];
       };
     };
     Enums: {

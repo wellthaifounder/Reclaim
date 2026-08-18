@@ -37,7 +37,13 @@
       "Bash(node:*)",
       "Bash(deno:*)",
       "Bash(vercel:*)",
-      "Bash(MSYS_NO_PATHCONV=1 docker cp \"C:/Users/OWENLA~1/AppData/Local/Temp/claude/c--Users-OwenLaurie-wellth-ai-wellth-ai/47ac8691-9805-4120-b776-cfaba17113c1/scratchpad/d6_test.sql\" supabase_db_fzmdfhdfvayaalhogskm:/tmp/d6_test.sql)"
+      "Bash(MSYS_NO_PATHCONV=1 docker cp \"C:/Users/OWENLA~1/AppData/Local/Temp/claude/c--Users-OwenLaurie-wellth-ai-wellth-ai/47ac8691-9805-4120-b776-cfaba17113c1/scratchpad/d6_test.sql\" supabase_db_fzmdfhdfvayaalhogskm:/tmp/d6_test.sql)",
+      "Bash(cd c:/Users/OwenLaurie/wellth-ai/wellth-ai && sed -n '/\\\\*\\\\*E5/,/\\\\*\\\\*E6/p' .claude/plans/bank-sync-implementation-plan.md)",
+      "Bash(MSYS_NO_PATHCONV=1 docker cp supabase/migrations/20260818120000_void_record.sql supabase_db_fzmdfhdfvayaalhogskm:/tmp/e5.sql)",
+      "Bash(MSYS_NO_PATHCONV=1 rtk docker exec supabase_db_fzmdfhdfvayaalhogskm psql -U postgres -d postgres -q -v ON_ERROR_STOP=1 -f /tmp/e5.sql)",
+      "Bash(MSYS_NO_PATHCONV=1 docker cp e5_test.sql supabase_db_fzmdfhdfvayaalhogskm:/tmp/e5_test.sql)",
+      "Bash(MSYS_NO_PATHCONV=1 rtk docker exec supabase_db_fzmdfhdfvayaalhogskm psql -U postgres -d postgres -f /tmp/e5_test.sql)",
+      "Bash(perl -ne 'print unless /^Connecting to db|^A new version of Supabase CLI|^We recommend updating/')"
     ],
     "deny": [
       "Bash(rm -rf /)",
@@ -45,6 +51,9 @@
       "Bash(*--force*)",
       "Bash(*secret*)",
       "Bash(*password*)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\OwenLaurie\\wellth-ai\\wellth-ai\\.claude\\plans"
     ]
   },
   "model": "opus",

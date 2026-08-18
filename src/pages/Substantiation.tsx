@@ -45,6 +45,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Loader2,
   ArrowLeft,
   FileText,
@@ -55,6 +65,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Banknote,
+  Undo2,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -308,6 +319,11 @@ export default function Substantiation() {
   const [attested, setAttested] = useState(false);
   const [progress, setProgress] = useState<string>("");
   const [redownloadingId, setRedownloadingId] = useState<string | null>(null);
+
+  // Workstream E5 — withdrawing a claim.
+  const [voidTarget, setVoidTarget] = useState<PastRecord | null>(null);
+  const [voidReason, setVoidReason] = useState("");
+  const [voiding, setVoiding] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -591,6 +607,69 @@ export default function Substantiation() {
       toast.error("Couldn't dismiss.");
     } finally {
       setMatchActingId(null);
+    }
+  }
+
+  // ── Withdraw a claim (Workstream E5) ─────────────────────────────────────
+
+  /**
+   * Void a claim: the custodian rejected it, or it was filed by mistake.
+   *
+   * The whole action is one database call, because it is several changes that
+   * have to happen together — the expenses come back, the claim lock lets go,
+   * the record keeps its place in history, and any deposit prompt still open
+   * against it is withdrawn. Half of that applied is worse than none: expenses
+   * released from the lock but still marked as submitted are claimable by
+   * nothing and visible on no screen.
+   */
+  async function voidRecord(record: PastRecord, reason: string) {
+    setVoiding(true);
+    try {
+      const { data, error } = await supabase.rpc("void_substantiation_record", {
+        p_record_id: record.id,
+        // Blank is fine to send: the function's NULLIF(TRIM(...)) turns an
+        // empty reason into no reason, so there is no "" to read back later.
+        p_reason: reason.trim(),
+      });
+      if (error) throw error;
+
+      const [result] = (data ?? []) as {
+        record_number: string;
+        expenses_released: number;
+        amount_released: number;
+      }[];
+      const released = result?.expenses_released ?? 0;
+
+      setPastRecords((prev) =>
+        prev.map((r) =>
+          r.id === record.id ? { ...r, status: "voided" as const } : r,
+        ),
+      );
+      setPendingMatches((prev) =>
+        prev.filter((m) => m.record_id !== record.id),
+      );
+      // The released expenses are claimable again, and the list on screen was
+      // built before they were. Reload rather than reconstruct: the database
+      // decides what is claimable, and guessing here is how the screen and the
+      // lock drift apart.
+      await load();
+
+      toast.success(
+        released > 0
+          ? `${record.record_number} withdrawn. ${released} expense${released === 1 ? "" : "s"} ($${(result?.amount_released ?? 0).toFixed(2)}) are ready to claim again.`
+          : `${record.record_number} withdrawn.`,
+      );
+    } catch (err) {
+      logError("Substantiation.voidRecord", err);
+      const message =
+        err instanceof Error && err.message.includes("VOID_REIMBURSED")
+          ? "That claim has already been paid, so its expenses can't go back into the claimable pool."
+          : "Couldn't withdraw that claim. Please try again.";
+      toast.error(message);
+    } finally {
+      setVoiding(false);
+      setVoidTarget(null);
+      setVoidReason("");
     }
   }
 
@@ -1449,8 +1528,24 @@ export default function Substantiation() {
                       )}
                       Packet
                     </Button>
+                    {/* Workstream E5: only an open claim can be withdrawn. A
+                        paid one would put money back into the claimable pool
+                        that has already arrived, and a voided one is already
+                        withdrawn — so neither offers the button at all rather
+                        than offering it and refusing. */}
                     {r.status === "generated" && (
-                      <CheckCircle2 className="h-5 w-5 text-amber-500" />
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-muted-foreground hover:text-destructive"
+                        onClick={() => {
+                          setVoidTarget(r);
+                          setVoidReason("");
+                        }}
+                      >
+                        <Undo2 className="h-3.5 w-3.5 mr-1.5" />
+                        Withdraw
+                      </Button>
                     )}
                   </div>
                 </CardContent>
@@ -1465,6 +1560,75 @@ export default function Substantiation() {
           — so you can rebuild any packet from this list at any time.
         </p>
       </div>
+
+      {/* Workstream E5 — withdrawing a claim. Confirmed rather than immediate:
+          it changes what several expenses are available for, and the number
+          below is the part the user actually needs to see before deciding. */}
+      <AlertDialog
+        open={voidTarget !== null}
+        onOpenChange={(open) => {
+          if (!open && !voiding) {
+            setVoidTarget(null);
+            setVoidReason("");
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Withdraw {voidTarget?.record_number}?
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <p>
+                  Its {voidTarget?.expense_count} expense
+                  {voidTarget?.expense_count === 1 ? "" : "s"} ($
+                  {voidTarget?.total_amount.toFixed(2)}) go back to being ready
+                  to claim, so you can put them in a new claim.
+                </p>
+                <p>
+                  The claim stays in your history with everything it contained,
+                  and you can still download its packet. Nothing is deleted.
+                </p>
+                <div className="space-y-1.5 pt-1">
+                  <Label htmlFor="void-reason" className="text-foreground">
+                    Why? (optional)
+                  </Label>
+                  <Input
+                    id="void-reason"
+                    value={voidReason}
+                    onChange={(e) => setVoidReason(e.target.value)}
+                    placeholder="e.g. custodian asked for an itemised bill"
+                    maxLength={200}
+                    disabled={voiding}
+                  />
+                  {/* Worth the extra field: a rejection revisited months later
+                      is only intelligible if the reason travelled with it. */}
+                  <p className="text-xs text-muted-foreground">
+                    Saved with the claim, so you'll know later what happened.
+                  </p>
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={voiding}>Keep it</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={voiding}
+              onClick={(e) => {
+                // The dialog closes itself on action; hold it open until the
+                // database has answered, so a failure is not hidden behind a
+                // dialog that has already dismissed.
+                e.preventDefault();
+                if (voidTarget) void voidRecord(voidTarget, voidReason);
+              }}
+            >
+              {voiding && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Withdraw claim
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AuthenticatedLayout>
   );
 }
