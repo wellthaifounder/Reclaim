@@ -142,15 +142,11 @@ export const MEDICAL_MILEAGE_RATES: readonly MileageRatePeriod[] = [
     source: "IRS Notice 2025-05",
   },
   {
-    // UNVERIFIED — carried forward from 2025. Replace with the published 2026
-    // figure and flip `confirmed` to true. Until then the entry screen tells
-    // the user the rate is provisional rather than presenting a tax number it
-    // cannot stand behind.
     start: "2026-01-01",
     end: "2026-12-31",
-    ratePerMile: 0.21,
-    confirmed: false,
-    source: "Carried forward from 2025 — 2026 notice not yet entered",
+    ratePerMile: 0.205,
+    confirmed: true,
+    source: "IRS medical mileage rate for 2026",
   },
 ] as const;
 
@@ -176,14 +172,40 @@ export function medicalMileageRate(
   );
 }
 
-/** Miles x rate, plus parking and tolls, rounded to the cent. */
+/**
+ * The rate as cents-per-mile, for display.
+ *
+ * NOT toFixed(0). The 2026 rate is 20.5 cents -- the first half-cent rate in
+ * the table -- and rounding it to a whole cent on screen tells the user an IRS
+ * figure that is not the one being applied to their claim. Whole-cent rates
+ * still render without a trailing ".0", so 21 stays "21".
+ */
+export function formatMileageRate(ratePerMile: number): string {
+  return String(Math.round(ratePerMile * 1000) / 10);
+}
+
+/**
+ * Miles x rate, plus parking and tolls, rounded to the cent.
+ *
+ * Computed in whole tenths of a cent rather than in dollars, because the 2026
+ * rate of 20.5c/mile puts every odd mileage exactly on a half cent -- 7 miles
+ * is $1.435 -- and binary floating point then breaks the tie at random. The
+ * previous `miles * rate * 100` form rounded 3 miles UP and 5 miles DOWN, from
+ * nothing but representation error. Every rate before 2026 was a whole number
+ * of cents, so this was unreachable until now.
+ *
+ * Multiplying by the rate in tenths of a cent (205, an integer) keeps the
+ * product exact for the one decimal place mileage_miles actually stores, so the
+ * half cent is a real half cent and rounds up consistently.
+ */
 export function medicalMileageAmount(
   miles: number,
   ratePerMile: number,
   parkingAndTolls = 0,
 ): number {
-  const drive = Math.round(miles * ratePerMile * 100) / 100;
-  return Math.round((drive + parkingAndTolls) * 100) / 100;
+  const rateTenthsOfCent = Math.round(ratePerMile * 1000);
+  const driveCents = Math.round((miles * rateTenthsOfCent) / 10);
+  return Math.round(driveCents + parkingAndTolls * 100) / 100;
 }
 
 // ── Current Tax Year Alias ────────────────────────────────────────────────────

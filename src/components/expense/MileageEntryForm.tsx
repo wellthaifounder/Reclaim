@@ -44,6 +44,7 @@ import { useFamilyRoster } from "@/hooks/useFamilyRoster";
 import {
   medicalMileageRate,
   medicalMileageAmount,
+  formatMileageRate,
 } from "@/lib/regulatoryLimits";
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -346,7 +347,7 @@ export function MileageEntryForm() {
                 {recurring && tripCount > 1
                   ? ` (${perTrip.toFixed(1)} x ${tripCount} trips)`
                   : ""}{" "}
-                at {(startPeriod.ratePerMile * 100).toFixed(0)}&cent;
+                at {formatMileageRate(startPeriod.ratePerMile)}&cent;
               </span>
               <span>
                 $
@@ -376,14 +377,14 @@ export function MileageEntryForm() {
               {startPeriod.confirmed ? (
                 <>
                   Using the IRS rate of{" "}
-                  {(startPeriod.ratePerMile * 100).toFixed(0)}&cent; a mile,
+                  {formatMileageRate(startPeriod.ratePerMile)}&cent; a mile,
                   which applies to care received between {startPeriod.start} and{" "}
                   {startPeriod.end} ({startPeriod.source}).
                 </>
               ) : (
                 <>
                   <strong>Provisional rate.</strong> We&rsquo;re using{" "}
-                  {(startPeriod.ratePerMile * 100).toFixed(0)}&cent; a mile,
+                  {formatMileageRate(startPeriod.ratePerMile)}&cent; a mile,
                   carried over from the previous year, because the official rate
                   for this period hasn&rsquo;t been entered yet. The rate is
                   saved with the trip, so it can be corrected later without

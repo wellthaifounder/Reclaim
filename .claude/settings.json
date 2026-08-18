@@ -1,23 +1,4 @@
 {
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Write|Edit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "npx prettier --write \"$CLAUDE_FILE_PATH\" 2>/dev/null || true"
-          }
-        ]
-      }
-    ],
-    "PreCommit": [
-      {
-        "type": "command",
-        "command": "npm run build"
-      }
-    ]
-  },
   "permissions": {
     "allow": [
       "Bash(npm run build:*)",
@@ -55,7 +36,8 @@
       "Bash(curl:*)",
       "Bash(node:*)",
       "Bash(deno:*)",
-      "Bash(vercel:*)"
+      "Bash(vercel:*)",
+      "Bash(MSYS_NO_PATHCONV=1 docker cp \"C:/Users/OWENLA~1/AppData/Local/Temp/claude/c--Users-OwenLaurie-wellth-ai-wellth-ai/47ac8691-9805-4120-b776-cfaba17113c1/scratchpad/d6_test.sql\" supabase_db_fzmdfhdfvayaalhogskm:/tmp/d6_test.sql)"
     ],
     "deny": [
       "Bash(rm -rf /)",
@@ -66,6 +48,19 @@
     ]
   },
   "model": "opus",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "npx prettier --write \"$CLAUDE_FILE_PATH\" 2>/dev/null || true"
+          }
+        ]
+      }
+    ]
+  },
   "planMode": {
     "enableByDefault": false,
     "requireForComplexTasks": true
