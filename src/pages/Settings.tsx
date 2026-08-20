@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
+import { ThemeToggleGroup } from "@/components/ThemeToggle";
 import { FamilyRosterCard } from "@/components/family/FamilyRosterCard";
 import { useRecomputeTiming } from "@/hooks/useHSAEligibility";
 import { SubscriptionManagement } from "@/components/settings/SubscriptionManagement";
@@ -398,7 +399,16 @@ const Settings = () => {
                 Manage your app experience and feature tours
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-6">
+              <div className="space-y-2">
+                <h4 className="font-medium">Appearance</h4>
+                <p className="text-sm text-muted-foreground">
+                  "System" follows your device, so Reclaim dims when your device
+                  does.
+                </p>
+                <ThemeToggleGroup />
+              </div>
+
               <div className="space-y-2">
                 <h4 className="font-medium">Feature Discovery</h4>
                 <p className="text-sm text-muted-foreground">

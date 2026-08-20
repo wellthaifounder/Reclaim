@@ -485,7 +485,7 @@ export function LinkTransactionDialog({
                                 {transaction.auto_linked ? (
                                   <Badge
                                     variant="outline"
-                                    className="text-xs bg-blue-500/10 text-blue-600 border-blue-500/20"
+                                    className="text-xs bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20"
                                   >
                                     Auto-matched
                                     {transaction.match_confidence

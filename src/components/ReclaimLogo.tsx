@@ -38,12 +38,17 @@ export const ReclaimLogo = ({
   className = "",
   showTagline = false,
 }: ReclaimLogoProps) => {
+  // The brand ink (--secondary) is a deep navy chosen against a light page.
+  // In dark mode that token is 25% lightness sitting on a 12% background, so
+  // the wordmark all but disappeared -- invisible until the theme toggle
+  // shipped and dark mode became reachable. Fall back to --foreground there,
+  // which is defined to contrast with the page in whichever theme is active.
   const textColor =
     colorMode === "white"
       ? "text-white"
       : colorMode === "monochrome"
         ? "text-current"
-        : "text-secondary";
+        : "text-secondary dark:text-foreground";
 
   const wordmarkSize =
     size === "sm"

@@ -385,7 +385,7 @@ const Bills = () => {
                             ) && (
                               <Badge
                                 variant="outline"
-                                className="bg-blue-500/10 text-blue-600 border-blue-500/20"
+                                className="bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20"
                               >
                                 Auto-matched
                               </Badge>

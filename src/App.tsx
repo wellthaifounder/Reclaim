@@ -8,6 +8,7 @@ import {
 } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { ThemeProvider } from "@/contexts/ThemeContext";
 import { SubscriptionProvider } from "@/contexts/SubscriptionContext";
 import { HSAProvider } from "@/contexts/HSAContext";
 import { OnboardingProvider } from "@/contexts/OnboardingContext";
@@ -103,229 +104,231 @@ const queryClient = new QueryClient({
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <SubscriptionProvider>
-        <HSAProvider>
-          <OnboardingProvider>
-            <DashboardLayoutProvider>
-              <Sonner />
-              <BrowserRouter>
-                <PWAInstallPrompt />
-                <PWAUpdatePrompt />
-                <CookieConsent />
-                <ErrorBoundary>
-                  <Suspense fallback={<PageLoader />}>
-                    <Routes>
-                      {/* Public routes */}
-                      <Route path="/" element={<Index />} />
-                      <Route path="/auth" element={<Auth />} />
-                      <Route path="/install" element={<Install />} />
-                      <Route path="/privacy" element={<PrivacyPolicy />} />
-                      <Route path="/terms" element={<TermsOfService />} />
+    <ThemeProvider>
+      <TooltipProvider>
+        <SubscriptionProvider>
+          <HSAProvider>
+            <OnboardingProvider>
+              <DashboardLayoutProvider>
+                <Sonner />
+                <BrowserRouter>
+                  <PWAInstallPrompt />
+                  <PWAUpdatePrompt />
+                  <CookieConsent />
+                  <ErrorBoundary>
+                    <Suspense fallback={<PageLoader />}>
+                      <Routes>
+                        {/* Public routes */}
+                        <Route path="/" element={<Index />} />
+                        <Route path="/auth" element={<Auth />} />
+                        <Route path="/install" element={<Install />} />
+                        <Route path="/privacy" element={<PrivacyPolicy />} />
+                        <Route path="/terms" element={<TermsOfService />} />
 
-                      {/* Protected routes */}
-                      <Route
-                        path="/dashboard"
-                        element={
-                          <ProtectedRoute>
-                            <ErrorBoundary>
-                              <Dashboard />
-                            </ErrorBoundary>
-                          </ProtectedRoute>
-                        }
-                      />
+                        {/* Protected routes */}
+                        <Route
+                          path="/dashboard"
+                          element={
+                            <ProtectedRoute>
+                              <ErrorBoundary>
+                                <Dashboard />
+                              </ErrorBoundary>
+                            </ProtectedRoute>
+                          }
+                        />
 
-                      {/* Reclaim Phase 5 W1: brief §9 renames Bills →
+                        {/* Reclaim Phase 5 W1: brief §9 renames Bills →
                           Expenses. /expenses is now canonical; /bills stays
                           mounted as an alias (not a redirect) for legacy
                           links + bookmarks until Phase 6 cleanup. */}
-                      <Route
-                        path="/expenses"
-                        element={
-                          <ProtectedRoute>
-                            <ErrorBoundary>
-                              <Bills />
-                            </ErrorBoundary>
-                          </ProtectedRoute>
-                        }
-                      />
-                      {/* Unified Bills Management Routes */}
-                      <Route
-                        path="/bills"
-                        element={
-                          <ProtectedRoute>
-                            <ErrorBoundary>
-                              <Bills />
-                            </ErrorBoundary>
-                          </ProtectedRoute>
-                        }
-                      />
-                      <Route
-                        path="/bills/new"
-                        element={
-                          <ProtectedRoute>
-                            <ErrorBoundary>
-                              <NewBillUpload />
-                            </ErrorBoundary>
-                          </ProtectedRoute>
-                        }
-                      />
-                      {/* /bills/upload was a duplicate of /bills/new — kept as a redirect for any external bookmarks */}
-                      <Route
-                        path="/bills/upload"
-                        element={<Navigate to="/bills/new" replace />}
-                      />
-                      <Route
-                        path="/bills/:id"
-                        element={
-                          <ProtectedRoute>
-                            <ErrorBoundary>
-                              <BillDetail />
-                            </ErrorBoundary>
-                          </ProtectedRoute>
-                        }
-                      />
+                        <Route
+                          path="/expenses"
+                          element={
+                            <ProtectedRoute>
+                              <ErrorBoundary>
+                                <Bills />
+                              </ErrorBoundary>
+                            </ProtectedRoute>
+                          }
+                        />
+                        {/* Unified Bills Management Routes */}
+                        <Route
+                          path="/bills"
+                          element={
+                            <ProtectedRoute>
+                              <ErrorBoundary>
+                                <Bills />
+                              </ErrorBoundary>
+                            </ProtectedRoute>
+                          }
+                        />
+                        <Route
+                          path="/bills/new"
+                          element={
+                            <ProtectedRoute>
+                              <ErrorBoundary>
+                                <NewBillUpload />
+                              </ErrorBoundary>
+                            </ProtectedRoute>
+                          }
+                        />
+                        {/* /bills/upload was a duplicate of /bills/new — kept as a redirect for any external bookmarks */}
+                        <Route
+                          path="/bills/upload"
+                          element={<Navigate to="/bills/new" replace />}
+                        />
+                        <Route
+                          path="/bills/:id"
+                          element={
+                            <ProtectedRoute>
+                              <ErrorBoundary>
+                                <BillDetail />
+                              </ErrorBoundary>
+                            </ProtectedRoute>
+                          }
+                        />
 
-                      {/* Workstream E1. The legacy reimbursement path is
+                        {/* Workstream E1. The legacy reimbursement path is
                           gone; these three routes redirect rather than 404.
                           They have been live long enough to be bookmarked, to
                           sit in the installed app's history, and to appear in
                           old emails — and a dead link is how a user concludes
                           their reimbursement history was deleted. */}
-                      <Route
-                        path="/reimbursement-requests"
-                        element={<Navigate to="/substantiation" replace />}
-                      />
-                      <Route
-                        path="/reimbursement/:id"
-                        element={<Navigate to="/substantiation" replace />}
-                      />
-                      <Route
-                        path="/hsa-reimbursement"
-                        element={<Navigate to="/substantiation" replace />}
-                      />
+                        <Route
+                          path="/reimbursement-requests"
+                          element={<Navigate to="/substantiation" replace />}
+                        />
+                        <Route
+                          path="/reimbursement/:id"
+                          element={<Navigate to="/substantiation" replace />}
+                        />
+                        <Route
+                          path="/hsa-reimbursement"
+                          element={<Navigate to="/substantiation" replace />}
+                        />
 
-                      {/* Transactions Route */}
-                      <Route
-                        path="/transactions"
-                        element={
-                          <ProtectedRoute>
-                            <ErrorBoundary>
-                              <Transactions />
-                            </ErrorBoundary>
-                          </ProtectedRoute>
-                        }
-                      />
-                      <Route
-                        path="/bank-accounts"
-                        element={
-                          <ProtectedRoute>
-                            <ErrorBoundary>
-                              <BankAccounts />
-                            </ErrorBoundary>
-                          </ProtectedRoute>
-                        }
-                      />
-                      {/* Reclaim Phase 2 W3: historical-import wow moment */}
-                      <Route
-                        path="/onboarding/import"
-                        element={
-                          <ProtectedRoute>
-                            <ErrorBoundary>
-                              <HistoricalImport />
-                            </ErrorBoundary>
-                          </ProtectedRoute>
-                        }
-                      />
-                      {/* Reclaim Phase 2 W4: manual expense entry fallback */}
-                      <Route
-                        path="/expenses/new"
-                        element={
-                          <ProtectedRoute>
-                            <ErrorBoundary>
-                              <ExpenseEntry />
-                            </ErrorBoundary>
-                          </ProtectedRoute>
-                        }
-                      />
-                      {/* Reclaim Phase 3: classification review + audit-trail capture */}
-                      <Route
-                        path="/review"
-                        element={
-                          <ProtectedRoute>
-                            <ErrorBoundary>
-                              <Review />
-                            </ErrorBoundary>
-                          </ProtectedRoute>
-                        }
-                      />
-                      {/* Reclaim Phase 4 W1+W2: Substantiation Record generation + SUBMITTED state */}
-                      <Route
-                        path="/substantiation"
-                        element={
-                          <ProtectedRoute>
-                            <ErrorBoundary>
-                              <Substantiation />
-                            </ErrorBoundary>
-                          </ProtectedRoute>
-                        }
-                      />
+                        {/* Transactions Route */}
+                        <Route
+                          path="/transactions"
+                          element={
+                            <ProtectedRoute>
+                              <ErrorBoundary>
+                                <Transactions />
+                              </ErrorBoundary>
+                            </ProtectedRoute>
+                          }
+                        />
+                        <Route
+                          path="/bank-accounts"
+                          element={
+                            <ProtectedRoute>
+                              <ErrorBoundary>
+                                <BankAccounts />
+                              </ErrorBoundary>
+                            </ProtectedRoute>
+                          }
+                        />
+                        {/* Reclaim Phase 2 W3: historical-import wow moment */}
+                        <Route
+                          path="/onboarding/import"
+                          element={
+                            <ProtectedRoute>
+                              <ErrorBoundary>
+                                <HistoricalImport />
+                              </ErrorBoundary>
+                            </ProtectedRoute>
+                          }
+                        />
+                        {/* Reclaim Phase 2 W4: manual expense entry fallback */}
+                        <Route
+                          path="/expenses/new"
+                          element={
+                            <ProtectedRoute>
+                              <ErrorBoundary>
+                                <ExpenseEntry />
+                              </ErrorBoundary>
+                            </ProtectedRoute>
+                          }
+                        />
+                        {/* Reclaim Phase 3: classification review + audit-trail capture */}
+                        <Route
+                          path="/review"
+                          element={
+                            <ProtectedRoute>
+                              <ErrorBoundary>
+                                <Review />
+                              </ErrorBoundary>
+                            </ProtectedRoute>
+                          }
+                        />
+                        {/* Reclaim Phase 4 W1+W2: Substantiation Record generation + SUBMITTED state */}
+                        <Route
+                          path="/substantiation"
+                          element={
+                            <ProtectedRoute>
+                              <ErrorBoundary>
+                                <Substantiation />
+                              </ErrorBoundary>
+                            </ProtectedRoute>
+                          }
+                        />
 
-                      {/* Supporting Routes */}
-                      <Route
-                        path="/documents"
-                        element={
-                          <ProtectedRoute>
-                            <ErrorBoundary>
-                              <Documents />
-                            </ErrorBoundary>
-                          </ProtectedRoute>
-                        }
-                      />
-                      <Route
-                        path="/settings"
-                        element={
-                          <ProtectedRoute>
-                            <ErrorBoundary>
-                              <Settings />
-                            </ErrorBoundary>
-                          </ProtectedRoute>
-                        }
-                      />
+                        {/* Supporting Routes */}
+                        <Route
+                          path="/documents"
+                          element={
+                            <ProtectedRoute>
+                              <ErrorBoundary>
+                                <Documents />
+                              </ErrorBoundary>
+                            </ProtectedRoute>
+                          }
+                        />
+                        <Route
+                          path="/settings"
+                          element={
+                            <ProtectedRoute>
+                              <ErrorBoundary>
+                                <Settings />
+                              </ErrorBoundary>
+                            </ProtectedRoute>
+                          }
+                        />
 
-                      {/* The tax export moved onto /substantiation, so a
+                        {/* The tax export moved onto /substantiation, so a
                           bookmarked /reports still lands on the thing the
                           user wanted rather than a 404. The retired routes
                           above get no such redirect: their features are gone,
                           not relocated, and pointing them somewhere plausible
                           would only be confusing. */}
-                      <Route
-                        path="/reports"
-                        element={<Navigate to="/substantiation" replace />}
-                      />
+                        <Route
+                          path="/reports"
+                          element={<Navigate to="/substantiation" replace />}
+                        />
 
-                      <Route
-                        path="/guide"
-                        element={
-                          <ProtectedRoute>
-                            <ErrorBoundary>
-                              <Guide />
-                            </ErrorBoundary>
-                          </ProtectedRoute>
-                        }
-                      />
+                        <Route
+                          path="/guide"
+                          element={
+                            <ProtectedRoute>
+                              <ErrorBoundary>
+                                <Guide />
+                              </ErrorBoundary>
+                            </ProtectedRoute>
+                          }
+                        />
 
-                      {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-                      <Route path="*" element={<NotFound />} />
-                    </Routes>
-                  </Suspense>
-                </ErrorBoundary>
-              </BrowserRouter>
-            </DashboardLayoutProvider>
-          </OnboardingProvider>
-        </HSAProvider>
-      </SubscriptionProvider>
-    </TooltipProvider>
+                        {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                        <Route path="*" element={<NotFound />} />
+                      </Routes>
+                    </Suspense>
+                  </ErrorBoundary>
+                </BrowserRouter>
+              </DashboardLayoutProvider>
+            </OnboardingProvider>
+          </HSAProvider>
+        </SubscriptionProvider>
+      </TooltipProvider>
+    </ThemeProvider>
   </QueryClientProvider>
 );
 

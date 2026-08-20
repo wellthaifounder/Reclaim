@@ -115,7 +115,7 @@ const Guide = () => {
               </p>
               <ol className="space-y-3">
                 <li className="flex items-start gap-3">
-                  <span className="flex items-center justify-center h-6 w-6 rounded-full bg-amber-500/20 text-amber-700 text-sm font-bold shrink-0">
+                  <span className="flex items-center justify-center h-6 w-6 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 text-sm font-bold shrink-0">
                     1
                   </span>
                   <div>
@@ -129,7 +129,7 @@ const Guide = () => {
                   </div>
                 </li>
                 <li className="flex items-start gap-3">
-                  <span className="flex items-center justify-center h-6 w-6 rounded-full bg-amber-500/20 text-amber-700 text-sm font-bold shrink-0">
+                  <span className="flex items-center justify-center h-6 w-6 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 text-sm font-bold shrink-0">
                     2
                   </span>
                   <div>
@@ -143,7 +143,7 @@ const Guide = () => {
                   </div>
                 </li>
                 <li className="flex items-start gap-3">
-                  <span className="flex items-center justify-center h-6 w-6 rounded-full bg-amber-500/20 text-amber-700 text-sm font-bold shrink-0">
+                  <span className="flex items-center justify-center h-6 w-6 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 text-sm font-bold shrink-0">
                     3
                   </span>
                   <div>
@@ -155,7 +155,7 @@ const Guide = () => {
                   </div>
                 </li>
                 <li className="flex items-start gap-3">
-                  <span className="flex items-center justify-center h-6 w-6 rounded-full bg-amber-500/20 text-amber-700 text-sm font-bold shrink-0">
+                  <span className="flex items-center justify-center h-6 w-6 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 text-sm font-bold shrink-0">
                     4
                   </span>
                   <div>

@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Link, useNavigate } from "react-router-dom";
 import { ReclaimLogo } from "./ReclaimLogo";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { Menu } from "lucide-react";
 import {
   Sheet,
@@ -98,6 +99,7 @@ export const Navigation = () => {
           role="group"
           aria-label="Authentication"
         >
+          <ThemeToggle />
           <Button
             variant="ghost"
             size="sm"

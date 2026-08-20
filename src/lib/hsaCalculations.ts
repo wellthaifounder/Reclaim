@@ -138,19 +138,21 @@ export const getPaymentStatusBadge = (
     return {
       status: "Fully Paid",
       variant: "default",
-      color: "bg-green-500/10 text-green-600 border-green-500/20",
+      color:
+        "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20",
     };
   } else if (totalPaid > 0) {
     return {
       status: `Partially Paid (${((totalPaid / totalAmount) * 100).toFixed(0)}%)`,
       variant: "secondary",
-      color: "bg-yellow-500/10 text-yellow-600 border-yellow-500/20",
+      color:
+        "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/20",
     };
   } else {
     return {
       status: "Unpaid",
       variant: "destructive",
-      color: "bg-red-500/10 text-red-600 border-red-500/20",
+      color: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20",
     };
   }
 };

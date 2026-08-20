@@ -36,7 +36,7 @@ export function AttentionBanner({ attention }: AttentionBannerProps) {
             {attention.hsaClaimable > 0 && (
               <Badge
                 variant="outline"
-                className="bg-purple-500/10 text-purple-600 border-purple-500/20"
+                className="bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20"
               >
                 ${attention.hsaClaimable.toLocaleString()} HSA claimable
               </Badge>

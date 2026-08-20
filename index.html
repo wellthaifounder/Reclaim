@@ -21,6 +21,33 @@
       content="geolocation=(), microphone=(), camera=()"
     />
 
+    <!--
+      Theme, applied before first paint.
+
+      React cannot do this: by the time it mounts, the browser has already
+      painted a white page, and a dark-mode user sees a flash of white before
+      it corrects itself. This reads the same localStorage key as
+      ThemeContext and sets the class up front. Kept deliberately tiny and
+      dependency-free -- it runs on every page load, including the offline
+      shell. Wrapped in try/catch because localStorage throws in private
+      browsing on some platforms, and a theme is not worth a blank page.
+    -->
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem("reclaim-theme");
+          var dark =
+            stored === "dark" ||
+            ((!stored || stored === "system") &&
+              window.matchMedia("(prefers-color-scheme: dark)").matches);
+          if (dark) document.documentElement.classList.add("dark");
+          document.documentElement.style.colorScheme = dark ? "dark" : "light";
+        } catch (e) {
+          /* fall through to light */
+        }
+      })();
+    </script>
+
     <title>
       Reclaim - Find unclaimed HSA reimbursements & generate IRS-ready records
     </title>

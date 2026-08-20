@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { ReclaimLogo } from "@/components/ReclaimLogo";
+import { ThemeToggle, ThemeToggleGroup } from "@/components/ThemeToggle";
 import {
   LogOut,
   Receipt,
@@ -153,6 +154,8 @@ export const AuthenticatedNav = ({
             </div>
 
             <div className="flex items-center gap-2" role="group">
+              <ThemeToggle className="hidden sm:inline-flex" />
+
               {/* Reclaim Phase 5 polish — primary CTA aligned with the
                   dashboard's "Snap a receipt" verb. Routes to the OCR wizard;
                   the wizard itself has a "log it manually" escape hatch for
@@ -249,6 +252,15 @@ export const AuthenticatedNav = ({
                         ))}
                       </div>
                     ))}
+
+                    <div className="border-t pt-4 space-y-2">
+                      <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide px-2">
+                        Appearance
+                      </h3>
+                      <div className="px-2 pb-2">
+                        <ThemeToggleGroup />
+                      </div>
+                    </div>
 
                     <div className="border-t pt-4 space-y-2">
                       <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide px-2">
