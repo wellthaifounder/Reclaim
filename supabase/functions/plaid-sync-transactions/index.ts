@@ -168,11 +168,19 @@ serve(async (req) => {
     );
 
     // ── 3. Auto-link to existing open invoices ────────────────────────────
+    // Only invoices the HSA has not already settled are candidates for
+    // auto-linking. Replaces `is_reimbursed = false`, a derived column being
+    // retired: it was false for 'not_reimbursable' too, so a bill already paid
+    // with the HSA card stayed an auto-link candidate.
     const { data: userInvoices } = await supabase
       .from("invoices")
       .select("id, vendor, amount, date, invoice_date, status")
       .eq("user_id", user.id)
-      .eq("is_reimbursed", false)
+      .not(
+        "claim_state",
+        "in",
+        "(reimbursed,reimbursed_externally,not_reimbursable)",
+      )
       .in("status", ["unpaid", "partially_paid"]);
 
     const { data: vendorAliases } = await supabase

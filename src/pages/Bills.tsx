@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -20,15 +21,9 @@ import {
   getPaymentStatusBadge,
   type PaymentTransaction,
 } from "@/lib/hsaCalculations";
-import { Link } from "react-router-dom";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
 import { withQueryTimeout } from "@/lib/queryHelpers";
-import { FF } from "@/lib/featureFlags";
-import { analytics } from "@/lib/analytics";
-import Ledger from "@/pages/Ledger";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BillsHeroMetrics } from "@/components/bills/BillsHeroMetrics";
-import { useOnboarding } from "@/contexts/OnboardingContext";
 // Bill review feature archived
 // import { BillReviewCard } from "@/components/bills/BillReviewCard";
 // import { DisputeAnalyticsDashboard } from "@/components/bills/DisputeAnalyticsDashboard";
@@ -44,48 +39,16 @@ interface Bill {
   date: string;
   amount: number;
   total_amount?: number;
-  is_hsa_eligible: boolean;
+  // Was is_hsa_eligible, a derived column being retired. The query selects *,
+  // so this arrives without a query change; 'eligible' is exactly what the old
+  // boolean meant.
+  eligibility_state:
+    Database["public"]["Enums"]["expense_eligibility_state"] | null;
   payment_transactions: BillPaymentTransaction[];
 }
 
-type BillsView = "list" | "ledger";
-
-const isBillsView = (v: string | null): v is BillsView =>
-  v === "list" || v === "ledger";
-
 const Bills = () => {
   const navigate = useNavigate();
-  const { hasSeenLedgerWorkflow } = useOnboarding();
-  const [searchParams, setSearchParams] = useSearchParams();
-
-  // Wave 4 IA-collapse experiment: when FF.BILLS_LEDGER_IA_COLLAPSE is on, the
-  // /ledger route redirects here as /bills?view=ledger and we render <Ledger
-  // embedded /> inline. With the flag off, currentView is forced to "list" and
-  // the ?view param is ignored — /ledger keeps its own standalone route.
-  const requestedView = searchParams.get("view");
-  const currentView: BillsView =
-    FF.BILLS_LEDGER_IA_COLLAPSE && isBillsView(requestedView)
-      ? requestedView
-      : "list";
-
-  // Track whichever view actually rendered (post-flag, post-fallback). Re-fire
-  // whenever the user toggles the tab so we get per-view dwell signal.
-  useEffect(() => {
-    if (!FF.BILLS_LEDGER_IA_COLLAPSE) return;
-    analytics.track({
-      type: "bills_view_selected",
-      action: currentView,
-      metadata: { view: currentView },
-    });
-  }, [currentView]);
-
-  const handleViewChange = (next: string) => {
-    if (!isBillsView(next) || next === currentView) return;
-    const sp = new URLSearchParams(searchParams);
-    if (next === "list") sp.delete("view");
-    else sp.set("view", next);
-    setSearchParams(sp, { replace: true });
-  };
 
   // Filter states
   const [searchTerm, setSearchTerm] = useState("");
@@ -171,7 +134,7 @@ const Bills = () => {
         return false;
       }
 
-      if (showOnlyHSAEligible && !bill.is_hsa_eligible) {
+      if (showOnlyHSAEligible && bill.eligibility_state !== "eligible") {
         return false;
       }
 
@@ -215,33 +178,6 @@ const Bills = () => {
     };
   }, [filteredBills]);
 
-  // The view switcher is only rendered when the IA-collapse flag is on. With
-  // the flag off, Bills only ever shows the list, so showing tabs would be
-  // misleading.
-  const viewSwitcher = FF.BILLS_LEDGER_IA_COLLAPSE ? (
-    <Tabs value={currentView} onValueChange={handleViewChange} className="mb-2">
-      <TabsList>
-        <TabsTrigger value="list">List</TabsTrigger>
-        <TabsTrigger value="ledger">Ledger</TabsTrigger>
-      </TabsList>
-    </Tabs>
-  ) : null;
-
-  // Short-circuit: when the user lands on /bills?view=ledger, render the
-  // Ledger page inline (no double AuthenticatedLayout via `embedded`). The
-  // existing Bills query has already been kicked off but the result is
-  // cached by React Query for when they switch back to the list.
-  if (currentView === "ledger") {
-    return (
-      <AuthenticatedLayout>
-        <div className="container mx-auto px-4 pt-6 max-w-7xl">
-          {viewSwitcher}
-        </div>
-        <Ledger embedded />
-      </AuthenticatedLayout>
-    );
-  }
-
   if (billsLoading) {
     return (
       <AuthenticatedLayout>
@@ -284,7 +220,6 @@ const Bills = () => {
   return (
     <AuthenticatedLayout>
       <div className="container mx-auto px-4 py-8 max-w-6xl space-y-6">
-        {viewSwitcher}
         {/* Header */}
         <div className="flex items-center justify-between sticky top-0 z-10 bg-background py-2 -mt-2">
           <div>
@@ -298,22 +233,6 @@ const Bills = () => {
             Add expense
           </Button>
         </div>
-
-        {/* Ledger nudge for new users */}
-        {!hasSeenLedgerWorkflow && (
-          <p className="text-sm text-muted-foreground">
-            After uploading, head to the{" "}
-            <Link
-              to={
-                FF.BILLS_LEDGER_IA_COLLAPSE ? "/bills?view=ledger" : "/ledger"
-              }
-              className="text-primary underline underline-offset-4 hover:text-primary/80"
-            >
-              Ledger
-            </Link>{" "}
-            to classify and organize your bills.
-          </p>
-        )}
 
         {/* Hero Metrics */}
         <BillsHeroMetrics
@@ -471,7 +390,7 @@ const Bills = () => {
                                 Auto-matched
                               </Badge>
                             )}
-                            {bill.is_hsa_eligible && (
+                            {bill.eligibility_state === "eligible" && (
                               <Badge variant="secondary">HSA Eligible</Badge>
                             )}
                           </div>

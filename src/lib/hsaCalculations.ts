@@ -1,5 +1,7 @@
 // HSA Reimbursement and Payment Strategy Calculations
 
+import type { Database } from "@/integrations/supabase/types";
+
 export interface PaymentTransaction {
   id: string;
   amount: number;
@@ -9,14 +11,17 @@ export interface PaymentTransaction {
 }
 
 // Nullability here mirrors the `invoices` row type. total_amount is nullable
-// in the DB and falls back to `amount` below; is_hsa_eligible is a generated
-// column derived from eligibility_state and is null until that is decided,
-// which reads the same as "not established as eligible" for these sums.
+// in the DB and falls back to `amount` below. eligibility_state replaces the
+// old is_hsa_eligible boolean, which was a derived column meaning exactly
+// `eligibility_state = 'eligible'`; anything else ('unknown', 'conditional',
+// 'ineligible', or null before it is decided) reads as "not established as
+// eligible" for these sums, which is how the boolean behaved.
 export interface ExpenseReport {
   id: string;
   total_amount?: number | null;
   amount: number;
-  is_hsa_eligible: boolean | null;
+  eligibility_state:
+    Database["public"]["Enums"]["expense_eligibility_state"] | null;
   vendor: string;
   category: string;
   date: string;
@@ -51,18 +56,16 @@ export const calculateHSAEligibility = (
 
   const unpaidBalance = totalInvoiced - paidViaHSA - paidViaOther;
 
+  const isEligible = expenseReport.eligibility_state === "eligible";
+
   // HSA Reimbursement Eligible = Out-of-pocket payments + Unpaid balance
   // (Assumes the expense is HSA eligible)
-  const hsaReimbursementEligible = expenseReport.is_hsa_eligible
+  const hsaReimbursementEligible = isEligible
     ? paidViaOther + unpaidBalance
     : 0;
 
-  const alreadyPaidRecoverable = expenseReport.is_hsa_eligible
-    ? paidViaOther
-    : 0;
-  const unpaidStrategicOpportunity = expenseReport.is_hsa_eligible
-    ? unpaidBalance
-    : 0;
+  const alreadyPaidRecoverable = isEligible ? paidViaOther : 0;
+  const unpaidStrategicOpportunity = isEligible ? unpaidBalance : 0;
 
   // Assume 2% average credit card rewards on out-of-pocket payments
   const potentialRewards = unpaidBalance * 0.02;

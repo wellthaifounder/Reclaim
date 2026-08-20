@@ -7,11 +7,23 @@ interface Invoice {
   amount: number;
   vendor: string;
   category: string;
-  // Generated columns derived from eligibility_state / claim_state; null
-  // until those facets are decided.
-  is_hsa_eligible: boolean | null;
-  is_reimbursed: boolean | null;
+  // The expense facets. These replace the is_hsa_eligible / is_reimbursed
+  // generated columns; null until the facets are decided.
+  eligibility_state: string | null;
+  claim_state: string | null;
 }
+
+// Has the HSA already paid for this expense, by any route?
+//
+// Three claim states mean yes: the HSA reimbursed the user, another party
+// reimbursed them, or the HSA card paid the provider directly. The old
+// is_reimbursed boolean covered only the first two, which put HSA-card spend
+// in the "unreimbursed" bucket below -- overstating, on a document someone may
+// hand to an accountant, how much they can still claim.
+const hsaHasPaid = (claimState: string | null) =>
+  claimState === "reimbursed" ||
+  claimState === "reimbursed_externally" ||
+  claimState === "not_reimbursable";
 
 interface Receipt {
   id: string;
@@ -62,10 +74,17 @@ export const generateTaxPackageReport = async (
     return false;
   };
 
-  // Filter HSA-eligible invoices
-  const hsaInvoices = data.invoices.filter((inv) => inv.is_hsa_eligible);
-  const unreimbursedInvoices = hsaInvoices.filter((inv) => !inv.is_reimbursed);
-  const reimbursedInvoices = hsaInvoices.filter((inv) => inv.is_reimbursed);
+  // Filter HSA-eligible invoices. The two buckets below are reported as a
+  // partition of this set, so every eligible expense must land in exactly one.
+  const hsaInvoices = data.invoices.filter(
+    (inv) => inv.eligibility_state === "eligible",
+  );
+  const reimbursedInvoices = hsaInvoices.filter((inv) =>
+    hsaHasPaid(inv.claim_state),
+  );
+  const unreimbursedInvoices = hsaInvoices.filter(
+    (inv) => !hsaHasPaid(inv.claim_state),
+  );
 
   // Calculate totals
   const totalQualifiedExpenses = hsaInvoices.reduce(
@@ -314,7 +333,7 @@ export const generateTaxPackageReport = async (
 
     doc.text(`$${invoice.amount.toFixed(2)}`, margin + 125, yPosition);
     doc.text(
-      invoice.is_reimbursed ? "Reimbursed" : "Unreimbursed",
+      hsaHasPaid(invoice.claim_state) ? "Reimbursed" : "Unreimbursed",
       margin + 155,
       yPosition,
     );

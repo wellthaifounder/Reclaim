@@ -34,7 +34,7 @@ export function HSAAccountPerformance() {
       ] = await Promise.all([
         supabase
           .from("invoices")
-          .select("amount, is_reimbursed, hsa_account_id")
+          .select("amount, claim_state, hsa_account_id")
           .eq("user_id", user.id)
           .in("hsa_account_id", accountIds),
         supabase
@@ -64,8 +64,16 @@ export function HSAAccountPerformance() {
           (sum, inv) => sum + Number(inv.amount),
           0,
         );
+        // Exactly what the derived is_reimbursed boolean meant. 'not_reimbursable'
+        // (HSA-card spend) is deliberately excluded: that money left the HSA
+        // directly and was never reimbursed, so counting it here would overstate
+        // how much this account has paid back.
         const reimbursed = invoices
-          .filter((inv) => inv.is_reimbursed)
+          .filter(
+            (inv) =>
+              inv.claim_state === "reimbursed" ||
+              inv.claim_state === "reimbursed_externally",
+          )
           .reduce((sum, inv) => sum + Number(inv.amount), 0);
         const unreimbursed = totalExpenses - reimbursed;
         const paymentsTotal = payments.reduce(

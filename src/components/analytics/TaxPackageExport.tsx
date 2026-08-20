@@ -39,7 +39,7 @@ export const TaxPackageExport = () => {
         .select("*")
         .gte("date", `${selectedYear}-01-01`)
         .lte("date", `${selectedYear}-12-31`)
-        .eq("is_hsa_eligible", true)
+        .eq("eligibility_state", "eligible")
         .order("date", { ascending: true });
 
       if (invoicesError) throw invoicesError;

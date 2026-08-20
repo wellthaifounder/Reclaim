@@ -58,13 +58,22 @@ export function useAttentionItems(): AttentionSummary {
               .split("T")[0],
           ),
 
-        // 4. HSA-claimable amount (HSA-eligible, not reimbursed)
+        // 4. HSA-claimable amount.
+        //
+        // Reads the facets directly rather than the derived is_hsa_eligible /
+        // is_reimbursed booleans, which were wrong here. is_reimbursed is only
+        // true for claim_state 'reimbursed'/'reimbursed_externally', so
+        // `is_reimbursed = false` also matched two kinds of money that can
+        // never be claimed: 'not_reimbursable' (already paid with the HSA card
+        // -- the double-count the brief calls out as the most important guard)
+        // and 'locked_in_request' (already committed to an open request).
+        // Claimable is exactly eligible + unclaimed.
         supabase
           .from("invoices")
           .select("amount")
           .eq("user_id", userId!)
-          .eq("is_hsa_eligible", true)
-          .eq("is_reimbursed", false),
+          .eq("eligibility_state", "eligible")
+          .eq("claim_state", "unclaimed"),
       ]);
 
       if (unreviewedResult.error)

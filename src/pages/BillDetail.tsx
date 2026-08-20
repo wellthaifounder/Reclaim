@@ -21,7 +21,7 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import { toast } from "sonner";
-import { FileText, CreditCard, Upload, Link2, Plus } from "lucide-react";
+import { FileText, CreditCard, Upload, Link2 } from "lucide-react";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
 import { SubstantiationPanel } from "@/components/expense/SubstantiationPanel";
 import { logError } from "@/utils/errorHandler";
@@ -181,7 +181,7 @@ export default function BillDetail() {
         category: bill.category,
         notes: bill.notes || "",
         invoiceNumber: bill.invoice_number || "",
-        isHsaEligible: bill.is_hsa_eligible || false,
+        isHsaEligible: bill.eligibility_state === "eligible",
       });
     }
   }, [bill, isNewBill]);
@@ -666,15 +666,14 @@ export default function BillDetail() {
                             <Link2 className="h-4 w-4 mr-2" />
                             Link Transaction
                           </Button>
-                          <Button
-                            size="sm"
-                            onClick={() =>
-                              navigate(`/payment/new?invoice=${id}`)
-                            }
-                          >
-                            <Plus className="h-4 w-4 mr-2" />
-                            Add Payment
-                          </Button>
+                          {/* "Add Payment" removed 2026-08-20 with the manual
+                              payment-entry page. The spec replaces the
+                              part-payment ledger with an editable reimbursable
+                              amount plus transaction splitting, so hand-keyed
+                              payments have no successor. Linking a real bank
+                              transaction stays -- that is the supported way to
+                              record that this bill was paid. Existing payment
+                              rows still display below. */}
                         </div>
                       </div>
 
