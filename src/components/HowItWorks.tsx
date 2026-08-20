@@ -99,9 +99,9 @@ export const HowItWorks = () => {
               </div>
               <h4 className="mb-2 text-lg font-semibold">Optimize & Save</h4>
               <p className="text-sm text-muted-foreground">
-                Use the savings calculator to model reimbursement timing. Track
-                your tax savings, and let your HSA grow tax-free until you're
-                ready to reimburse.
+                Claim now, or hold the documentation and let your HSA grow
+                tax-free for years. Either way the paper trail is ready the day
+                you decide.
               </p>
             </div>
           </div>

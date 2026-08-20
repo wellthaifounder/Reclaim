@@ -1,7 +1,7 @@
 import {
   Receipt,
-  FolderOpen,
-  Calculator,
+  Landmark,
+  ShieldCheck,
   CheckCircle2,
   PiggyBank,
   FileText,
@@ -22,16 +22,16 @@ const features = [
       "Upload bills and receipts — amounts, vendors, dates, and categories are extracted automatically so you never have to enter data by hand.",
   },
   {
-    icon: FolderOpen,
-    title: "Care Events",
+    icon: Landmark,
+    title: "Connected to Your Bank",
     description:
-      "Group related medical expenses into episodes of care. Track outstanding balances and HSA-eligible totals for each care event.",
+      "Link your accounts and Reclaim finds the medical spending automatically — including what you paid out of pocket after insurance, which a receipt alone never shows.",
   },
   {
-    icon: Calculator,
-    title: "HSA Savings Calculator",
+    icon: ShieldCheck,
+    title: "Audit-Ready Claim Packets",
     description:
-      "Model reimbursement timing to see how much your HSA could grow. Understand the long-term impact of delaying reimbursement.",
+      "One file for your custodian: every expense with its IRS Publication 502 basis, the date you confirmed it, and all supporting documents attached.",
   },
   {
     icon: CheckCircle2,
@@ -49,7 +49,7 @@ const features = [
     icon: FileText,
     title: "Organized Records",
     description:
-      "All your bills, receipts, and payments in one searchable place. Organize by care event, category, or date.",
+      "All your bills, receipts, and payments in one searchable place. Filter by patient, category, date, or tax year.",
   },
 ];
 

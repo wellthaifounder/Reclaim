@@ -98,10 +98,11 @@ export const Hero = () => {
                 aria-hidden="true"
               />
               <h3 className="font-semibold text-white mb-2 text-sm sm:text-base">
-                Group by Care Event
+                Sorted Automatically
               </h3>
               <p className="text-xs sm:text-sm text-white/80">
-                Group related expenses by episode of care or treatment
+                Bank transactions sorted into medical and not, so you only
+                review what matters
               </p>
             </div>
             <div className="rounded-lg bg-white/10 p-4 sm:p-6 backdrop-blur-sm border border-white/20 transition-all hover:bg-white/15">

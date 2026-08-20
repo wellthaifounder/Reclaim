@@ -6,7 +6,6 @@ import {
   PiggyBank,
   Upload,
   Inbox,
-  FolderHeart,
   ShieldCheck,
   ArrowRight,
   ArrowLeft,
@@ -39,11 +38,11 @@ const STEPS = [
     description:
       "To reimburse yourself from your HSA, you need documentation. Reclaim automatically creates and stores the records you need:",
     steps: [
-      { icon: Upload, label: "Upload bills and receipts" },
       { icon: Inbox, label: "Classify bank transactions as medical or not" },
+      { icon: Upload, label: "Attach the bill or receipt that proves it" },
       {
-        icon: FolderHeart,
-        label: "Group related bills into care events",
+        icon: ShieldCheck,
+        label: "Confirm it qualifies under IRS Publication 502",
       },
     ],
   },
