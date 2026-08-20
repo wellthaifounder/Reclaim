@@ -22,9 +22,15 @@ export const Hero = () => {
     rootMargin: "50px",
   });
 
+  // The four-step savings quiz this used to open was retired on 2026-08-20.
+  // Its job was to get a visitor to an estimate and then to sign-up; the app
+  // now does that with the visitor's own bank data on the historical-import
+  // screen, which is a real number instead of a guessed one. Kept as its own
+  // handler (rather than folded into handleAuthClick) so the two hero buttons
+  // stay separable in the funnel data.
   const handleCalculatorClick = () => {
     analytics.ctaClick("calculator", "hero");
-    navigate("/calculator");
+    navigate("/auth?signup=1");
   };
 
   const handleAuthClick = () => {

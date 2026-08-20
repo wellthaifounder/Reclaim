@@ -1,21 +1,21 @@
-// Reclaim Phase 5 W1 — 4-tab mobile bottom navigation.
+// Reclaim — 4-tab mobile bottom navigation.
 //
-// Replaces the Wellth-era 4-tab IA (Home / Ledger / Care Events|HSA /
-// Account) with the brief §9 Reclaim primary nav:
-//   Dashboard · Expenses · Expense Groups · Substantiation
+// Follows the spec's spine in order: Transactions is where money gets sorted
+// into medical / non-medical, Expenses is what came out of that, and Records
+// is where a claim gets built. Expense Groups was retired on 2026-08-20 with
+// the rest of the care-events surface, and Transactions took the free slot —
+// it is step one of the workflow and had been buried behind "More".
 //
 // Wellbie chat stays as its own action button — invoked via window event
 // so the layout component owns the chat instance (no double-mounting).
-// HSA-specific surfaces (HSA Calculator, HSA Claims, Reports, Transactions,
-// Documents, Bank Accounts) all live behind the sidebar's "More" group on
-// desktop and the hamburger sheet on mobile — no per-user branching on the
-// primary bottom nav anymore.
+// The remaining surfaces (Documents, Bank Accounts) live behind the sidebar's
+// "More" group on desktop and the hamburger sheet on mobile.
 
 import { NavLink } from "@/components/NavLink";
 import {
   LayoutDashboard,
   Receipt,
-  FolderHeart,
+  Wallet,
   FileText,
   MessageCircle,
 } from "lucide-react";
@@ -23,8 +23,8 @@ import { FF } from "@/lib/featureFlags";
 
 const TABS = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
+  { icon: Wallet, label: "Transactions", path: "/transactions" },
   { icon: Receipt, label: "Expenses", path: "/expenses" },
-  { icon: FolderHeart, label: "Groups", path: "/expense-groups" },
   { icon: FileText, label: "Records", path: "/substantiation" },
 ];
 

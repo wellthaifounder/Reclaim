@@ -51,16 +51,6 @@ export const Footer = () => {
             <nav aria-labelledby="footer-resources">
               <ul className="space-y-2 text-sm text-muted-foreground">
                 <li>
-                  <a href="/hsa-eligibility" className="hover:text-foreground">
-                    HSA Guide
-                  </a>
-                </li>
-                <li>
-                  <a href="/calculator" className="hover:text-foreground">
-                    Savings Calculator
-                  </a>
-                </li>
-                <li>
                   <a href="/auth" className="hover:text-foreground">
                     Sign In
                   </a>

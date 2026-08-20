@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -117,12 +116,12 @@ export const DocumentCard = ({
             </div>
           </div>
 
-          {/* Collection Link */}
+          {/* Care-event label. Was a link to /collections/:id until
+              2026-08-20, when that surface was retired; the label stays
+              because documents filed under an old care event should still
+              say so, but there is no longer a page to open. */}
           {hasCollection && (
-            <Link
-              to={`/collections/${receipt.collections!.id}`}
-              className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 bg-primary/5 hover:bg-primary/10 p-2 rounded transition-colors"
-            >
+            <div className="flex items-center gap-1 text-xs text-muted-foreground bg-muted/50 p-2 rounded">
               {receipt.collections!.color && (
                 <div
                   className="w-2.5 h-2.5 rounded-full flex-shrink-0"
@@ -131,7 +130,7 @@ export const DocumentCard = ({
               )}
               <FolderOpen className="h-3 w-3" />
               <span className="truncate">{receipt.collections!.title}</span>
-            </Link>
+            </div>
           )}
 
           {/* Bill/Payment Attachment */}

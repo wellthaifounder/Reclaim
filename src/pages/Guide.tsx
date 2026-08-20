@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import {
   Upload,
   Inbox,
-  FolderHeart,
   ShieldCheck,
   TrendingUp,
   DollarSign,
@@ -250,9 +249,9 @@ const Guide = () => {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => navigate("/ledger")}
+                      onClick={() => navigate("/transactions")}
                     >
-                      Open the Ledger
+                      Open Transactions
                       <ArrowRight className="h-3.5 w-3.5 ml-1" />
                     </Button>
                   </div>
@@ -264,43 +263,12 @@ const Guide = () => {
             <Card>
               <CardContent className="pt-6">
                 <div className="flex items-start gap-4">
-                  <div className="flex items-center justify-center h-10 w-10 rounded-full bg-purple-500/10 shrink-0">
-                    <FolderHeart className="h-5 w-5 text-purple-600" />
-                  </div>
-                  <div className="space-y-2">
-                    <h3 className="text-lg font-semibold">
-                      Step 3: Group into Care Events
-                    </h3>
-                    <p className="text-muted-foreground">
-                      Group related bills into Care Events — for example, all
-                      visits to "City Hospital" for a knee surgery. This makes
-                      it easy to see the full cost of an episode of care and
-                      generates cleaner reimbursement claims. Reclaim suggests
-                      groupings automatically when it detects related bills.
-                    </p>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => navigate("/collections")}
-                    >
-                      View Care Events
-                      <ArrowRight className="h-3.5 w-3.5 ml-1" />
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Step 4 */}
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-start gap-4">
                   <div className="flex items-center justify-center h-10 w-10 rounded-full bg-green-500/10 shrink-0">
                     <ShieldCheck className="h-5 w-5 text-green-600" />
                   </div>
                   <div className="space-y-2">
                     <h3 className="text-lg font-semibold">
-                      Step 4: Claim HSA Reimbursement
+                      Step 3: Claim HSA Reimbursement
                     </h3>
                     <p className="text-muted-foreground">
                       When you're ready — whether that's tomorrow or ten years
@@ -382,8 +350,8 @@ const Guide = () => {
 
         {/* CTA */}
         <div className="text-center py-6">
-          <Button size="lg" onClick={() => navigate("/ledger")}>
-            Get Started on the Ledger
+          <Button size="lg" onClick={() => navigate("/transactions")}>
+            Get Started with Your Transactions
             <ArrowRight className="h-4 w-4 ml-2" />
           </Button>
         </div>

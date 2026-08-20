@@ -1,26 +1,20 @@
 import { useState } from "react";
 import {
-  Calculator,
   Receipt,
   FileText,
-  TrendingUp,
   Wallet,
   Settings,
-  MessageSquare,
-  Shield,
   ChevronDown,
   ChevronRight,
-  FolderHeart,
   HelpCircle,
   LayoutDashboard,
   Building2,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { NavLink } from "@/components/NavLink";
 import { useHSA } from "@/contexts/HSAContext";
-import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { useSubscription } from "@/contexts/SubscriptionContext";
-import { Badge } from "@/components/ui/badge";
 import {
   Sidebar,
   SidebarContent,
@@ -44,7 +38,7 @@ interface AppSidebarProps {
 }
 
 interface MenuItem {
-  icon: any;
+  icon: LucideIcon;
   label: string;
   path: string;
   badgeKey: string | null;
@@ -64,12 +58,6 @@ const primaryMenuItems: MenuItem[] = [
     badgeKey: null,
   },
   { icon: Receipt, label: "Expenses", path: "/expenses", badgeKey: null },
-  {
-    icon: FolderHeart,
-    label: "Expense Groups",
-    path: "/expense-groups",
-    badgeKey: null,
-  },
   {
     icon: FileText,
     label: "Substantiation",
@@ -91,13 +79,6 @@ const moreMenuItems: MenuItem[] = [
     path: "/bank-accounts",
     badgeKey: null,
   },
-  {
-    icon: Calculator,
-    label: "HSA Calculator",
-    path: "/savings-calculator",
-    badgeKey: null,
-  },
-  { icon: TrendingUp, label: "Reports", path: "/reports", badgeKey: null },
   { icon: FileText, label: "Documents", path: "/documents", badgeKey: null },
   { icon: HelpCircle, label: "HSA Guide", path: "/guide", badgeKey: null },
 ];
@@ -106,7 +87,6 @@ export function AppSidebar({ unreviewedTransactions = 0 }: AppSidebarProps) {
   const { open } = useSidebar();
   const navigate = useNavigate();
   const { hasHSA, userIntent } = useHSA();
-  const { isAdmin } = useIsAdmin();
   const { tier } = useSubscription();
 
   // Show HSA features if user selected HSA intent or actually has an HSA
@@ -217,34 +197,8 @@ export function AppSidebar({ unreviewedTransactions = 0 }: AppSidebarProps) {
             <CollapsibleContent>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {isAdmin && (
-                    <SidebarMenuItem>
-                      <SidebarMenuButton asChild tooltip="Manage Reviews">
-                        <NavLink to="/admin/reviews">
-                          <Shield className="h-4 w-4" />
-                          {open && (
-                            <span className="flex items-center gap-2">
-                              Manage Reviews
-                              <Badge
-                                variant="secondary"
-                                className="text-[10px] px-1 py-0"
-                              >
-                                Admin
-                              </Badge>
-                            </span>
-                          )}
-                        </NavLink>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  )}
-                  <SidebarMenuItem>
-                    <SidebarMenuButton asChild tooltip="Share Your Feedback">
-                      <NavLink to="/user-reviews">
-                        <MessageSquare className="h-4 w-4" />
-                        {open && <span>Share Feedback</span>}
-                      </NavLink>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
+                  {/* "Manage Reviews" (admin) and "Share Feedback" removed
+                      2026-08-19 with the provider-reviews pages. */}
                   <SidebarMenuItem>
                     <SidebarMenuButton asChild tooltip="Settings">
                       <NavLink to="/settings">

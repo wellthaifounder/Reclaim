@@ -5,14 +5,11 @@ import { Button } from "@/components/ui/button";
 import { ReclaimLogo } from "@/components/ReclaimLogo";
 import {
   LogOut,
-  Calculator,
   Receipt,
   FileText,
   Menu,
   Settings,
   Wallet,
-  TrendingUp,
-  FolderHeart,
   LayoutDashboard,
   Building2,
   HelpCircle,
@@ -68,7 +65,6 @@ export const AuthenticatedNav = ({
       path: "/expenses",
       badge: pendingReviews,
     },
-    { icon: FolderHeart, label: "Groups", path: "/expense-groups" },
     { icon: FileText, label: "Records", path: "/substantiation" },
   ];
 
@@ -81,7 +77,6 @@ export const AuthenticatedNav = ({
       path: "/expenses",
       badge: pendingReviews,
     },
-    { icon: FolderHeart, label: "Expense Groups", path: "/expense-groups" },
     { icon: FileText, label: "Substantiation", path: "/substantiation" },
   ];
 
@@ -93,8 +88,6 @@ export const AuthenticatedNav = ({
       badge: unreviewedTransactions,
     },
     { icon: Building2, label: "Bank Accounts", path: "/bank-accounts" },
-    { icon: Calculator, label: "HSA Calculator", path: "/savings-calculator" },
-    { icon: TrendingUp, label: "Reports", path: "/reports" },
     { icon: FileText, label: "Documents", path: "/documents" },
     { icon: HelpCircle, label: "HSA Guide", path: "/guide" },
   ];

@@ -102,17 +102,6 @@ export const Navigation = () => {
             variant="ghost"
             size="sm"
             onClick={() => {
-              analytics.navigationClick("calculator");
-              navigate("/calculator");
-            }}
-            className="text-sm"
-          >
-            Savings Calculator
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
               analytics.navigationClick("sign_in");
               navigate("/auth");
             }}
@@ -198,19 +187,6 @@ export const Navigation = () => {
                     className="text-base sm:text-lg font-medium text-foreground transition-all duration-150 hover:text-primary py-2 px-3 sm:px-4 rounded-md hover:bg-accent/5"
                   >
                     Pricing
-                  </a>
-                </SheetClose>
-
-                <SheetClose asChild>
-                  <a
-                    href="/calculator"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      handleNavClick("/calculator");
-                    }}
-                    className="text-base sm:text-lg font-medium text-foreground transition-all duration-150 hover:text-primary py-2 px-3 sm:px-4 rounded-md hover:bg-accent/5"
-                  >
-                    Savings Calculator
                   </a>
                 </SheetClose>
               </div>

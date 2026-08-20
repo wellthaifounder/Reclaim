@@ -17,7 +17,6 @@ import { PWAUpdatePrompt } from "@/components/PWAUpdatePrompt";
 import { CookieConsent } from "@/components/CookieConsent";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
-import { FF } from "@/lib/featureFlags";
 import { Loader2 } from "lucide-react";
 
 // Critical pages - load immediately
@@ -26,12 +25,9 @@ import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 
 // Lazy load non-critical pages for better performance
-const Calculator = lazy(() => import("./pages/Calculator"));
 const Bills = lazy(() => import("./pages/Bills"));
 const BillDetail = lazy(() => import("./pages/BillDetail"));
 const Transactions = lazy(() => import("./pages/Transactions"));
-const PrePurchaseDecision = lazy(() => import("./pages/PrePurchaseDecision"));
-const HSAEligibility = lazy(() => import("./pages/HSAEligibility"));
 const BankAccounts = lazy(() => import("./pages/BankAccounts"));
 const HistoricalImport = lazy(() => import("./pages/HistoricalImport"));
 const ExpenseEntry = lazy(() => import("./pages/ExpenseEntry"));
@@ -40,27 +36,37 @@ const Substantiation = lazy(() => import("./pages/Substantiation"));
 const Documents = lazy(() => import("./pages/Documents"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Install = lazy(() => import("./pages/Install"));
-const Reports = lazy(() => import("./pages/Reports"));
-const TripwireSuccess = lazy(() => import("./pages/TripwireSuccess"));
-const TripwireOffer = lazy(() => import("./pages/TripwireOffer"));
-const Checkout = lazy(() => import("./pages/Checkout"));
+// /checkout removed 2026-08-19: it read a Stripe client secret from
+// sessionStorage that only the tripwire offer page ever set, so it became
+// unreachable when that page was cut. Subscription checkout is unaffected --
+// it goes through the create-checkout function to a Stripe-hosted page.
 const NewBillUpload = lazy(() => import("./pages/NewBillUpload"));
-const Ledger = lazy(() => import("./pages/Ledger"));
-// Collections pages
-const PaymentEntry = lazy(() => import("./pages/PaymentEntry"));
-const Collections = lazy(() => import("./pages/Collections"));
-const CollectionDetail = lazy(() => import("./pages/CollectionDetail"));
-const NewCollection = lazy(() => import("./pages/NewCollection"));
+// Retired 2026-08-20 (workstream F6). These belonged to the pre-bank-sync
+// product and the spec replaces rather than reuses them:
+//   Collections / CollectionDetail / NewCollection — care events. Grouping
+//     expenses by vendor is deferred past v1 until the core object model is
+//     settled, so the whole surface goes rather than half of it.
+//   Ledger — the second expense list, plus the clustering that fed care
+//     events. Its inbox queue is superseded by ReviewFeed on /transactions.
+//   Calculator — the public four-step marketing quiz.
+//   HSAEligibility — the browsable Pub 502 reference. The classifier's
+//     pub_502_rules table is the surviving source of truth.
+//   PrePurchaseDecision — the savings calculator.
+//   PaymentEntry — recorded part-payments against a bill. The spec's money
+//     model is an editable reimbursable amount plus splitting, and states
+//     "no partial-payment ledger", so this has no successor by design.
+//   Reports — its charts were cut on 2026-08-19; the tax export it wrapped
+//     now lives on /substantiation next to the claim it belongs to.
+//   WellbieRedirect — chat is deferred to v1.1 and flagged off.
 // Provider Directory removed - V2 feature
 // const ProviderDirectory = lazy(() => import("./pages/ProviderDirectory"));
 // const ProviderDetail = lazy(() => import("./pages/ProviderDetail"));
 // const ProviderTransparency = lazy(() => import("./pages/ProviderTransparency"));
-const UserReviews = lazy(() => import("./pages/UserReviews"));
-const AdminReviews = lazy(() => import("./pages/AdminReviews"));
+// Provider reviews removed 2026-08-19 (workstream F5): a ratings system is a
+// separate product and is no longer on the roadmap.
 const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
 const TermsOfService = lazy(() => import("./pages/TermsOfService"));
 const Guide = lazy(() => import("./pages/Guide"));
-const WellbieRedirect = lazy(() => import("./pages/WellbieRedirect"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 // Loading fallback
@@ -113,16 +119,6 @@ const App = () => (
                       {/* Public routes */}
                       <Route path="/" element={<Index />} />
                       <Route path="/auth" element={<Auth />} />
-                      <Route path="/calculator" element={<Calculator />} />
-                      <Route
-                        path="/tripwire-offer"
-                        element={<TripwireOffer />}
-                      />
-                      <Route
-                        path="/tripwire-success"
-                        element={<TripwireSuccess />}
-                      />
-                      <Route path="/checkout" element={<Checkout />} />
                       <Route path="/install" element={<Install />} />
                       <Route path="/privacy" element={<PrivacyPolicy />} />
                       <Route path="/terms" element={<TermsOfService />} />
@@ -190,54 +186,6 @@ const App = () => (
                         }
                       />
 
-                      {/* Decision Tool renamed to Savings Calculator (HSA only) */}
-                      <Route
-                        path="/savings-calculator"
-                        element={
-                          <ProtectedRoute>
-                            <ErrorBoundary>
-                              <PrePurchaseDecision />
-                            </ErrorBoundary>
-                          </ProtectedRoute>
-                        }
-                      />
-                      <Route
-                        path="/decision-tool"
-                        element={
-                          <ProtectedRoute>
-                            <PrePurchaseDecision />
-                          </ProtectedRoute>
-                        }
-                      />
-                      {/* Legacy alias — stale bookmarks/marketing links may still point here */}
-                      <Route
-                        path="/hsa-calculator"
-                        element={<Navigate to="/savings-calculator" replace />}
-                      />
-                      {/* Wellbie is a modal, not a page — this route opens the chat and bounces to the dashboard.
-                          Hidden for soft launch (v1.1): when off, /wellbie lands on the dashboard. */}
-                      <Route
-                        path="/wellbie"
-                        element={
-                          FF.WELLBIE_ENABLED ? (
-                            <WellbieRedirect />
-                          ) : (
-                            <Navigate to="/dashboard" replace />
-                          )
-                        }
-                      />
-
-                      {/* HSA Routes */}
-                      <Route
-                        path="/hsa-eligibility"
-                        element={
-                          <ProtectedRoute>
-                            <ErrorBoundary>
-                              <HSAEligibility />
-                            </ErrorBoundary>
-                          </ProtectedRoute>
-                        }
-                      />
                       {/* Workstream E1. The legacy reimbursement path is
                           gone; these three routes redirect rather than 404.
                           They have been live long enough to be bookmarked, to
@@ -255,28 +203,6 @@ const App = () => (
                       <Route
                         path="/hsa-reimbursement"
                         element={<Navigate to="/substantiation" replace />}
-                      />
-
-                      {/* Payment Routes */}
-                      <Route
-                        path="/payments/new"
-                        element={
-                          <ProtectedRoute>
-                            <ErrorBoundary>
-                              <PaymentEntry />
-                            </ErrorBoundary>
-                          </ProtectedRoute>
-                        }
-                      />
-                      <Route
-                        path="/payment/new"
-                        element={
-                          <ProtectedRoute>
-                            <ErrorBoundary>
-                              <PaymentEntry />
-                            </ErrorBoundary>
-                          </ProtectedRoute>
-                        }
                       />
 
                       {/* Transactions Route */}
@@ -345,51 +271,6 @@ const App = () => (
                         }
                       />
 
-                      {/* Reclaim Phase 5 W1: brief §9 renames Care Events /
-                          Collections → Expense Groups. /expense-groups is
-                          now canonical; /collections stays as alias. */}
-                      <Route
-                        path="/expense-groups"
-                        element={
-                          <ProtectedRoute>
-                            <ErrorBoundary>
-                              <Collections />
-                            </ErrorBoundary>
-                          </ProtectedRoute>
-                        }
-                      />
-                      {/* Collections Routes */}
-                      <Route
-                        path="/collections"
-                        element={
-                          <ProtectedRoute>
-                            <ErrorBoundary>
-                              <Collections />
-                            </ErrorBoundary>
-                          </ProtectedRoute>
-                        }
-                      />
-                      <Route
-                        path="/collections/new"
-                        element={
-                          <ProtectedRoute>
-                            <ErrorBoundary>
-                              <NewCollection />
-                            </ErrorBoundary>
-                          </ProtectedRoute>
-                        }
-                      />
-                      <Route
-                        path="/collections/:id"
-                        element={
-                          <ProtectedRoute>
-                            <ErrorBoundary>
-                              <CollectionDetail />
-                            </ErrorBoundary>
-                          </ProtectedRoute>
-                        }
-                      />
-
                       {/* Supporting Routes */}
                       <Route
                         path="/documents"
@@ -412,59 +293,15 @@ const App = () => (
                         }
                       />
 
+                      {/* The tax export moved onto /substantiation, so a
+                          bookmarked /reports still lands on the thing the
+                          user wanted rather than a 404. The retired routes
+                          above get no such redirect: their features are gone,
+                          not relocated, and pointing them somewhere plausible
+                          would only be confusing. */}
                       <Route
                         path="/reports"
-                        element={
-                          <ProtectedRoute>
-                            <ErrorBoundary>
-                              <Reports />
-                            </ErrorBoundary>
-                          </ProtectedRoute>
-                        }
-                      />
-
-                      {/* User Feedback */}
-                      <Route
-                        path="/user-reviews"
-                        element={
-                          <ProtectedRoute>
-                            <ErrorBoundary>
-                              <UserReviews />
-                            </ErrorBoundary>
-                          </ProtectedRoute>
-                        }
-                      />
-
-                      {/* Admin Routes */}
-                      <Route
-                        path="/admin/reviews"
-                        element={
-                          <ProtectedRoute>
-                            <ErrorBoundary>
-                              <AdminReviews />
-                            </ErrorBoundary>
-                          </ProtectedRoute>
-                        }
-                      />
-
-                      {/* Unified Ledger View. With FF.BILLS_LEDGER_IA_COLLAPSE
-                          on (Wave 4 IA-collapse experiment), /ledger 301s into
-                          /bills?view=ledger so Bills can render it inline as
-                          a tab. With the flag off, the standalone route is
-                          unchanged. */}
-                      <Route
-                        path="/ledger"
-                        element={
-                          FF.BILLS_LEDGER_IA_COLLAPSE ? (
-                            <Navigate to="/bills?view=ledger" replace />
-                          ) : (
-                            <ProtectedRoute>
-                              <ErrorBoundary>
-                                <Ledger />
-                              </ErrorBoundary>
-                            </ProtectedRoute>
-                          )
-                        }
+                        element={<Navigate to="/substantiation" replace />}
                       />
 
                       <Route

@@ -65,13 +65,18 @@ export function getNextAction(stats: DashboardStats): DashboardAction {
     };
   }
 
-  // Priority 4: Everything done
+  // Priority 4: Everything done.
+  //
+  // Pointed at /reports until 2026-08-20. That page is gone, and the nearest
+  // equivalent -- the claim list -- is already where priority 3 sends people,
+  // so this sends them to the expense list instead: with nothing outstanding,
+  // the useful thing to see is the record itself.
   return {
     priority: 4,
     title: "You're All Caught Up!",
-    description: "Great work! Review your savings or add new expenses",
-    buttonText: "View Your Savings",
-    route: "/reports",
+    description: "Great work! Review what you've tracked or add new expenses",
+    buttonText: "View Your Expenses",
+    route: "/expenses",
     icon: TrendingUp,
     timeEstimate: undefined,
   };

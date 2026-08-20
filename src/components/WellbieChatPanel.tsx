@@ -57,9 +57,8 @@ interface WellbieChatPanelProps {
 const quickActionsByPage: Record<string, string[]> = {
   "/dashboard": ["What should I do next?", "Explain my savings potential"],
   "/expenses/new": ["What documents do I need?", "Is this HSA eligible?"],
-  "/reports": ["How can I optimize my strategy?", "Explain these charts"],
   "/substantiation": ["When should I reimburse?", "What's the tax impact?"],
-  "/payment-methods": ["Which card should I use?", "How do rewards work?"],
+  "/transactions": ["Is this medical?", "Why was this categorized this way?"],
 };
 
 export const WellbieChatPanel = ({

@@ -81,6 +81,7 @@ import {
   type SubstantiationHeader,
 } from "@/lib/substantiationRecord";
 import { buildClaimPacket, type ClaimPacketReport } from "@/lib/claimPacket";
+import { TaxPackageExport } from "@/components/analytics/TaxPackageExport";
 import { useReimbursementStrategy } from "@/hooks/useReimbursementStrategy";
 import { HSA_CUSTODIANS } from "@/lib/custodianInstructions";
 
@@ -1573,6 +1574,21 @@ export default function Substantiation() {
             ))}
           </div>
         )}
+
+        {/* Tax export, moved here 2026-08-20 when /reports was retired.
+            A claim packet goes to the HSA custodian to get money back; this
+            goes to whoever does the user's taxes. Same underlying expenses,
+            different reader — so it belongs on this page, one section down
+            from the claims rather than on an analytics screen of its own. */}
+        <div className="mt-10 pt-8 border-t">
+          <h2 className="text-lg font-semibold mb-1">Tax export</h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            A year's worth of qualified expenses in one file, for your records
+            or your accountant. Separate from a claim — nothing here is sent to
+            your custodian.
+          </p>
+          <TaxPackageExport />
+        </div>
 
         <p className="text-xs text-muted-foreground mt-6 text-center max-w-md mx-auto">
           Claim packets are built on your device and never stored on Reclaim's
