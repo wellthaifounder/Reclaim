@@ -153,20 +153,10 @@ export default function BillDetail() {
 
   // Bill review feature archived - removed error fetching
 
-  // Fetch provider data
-  useQuery({
-    queryKey: ["provider-for-bill", bill?.vendor],
-    queryFn: async () => {
-      if (!bill?.vendor) return null;
-      const { data } = await supabase
-        .from("providers")
-        .select("*")
-        .ilike("name", bill.vendor)
-        .maybeSingle();
-      return data;
-    },
-    enabled: !!bill?.vendor,
-  });
+  // A provider-directory lookup used to run here. It was already inert -- the
+  // query result was never bound to anything, so it fetched a row on every
+  // bill view and threw it away. Removed 2026-08-20 with the provider
+  // directory tables it read from.
 
   // Bill review feature archived - removed AI analysis function
 

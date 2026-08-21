@@ -3,7 +3,9 @@ import { Navigation } from "@/components/Navigation";
 import { Hero } from "@/components/Hero";
 import { Features } from "@/components/Features";
 import { HowItWorks } from "@/components/HowItWorks";
-import { Testimonials } from "@/components/Testimonials";
+// Testimonials removed 2026-08-20 with the reviews tables. It read featured
+// user reviews and returned null when there were none -- which was always,
+// since nothing ever wrote one.
 import { Pricing } from "@/components/Pricing";
 import { CTA } from "@/components/CTA";
 import { Footer } from "@/components/Footer";
@@ -25,7 +27,7 @@ const Index = () => {
         <Hero />
         <Features />
         <HowItWorks />
-        <Testimonials />
+
         <Pricing />
         <CTA />
       </main>
