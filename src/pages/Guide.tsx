@@ -218,7 +218,7 @@ const Guide = () => {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => navigate("/bills/new")}
+                      onClick={() => navigate("/expenses/new")}
                     >
                       Upload a bill
                       <ArrowRight className="h-3.5 w-3.5 ml-1" />

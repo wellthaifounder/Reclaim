@@ -90,54 +90,6 @@ export type Database = {
         }
         Relationships: []
       }
-      collections: {
-        Row: {
-          color: string | null
-          created_at: string | null
-          description: string | null
-          hsa_eligible_amount: number | null
-          icon: string | null
-          id: string
-          status: Database["public"]["Enums"]["collection_status"]
-          title: string
-          total_billed: number | null
-          total_paid: number | null
-          updated_at: string | null
-          user_id: string
-          user_responsibility_override: number | null
-        }
-        Insert: {
-          color?: string | null
-          created_at?: string | null
-          description?: string | null
-          hsa_eligible_amount?: number | null
-          icon?: string | null
-          id?: string
-          status?: Database["public"]["Enums"]["collection_status"]
-          title: string
-          total_billed?: number | null
-          total_paid?: number | null
-          updated_at?: string | null
-          user_id: string
-          user_responsibility_override?: number | null
-        }
-        Update: {
-          color?: string | null
-          created_at?: string | null
-          description?: string | null
-          hsa_eligible_amount?: number | null
-          icon?: string | null
-          id?: string
-          status?: Database["public"]["Enums"]["collection_status"]
-          title?: string
-          total_billed?: number | null
-          total_paid?: number | null
-          updated_at?: string | null
-          user_id?: string
-          user_responsibility_override?: number | null
-        }
-        Relationships: []
-      }
       expense_duplicate_candidates: {
         Row: {
           confidence: number
@@ -181,25 +133,11 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "expense_duplicate_candidates_expense_a_id_fkey"
-            columns: ["expense_a_id"]
-            isOneToOne: false
-            referencedRelation: "ledger_entries"
-            referencedColumns: ["invoice_id"]
-          },
-          {
             foreignKeyName: "expense_duplicate_candidates_expense_b_id_fkey"
             columns: ["expense_b_id"]
             isOneToOne: false
             referencedRelation: "invoices"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "expense_duplicate_candidates_expense_b_id_fkey"
-            columns: ["expense_b_id"]
-            isOneToOne: false
-            referencedRelation: "ledger_entries"
-            referencedColumns: ["invoice_id"]
           },
         ]
       }
@@ -229,13 +167,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "invoices"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "expense_tags_invoice_id_fkey"
-            columns: ["invoice_id"]
-            isOneToOne: false
-            referencedRelation: "ledger_entries"
-            referencedColumns: ["invoice_id"]
           },
           {
             foreignKeyName: "expense_tags_tag_id_fkey"
@@ -338,49 +269,6 @@ export type Database = {
           },
         ]
       }
-      invoice_labels: {
-        Row: {
-          created_at: string
-          id: string
-          invoice_id: string
-          label_id: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          invoice_id: string
-          label_id: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          invoice_id?: string
-          label_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "invoice_labels_invoice_id_fkey"
-            columns: ["invoice_id"]
-            isOneToOne: false
-            referencedRelation: "invoices"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "invoice_labels_invoice_id_fkey"
-            columns: ["invoice_id"]
-            isOneToOne: false
-            referencedRelation: "ledger_entries"
-            referencedColumns: ["invoice_id"]
-          },
-          {
-            foreignKeyName: "invoice_labels_label_id_fkey"
-            columns: ["label_id"]
-            isOneToOne: false
-            referencedRelation: "labels"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       invoices: {
         Row: {
           amount: number
@@ -392,7 +280,6 @@ export type Database = {
           classification_reasoning: string | null
           classification_warnings: Json
           classified_at: string | null
-          collection_id: string | null
           confirmed_at: string | null
           created_at: string
           date: string
@@ -420,7 +307,6 @@ export type Database = {
           npi_number: string | null
           patient_id: string | null
           patient_name: string | null
-          payment_method_id: string | null
           payment_plan_installments: number | null
           payment_plan_notes: string | null
           payment_plan_total_amount: number | null
@@ -456,7 +342,6 @@ export type Database = {
           classification_reasoning?: string | null
           classification_warnings?: Json
           classified_at?: string | null
-          collection_id?: string | null
           confirmed_at?: string | null
           created_at?: string
           date: string
@@ -484,7 +369,6 @@ export type Database = {
           npi_number?: string | null
           patient_id?: string | null
           patient_name?: string | null
-          payment_method_id?: string | null
           payment_plan_installments?: number | null
           payment_plan_notes?: string | null
           payment_plan_total_amount?: number | null
@@ -520,7 +404,6 @@ export type Database = {
           classification_reasoning?: string | null
           classification_warnings?: Json
           classified_at?: string | null
-          collection_id?: string | null
           confirmed_at?: string | null
           created_at?: string
           date?: string
@@ -548,7 +431,6 @@ export type Database = {
           npi_number?: string | null
           patient_id?: string | null
           patient_name?: string | null
-          payment_method_id?: string | null
           payment_plan_installments?: number | null
           payment_plan_notes?: string | null
           payment_plan_total_amount?: number | null
@@ -576,13 +458,6 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "expenses_payment_method_id_fkey"
-            columns: ["payment_method_id"]
-            isOneToOne: false
-            referencedRelation: "payment_methods"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "expenses_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
@@ -601,13 +476,6 @@ export type Database = {
             columns: ["hsa_account_id"]
             isOneToOne: false
             referencedRelation: "hsa_accounts"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "invoices_medical_event_id_fkey"
-            columns: ["collection_id"]
-            isOneToOne: false
-            referencedRelation: "collections"
             referencedColumns: ["id"]
           },
           {
@@ -632,30 +500,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      labels: {
-        Row: {
-          color: string
-          created_at: string
-          id: string
-          name: string
-          user_id: string
-        }
-        Insert: {
-          color?: string
-          created_at?: string
-          id?: string
-          name: string
-          user_id: string
-        }
-        Update: {
-          color?: string
-          created_at?: string
-          id?: string
-          name?: string
-          user_id?: string
-        }
-        Relationships: []
       }
       matching_run_log: {
         Row: {
@@ -730,179 +574,6 @@ export type Database = {
             columns: ["default_pub_502_rule_id"]
             isOneToOne: false
             referencedRelation: "pub_502_rules"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      payment_labels: {
-        Row: {
-          created_at: string
-          id: string
-          label_id: string
-          payment_transaction_id: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          label_id: string
-          payment_transaction_id: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          label_id?: string
-          payment_transaction_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "payment_labels_label_id_fkey"
-            columns: ["label_id"]
-            isOneToOne: false
-            referencedRelation: "labels"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "payment_labels_payment_transaction_id_fkey"
-            columns: ["payment_transaction_id"]
-            isOneToOne: false
-            referencedRelation: "payment_transactions"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      payment_methods: {
-        Row: {
-          created_at: string
-          id: string
-          is_hsa_account: boolean
-          name: string
-          rewards_rate: number | null
-          type: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          is_hsa_account?: boolean
-          name: string
-          rewards_rate?: number | null
-          type: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          is_hsa_account?: boolean
-          name?: string
-          rewards_rate?: number | null
-          type?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "payment_methods_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      payment_transactions: {
-        Row: {
-          amount: number
-          auto_linked: boolean
-          auto_linked_at: string | null
-          created_at: string
-          hsa_account_id: string | null
-          id: string
-          invoice_id: string
-          is_reimbursed: boolean
-          match_confidence: number | null
-          notes: string | null
-          payment_date: string
-          payment_method_id: string | null
-          payment_source: string
-          plaid_transaction_id: string | null
-          reimbursed_date: string | null
-          transaction_id: string | null
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          amount: number
-          auto_linked?: boolean
-          auto_linked_at?: string | null
-          created_at?: string
-          hsa_account_id?: string | null
-          id?: string
-          invoice_id: string
-          is_reimbursed?: boolean
-          match_confidence?: number | null
-          notes?: string | null
-          payment_date: string
-          payment_method_id?: string | null
-          payment_source: string
-          plaid_transaction_id?: string | null
-          reimbursed_date?: string | null
-          transaction_id?: string | null
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          amount?: number
-          auto_linked?: boolean
-          auto_linked_at?: string | null
-          created_at?: string
-          hsa_account_id?: string | null
-          id?: string
-          invoice_id?: string
-          is_reimbursed?: boolean
-          match_confidence?: number | null
-          notes?: string | null
-          payment_date?: string
-          payment_method_id?: string | null
-          payment_source?: string
-          plaid_transaction_id?: string | null
-          reimbursed_date?: string | null
-          transaction_id?: string | null
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "payment_transactions_expense_report_id_fkey"
-            columns: ["invoice_id"]
-            isOneToOne: false
-            referencedRelation: "invoices"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "payment_transactions_expense_report_id_fkey"
-            columns: ["invoice_id"]
-            isOneToOne: false
-            referencedRelation: "ledger_entries"
-            referencedColumns: ["invoice_id"]
-          },
-          {
-            foreignKeyName: "payment_transactions_hsa_account_id_fkey"
-            columns: ["hsa_account_id"]
-            isOneToOne: false
-            referencedRelation: "hsa_accounts"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "payment_transactions_payment_method_id_fkey"
-            columns: ["payment_method_id"]
-            isOneToOne: false
-            referencedRelation: "payment_methods"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "payment_transactions_transaction_id_fkey"
-            columns: ["transaction_id"]
-            isOneToOne: false
-            referencedRelation: "transactions"
             referencedColumns: ["id"]
           },
         ]
@@ -1125,39 +796,6 @@ export type Database = {
         }
         Relationships: []
       }
-      receipt_labels: {
-        Row: {
-          id: string
-          label_id: string
-          receipt_id: string
-        }
-        Insert: {
-          id?: string
-          label_id: string
-          receipt_id: string
-        }
-        Update: {
-          id?: string
-          label_id?: string
-          receipt_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "receipt_labels_label_id_fkey"
-            columns: ["label_id"]
-            isOneToOne: false
-            referencedRelation: "labels"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "receipt_labels_receipt_id_fkey"
-            columns: ["receipt_id"]
-            isOneToOne: false
-            referencedRelation: "receipts"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       receipt_ocr_data: {
         Row: {
           confidence_score: number | null
@@ -1225,7 +863,6 @@ export type Database = {
       }
       receipts: {
         Row: {
-          collection_id: string | null
           description: string | null
           display_order: number | null
           document_type: string | null
@@ -1233,12 +870,10 @@ export type Database = {
           file_type: string
           id: string
           invoice_id: string | null
-          payment_transaction_id: string | null
           uploaded_at: string
           user_id: string
         }
         Insert: {
-          collection_id?: string | null
           description?: string | null
           display_order?: number | null
           document_type?: string | null
@@ -1246,12 +881,10 @@ export type Database = {
           file_type: string
           id?: string
           invoice_id?: string | null
-          payment_transaction_id?: string | null
           uploaded_at?: string
           user_id: string
         }
         Update: {
-          collection_id?: string | null
           description?: string | null
           display_order?: number | null
           document_type?: string | null
@@ -1259,7 +892,6 @@ export type Database = {
           file_type?: string
           id?: string
           invoice_id?: string | null
-          payment_transaction_id?: string | null
           uploaded_at?: string
           user_id?: string
         }
@@ -1269,27 +901,6 @@ export type Database = {
             columns: ["invoice_id"]
             isOneToOne: false
             referencedRelation: "invoices"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "receipts_expense_id_fkey"
-            columns: ["invoice_id"]
-            isOneToOne: false
-            referencedRelation: "ledger_entries"
-            referencedColumns: ["invoice_id"]
-          },
-          {
-            foreignKeyName: "receipts_medical_event_id_fkey"
-            columns: ["collection_id"]
-            isOneToOne: false
-            referencedRelation: "collections"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "receipts_payment_transaction_id_fkey"
-            columns: ["payment_transaction_id"]
-            isOneToOne: false
-            referencedRelation: "payment_transactions"
             referencedColumns: ["id"]
           },
         ]
@@ -1479,13 +1090,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "substantiation_record_items_invoice_id_fkey"
-            columns: ["invoice_id"]
-            isOneToOne: false
-            referencedRelation: "ledger_entries"
-            referencedColumns: ["invoice_id"]
-          },
-          {
             foreignKeyName: "substantiation_record_items_substantiation_record_id_fkey"
             columns: ["substantiation_record_id"]
             isOneToOne: false
@@ -1665,7 +1269,6 @@ export type Database = {
           merchant_normalized: string | null
           needs_review: boolean
           notes: string | null
-          payment_method_id: string | null
           pending_plaid_transaction_id: string | null
           pfc_confidence: string | null
           pfc_detailed: string | null
@@ -1705,7 +1308,6 @@ export type Database = {
           merchant_normalized?: string | null
           needs_review?: boolean
           notes?: string | null
-          payment_method_id?: string | null
           pending_plaid_transaction_id?: string | null
           pfc_confidence?: string | null
           pfc_detailed?: string | null
@@ -1745,7 +1347,6 @@ export type Database = {
           merchant_normalized?: string | null
           needs_review?: boolean
           notes?: string | null
-          payment_method_id?: string | null
           pending_plaid_transaction_id?: string | null
           pfc_confidence?: string | null
           pfc_detailed?: string | null
@@ -1777,20 +1378,6 @@ export type Database = {
             columns: ["invoice_id"]
             isOneToOne: false
             referencedRelation: "invoices"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "transactions_invoice_id_fkey"
-            columns: ["invoice_id"]
-            isOneToOne: false
-            referencedRelation: "ledger_entries"
-            referencedColumns: ["invoice_id"]
-          },
-          {
-            foreignKeyName: "transactions_payment_method_id_fkey"
-            columns: ["payment_method_id"]
-            isOneToOne: false
-            referencedRelation: "payment_methods"
             referencedColumns: ["id"]
           },
           {
@@ -1905,13 +1492,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "wellbie_attachments_invoice_id_fkey"
-            columns: ["invoice_id"]
-            isOneToOne: false
-            referencedRelation: "ledger_entries"
-            referencedColumns: ["invoice_id"]
-          },
-          {
             foreignKeyName: "wellbie_attachments_message_id_fkey"
             columns: ["message_id"]
             isOneToOne: false
@@ -1985,59 +1565,7 @@ export type Database = {
       }
     }
     Views: {
-      ledger_entries: {
-        Row: {
-          amount_paid: number | null
-          billed_amount: number | null
-          care_event_title: string | null
-          category: string | null
-          claim_state: Database["public"]["Enums"]["expense_claim_state"] | null
-          collection_id: string | null
-          documentation_state:
-            | Database["public"]["Enums"]["expense_documentation_state"]
-            | null
-          eligibility_state:
-            | Database["public"]["Enums"]["expense_eligibility_state"]
-            | null
-          has_auto_linked: boolean | null
-          invoice_created_at: string | null
-          invoice_date: string | null
-          invoice_id: string | null
-          invoice_notes: string | null
-          invoice_number: string | null
-          invoice_status: Database["public"]["Enums"]["invoice_status"] | null
-          latest_payment_date: string | null
-          linked_transaction_count: number | null
-          match_status: string | null
-          outstanding_balance: number | null
-          paid_via_hsa: number | null
-          paid_via_oop: number | null
-          payment_count: number | null
-          reimbursable_amount: number | null
-          reimbursed_amount: number | null
-          service_date: string | null
-          total_amount: number | null
-          total_paid: number | null
-          user_id: string | null
-          vendor: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "expenses_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "invoices_medical_event_id_fkey"
-            columns: ["collection_id"]
-            isOneToOne: false
-            referencedRelation: "collections"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
+      [_ in never]: never
     }
     Functions: {
       apply_categorization_rule: {
@@ -2077,14 +1605,6 @@ export type Database = {
       classify_patient_name: {
         Args: { p_name: string }
         Returns: Database["public"]["Enums"]["family_relationship"]
-      }
-      compute_collection_status: {
-        Args: { p_collection_id: string }
-        Returns: Database["public"]["Enums"]["collection_status"]
-      }
-      compute_invoice_status: {
-        Args: { p_invoice_id: string }
-        Returns: Database["public"]["Enums"]["invoice_status"]
       }
       confirm_deposit_match: {
         Args: { p_candidate_id: string }

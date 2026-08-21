@@ -101,21 +101,10 @@ export function AttentionBanner({ attention }: AttentionBannerProps) {
                 </Button>
               </div>
             )}
-            {attention.overdueUnpaid > 0 && (
-              <div className="flex items-center justify-between">
-                <span>
-                  {attention.overdueUnpaid} unpaid bill
-                  {attention.overdueUnpaid !== 1 ? "s" : ""} older than 30 days
-                </span>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => navigate("/expenses")}
-                >
-                  View
-                </Button>
-              </div>
-            )}
+            {/* "N unpaid bills older than 30 days" removed 2026-08-21 — see
+                the note in useAttentionItems. The column behind it stopped
+                being maintained, and the idea never applied to an expense the
+                bank has already shown as paid. */}
             {attention.hsaClaimable > 0 && (
               <div className="flex items-center justify-between">
                 <span>

@@ -129,7 +129,7 @@ export function EmptyStateOnboarding({
           <div className="space-y-3">
             <Button
               size="lg"
-              onClick={() => navigate("/bills/new")}
+              onClick={() => navigate("/expenses/new")}
               className="w-full sm:w-auto bg-accent text-accent-foreground hover:bg-accent/90"
             >
               <Upload className="h-4 w-4 mr-2" />

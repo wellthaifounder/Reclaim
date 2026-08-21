@@ -60,7 +60,6 @@ export const AttachDocumentDialog = ({
         .select("id, document_type, description, uploaded_at, file_type")
         .eq("user_id", user.id)
         .is("invoice_id", null)
-        .is("payment_transaction_id", null)
         .order("uploaded_at", { ascending: false });
 
       if (error) throw error;

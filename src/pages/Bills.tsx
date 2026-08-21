@@ -15,18 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import {
-  Plus,
-  Loader2,
-  FileText,
-  Search,
-  ClipboardCheck,
-} from "lucide-react";
-import {
-  calculateHSAEligibility,
-  getPaymentStatusBadge,
-  type PaymentTransaction,
-} from "@/lib/hsaCalculations";
+import { Plus, Loader2, FileText, Search, ClipboardCheck } from "lucide-react";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
 import { withQueryTimeout } from "@/lib/queryHelpers";
 import { BillsHeroMetrics } from "@/components/bills/BillsHeroMetrics";
@@ -35,10 +24,6 @@ import { formatDateOnly } from "@/lib/dates";
 // Bill review feature archived
 // import { BillReviewCard } from "@/components/bills/BillReviewCard";
 // import { DisputeAnalyticsDashboard } from "@/components/bills/DisputeAnalyticsDashboard";
-
-interface BillPaymentTransaction extends PaymentTransaction {
-  auto_linked?: boolean;
-}
 
 interface Bill {
   id: string;
@@ -52,7 +37,13 @@ interface Bill {
   // boolean meant.
   eligibility_state:
     Database["public"]["Enums"]["expense_eligibility_state"] | null;
-  payment_transactions: BillPaymentTransaction[];
+  // The money model from the workflow spec. The query selects *, so these
+  // arrive without a query change; they are what the summary above the list
+  // and the claim screen both count.
+  amount_paid?: number | null;
+  reimbursable_amount?: number | null;
+  reimbursed_amount?: number | null;
+  claim_state: Database["public"]["Enums"]["expense_claim_state"] | null;
 }
 
 interface BillsProps {
@@ -84,8 +75,11 @@ const Bills = ({ embedded = false }: BillsProps) => {
 
   // Filter states
   const [searchTerm, setSearchTerm] = useState("");
-  const [hideFullyReimbursed, setHideFullyReimbursed] = useState(true);
-  const [hideFullyPaid, setHideFullyPaid] = useState(true);
+  // Defaults to off. The two filters this replaces both defaulted to ON, so
+  // the list opened with expenses already hidden and no indication that it
+  // had done so -- a user who could not find something they had just added
+  // had no way to know a checkbox was the reason.
+  const [hideClaimed, setHideClaimed] = useState(false);
   const [showOnlyHSAEligible, setShowOnlyHSAEligible] = useState(false);
 
   // Fetch bills data
@@ -106,20 +100,7 @@ const Bills = ({ embedded = false }: BillsProps) => {
 
         const { data, error } = await supabase
           .from("invoices")
-          .select(
-            `
-            *,
-            payment_transactions (
-              id,
-              payment_date,
-              amount,
-              payment_source,
-              is_reimbursed,
-              reimbursed_date,
-              auto_linked
-            )
-          `,
-          )
+          .select("*")
           .eq("user_id", user.id)
           .order("date", { ascending: false })
           .limit(500) // Limit to most recent 500 bills for performance
@@ -145,24 +126,12 @@ const Bills = ({ embedded = false }: BillsProps) => {
         return false;
       }
 
-      const breakdown = calculateHSAEligibility(
-        bill,
-        bill.payment_transactions || [],
-      );
-
-      if (
-        hideFullyReimbursed &&
-        breakdown.paidViaHSA === breakdown.totalInvoiced &&
-        breakdown.totalInvoiced > 0
-      ) {
-        return false;
-      }
-
-      if (
-        hideFullyPaid &&
-        breakdown.unpaidBalance === 0 &&
-        breakdown.totalInvoiced > 0
-      ) {
+      // "Hide fully reimbursed" and "Hide fully paid" went with the payments
+      // table (2026-08-21). Both asked how much of a bill had been settled,
+      // which is not a question about an expense the bank already shows as
+      // paid. "Hide what I've already claimed" is the useful version and it
+      // reads claim_state, which is the column that actually knows.
+      if (hideClaimed && (bill.claim_state ?? "unclaimed") !== "unclaimed") {
         return false;
       }
 
@@ -172,43 +141,12 @@ const Bills = ({ embedded = false }: BillsProps) => {
 
       return true;
     });
-  }, [
-    bills,
-    searchTerm,
-    hideFullyReimbursed,
-    hideFullyPaid,
-    showOnlyHSAEligible,
-  ]);
+  }, [bills, searchTerm, hideClaimed, showOnlyHSAEligible]);
 
   // Bill review feature archived - removed review/dispute aggregations
 
-  const aggregateStats = useMemo(() => {
-    let totalInvoiced = 0;
-    let totalPaidHSA = 0;
-    let totalPaidOther = 0;
-    let totalUnpaid = 0;
-    let totalHSAEligible = 0;
-
-    filteredBills.forEach((bill) => {
-      const breakdown = calculateHSAEligibility(
-        bill,
-        bill.payment_transactions || [],
-      );
-      totalInvoiced += breakdown.totalInvoiced;
-      totalPaidHSA += breakdown.paidViaHSA;
-      totalPaidOther += breakdown.paidViaOther;
-      totalUnpaid += breakdown.unpaidBalance;
-      totalHSAEligible += breakdown.hsaReimbursementEligible;
-    });
-
-    return {
-      totalInvoiced,
-      totalPaidHSA,
-      totalPaidOther,
-      totalUnpaid,
-      totalHSAEligible,
-    };
-  }, [filteredBills]);
+  // The summary counts what is on screen, so it responds to the filters
+  // above it rather than quietly reporting a different population.
 
   if (billsLoading) {
     return (
@@ -219,7 +157,7 @@ const Bills = ({ embedded = false }: BillsProps) => {
           aria-live="polite"
           aria-busy="true"
         >
-          <span className="sr-only">Loading your bills…</span>
+          <span className="sr-only">Loading your expenses…</span>
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
       </Shell>
@@ -237,7 +175,7 @@ const Bills = ({ embedded = false }: BillsProps) => {
             <CardContent className="text-center py-12 space-y-3">
               <FileText className="h-12 w-12 mx-auto text-muted-foreground" />
               <p className="text-muted-foreground">
-                We had trouble loading your bills.
+                We had trouble loading your expenses.
               </p>
               <Button variant="outline" onClick={() => refetchBills()}>
                 Try again
@@ -265,10 +203,10 @@ const Bills = ({ embedded = false }: BillsProps) => {
             <div>
               <h1 className="text-3xl font-bold mb-1">Expenses</h1>
               <p className="text-muted-foreground text-sm">
-                Track and manage your medical expenses
+                Everything you have spent on care, and how close each is to money back
               </p>
             </div>
-            <Button onClick={() => navigate("/bills/new")}>
+            <Button onClick={() => navigate("/expenses/new")}>
               <Plus className="h-4 w-4 mr-2" />
               Add expense
             </Button>
@@ -276,12 +214,7 @@ const Bills = ({ embedded = false }: BillsProps) => {
         )}
 
         {/* Hero Metrics */}
-        <BillsHeroMetrics
-          totalBilled={aggregateStats.totalInvoiced}
-          paidViaHSA={aggregateStats.totalPaidHSA}
-          paidOther={aggregateStats.totalPaidOther}
-          unpaidBalance={aggregateStats.totalUnpaid}
-        />
+        <BillsHeroMetrics rows={filteredBills} />
 
         {/* Bills List */}
         <div className="space-y-4">
@@ -290,7 +223,7 @@ const Bills = ({ embedded = false }: BillsProps) => {
             <CardHeader>
               <CardTitle>Filters</CardTitle>
               <CardDescription>
-                Customize which bills to display
+                Customize which expenses to display
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -303,29 +236,17 @@ const Bills = ({ embedded = false }: BillsProps) => {
                   className="pl-9"
                 />
               </div>
-              <div className="grid gap-4 md:grid-cols-3">
+              <div className="grid gap-4 md:grid-cols-2">
                 <div className="flex items-center space-x-2">
                   <Checkbox
-                    id="hideReimbursed"
-                    checked={hideFullyReimbursed}
+                    id="hideClaimed"
+                    checked={hideClaimed}
                     onCheckedChange={(checked) =>
-                      setHideFullyReimbursed(checked as boolean)
+                      setHideClaimed(checked as boolean)
                     }
                   />
-                  <Label htmlFor="hideReimbursed" className="cursor-pointer">
-                    Hide Fully Reimbursed
-                  </Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="hidePaid"
-                    checked={hideFullyPaid}
-                    onCheckedChange={(checked) =>
-                      setHideFullyPaid(checked as boolean)
-                    }
-                  />
-                  <Label htmlFor="hidePaid" className="cursor-pointer">
-                    Hide Fully Paid
+                  <Label htmlFor="hideClaimed" className="cursor-pointer">
+                    Hide what I've already claimed
                   </Label>
                 </div>
                 <div className="flex items-center space-x-2">
@@ -337,7 +258,7 @@ const Bills = ({ embedded = false }: BillsProps) => {
                     }
                   />
                   <Label htmlFor="hsaOnly" className="cursor-pointer">
-                    HSA Eligible Only
+                    Only show what's eligible
                   </Label>
                 </div>
               </div>
@@ -348,7 +269,7 @@ const Bills = ({ embedded = false }: BillsProps) => {
             <CardHeader>
               <div className="flex justify-between items-center">
                 <CardTitle>All Expenses</CardTitle>
-                <Button onClick={() => navigate("/bills/new")}>
+                <Button onClick={() => navigate("/expenses/new")}>
                   <Plus className="h-4 w-4 mr-2" />
                   Add expense
                 </Button>
@@ -359,11 +280,11 @@ const Bills = ({ embedded = false }: BillsProps) => {
                 <div className="text-center py-12">
                   <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                   <p className="text-muted-foreground mb-1">
-                    No bills match your current filters
+                    No expenses match your current filters
                   </p>
                   <p className="text-sm text-muted-foreground mb-4">
                     {showOnlyHSAEligible
-                      ? "Try turning off the HSA-eligible filter to see all bills."
+                      ? "Turn off the eligibility filter to see everything."
                       : searchTerm
                         ? `No results for "${searchTerm}". Try a different search term.`
                         : "Try adjusting your filter settings."}
@@ -374,8 +295,7 @@ const Bills = ({ embedded = false }: BillsProps) => {
                     onClick={() => {
                       setSearchTerm("");
                       setShowOnlyHSAEligible(false);
-                      setHideFullyReimbursed(false);
-                      setHideFullyPaid(false);
+                      setHideClaimed(false);
                     }}
                   >
                     Clear all filters
@@ -393,8 +313,7 @@ const Bills = ({ embedded = false }: BillsProps) => {
                         <div>
                           <h4 className="font-medium">{bill.vendor}</h4>
                           <p className="text-sm text-muted-foreground">
-                            {bill.category} •{" "}
-                            {formatDateOnly(bill.date)}
+                            {bill.category} • {formatDateOnly(bill.date)}
                           </p>
                           {/* Substantiating is the common errand on this list,
                               so it gets its own control rather than sitting one
@@ -417,38 +336,43 @@ const Bills = ({ embedded = false }: BillsProps) => {
                           <p className="font-semibold">
                             ${Number(bill.amount).toFixed(2)}
                           </p>
+                          {/* The "Fully Paid / Partially Paid / Unpaid" badge
+                              and the "Auto-matched" badge both came off the
+                              payments table and went with it (2026-08-21).
+                              The first would have marked every expense
+                              "Unpaid" in red once that table was empty, which
+                              is the opposite of the truth — the money is gone,
+                              that is why the expense exists. What the row
+                              needs to say is how close this is to being money
+                              back, so it says that instead. */}
                           <div className="flex items-center gap-1 justify-end mt-1">
-                            {(() => {
-                              const breakdown = calculateHSAEligibility(
-                                bill,
-                                bill.payment_transactions || [],
-                              );
-                              const badge = getPaymentStatusBadge(
-                                breakdown.totalInvoiced,
-                                breakdown.paidViaHSA,
-                                breakdown.paidViaOther,
-                              );
-                              return (
-                                <Badge
-                                  variant="outline"
-                                  className={badge.color}
-                                >
-                                  {badge.status}
-                                </Badge>
-                              );
-                            })()}
-                            {bill.payment_transactions?.some(
-                              (pt) => pt.auto_linked,
-                            ) && (
+                            {(bill.claim_state ?? "unclaimed") !==
+                            "unclaimed" ? (
                               <Badge
                                 variant="outline"
-                                className="bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20"
+                                className="bg-muted text-muted-foreground"
                               >
-                                Auto-matched
+                                {bill.claim_state === "reimbursed" ||
+                                bill.claim_state === "reimbursed_externally"
+                                  ? "Reimbursed"
+                                  : bill.claim_state === "not_reimbursable"
+                                    ? "HSA card"
+                                    : "In a claim"}
                               </Badge>
-                            )}
-                            {bill.eligibility_state === "eligible" && (
-                              <Badge variant="secondary">HSA Eligible</Badge>
+                            ) : bill.eligibility_state === "eligible" ? (
+                              <Badge
+                                variant="outline"
+                                className="bg-primary/10 text-primary border-primary/20"
+                              >
+                                Ready to claim
+                              </Badge>
+                            ) : (
+                              <Badge
+                                variant="outline"
+                                className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                              >
+                                Needs work
+                              </Badge>
                             )}
                           </div>
                         </div>

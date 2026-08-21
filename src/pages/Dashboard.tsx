@@ -203,7 +203,7 @@ export default function Dashboard() {
         <div className="grid grid-cols-2 gap-2">
           <Button
             variant="outline"
-            onClick={() => navigate("/bills/new")}
+            onClick={() => navigate("/expenses/new")}
             className="justify-center"
           >
             <Camera className="h-4 w-4 mr-2" />

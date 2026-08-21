@@ -11,7 +11,6 @@ export interface Transaction {
   category?: string | null;
   is_hsa_eligible?: boolean | null;
   notes?: string | null;
-  payment_method_id?: string | null;
   invoice_id?: string | null;
   // Rule keys, persisted as of 20260815120000.
   merchant_entity_id?: string | null;

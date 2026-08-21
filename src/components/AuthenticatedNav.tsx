@@ -175,7 +175,7 @@ export const AuthenticatedNav = ({
               <Button
                 variant="default"
                 size="sm"
-                onClick={() => navigate("/bills/new")}
+                onClick={() => navigate("/expenses/new")}
                 className="flex items-center gap-2 bg-accent text-accent-foreground hover:bg-accent/90"
                 aria-label="Snap a receipt to log an expense"
               >

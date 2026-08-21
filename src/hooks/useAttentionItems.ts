@@ -8,7 +8,6 @@ export interface AttentionSummary {
   totalCount: number;
   unreviewedTransactions: number;
   unlinkedMedical: number;
-  overdueUnpaid: number;
   hsaClaimable: number;
   isShoebox: boolean;
   isLoading: boolean;
@@ -24,18 +23,24 @@ export function useAttentionItems(): AttentionSummary {
     enabled: !!userId,
     queryFn: async () => {
       // Run all counts in parallel
-      const [
-        unreviewedResult,
-        unlinkedMedicalResult,
-        overdueUnpaidResult,
-        hsaClaimableResult,
-      ] = await Promise.all([
+      const [unreviewedResult, unlinkedMedicalResult, hsaClaimableResult] =
+        await Promise.all([
         // 1. Unreviewed transactions (needs_review = true)
         supabase
           .from("transactions")
           .select("id", { count: "exact", head: true })
           .eq("user_id", userId!)
           .eq("needs_review", true),
+
+        // "Unpaid bills older than 30 days" removed 2026-08-21.
+        //
+        // It counted invoices.status = 'unpaid'. That column was maintained by
+        // a trigger on the payments table, which is gone -- so the column now
+        // sits at its default of 'unpaid' for every expense forever, and this
+        // counter would have put the user's entire expense history in the
+        // nav badge as overdue work. The idea was wrong here anyway: an
+        // expense exists because the bank recorded the money leaving, so
+        // "unpaid" describes none of them.
 
         // 2. Unlinked medical transactions
         supabase
@@ -45,18 +50,6 @@ export function useAttentionItems(): AttentionSummary {
           .eq("is_medical", true)
           .eq("reconciliation_status", "unlinked"),
 
-        // 3. Unpaid invoices older than 30 days
-        supabase
-          .from("invoices")
-          .select("id", { count: "exact", head: true })
-          .eq("user_id", userId!)
-          .eq("status", "unpaid")
-          .lt(
-            "date",
-            new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
-              .toISOString()
-              .split("T")[0],
-          ),
 
         // 4. HSA-claimable amount.
         //
@@ -80,8 +73,6 @@ export function useAttentionItems(): AttentionSummary {
         logError("Attention: unreviewed query", unreviewedResult.error);
       if (unlinkedMedicalResult.error)
         logError("Attention: unlinked query", unlinkedMedicalResult.error);
-      if (overdueUnpaidResult.error)
-        logError("Attention: overdue query", overdueUnpaidResult.error);
       if (hsaClaimableResult.error)
         logError("Attention: HSA query", hsaClaimableResult.error);
 
@@ -93,7 +84,6 @@ export function useAttentionItems(): AttentionSummary {
       return {
         unreviewedTransactions: unreviewedResult.count ?? 0,
         unlinkedMedical: unlinkedMedicalResult.count ?? 0,
-        overdueUnpaid: overdueUnpaidResult.count ?? 0,
         hsaClaimable,
       };
     },
@@ -102,7 +92,6 @@ export function useAttentionItems(): AttentionSummary {
 
   const unreviewedTransactions = data?.unreviewedTransactions ?? 0;
   const unlinkedMedical = data?.unlinkedMedical ?? 0;
-  const overdueUnpaid = data?.overdueUnpaid ?? 0;
 
   // Workstream E6. A shoebox user has deliberately chosen not to claim, so
   // "$12,400 ready to claim" with a Claim button is not a helpful nudge — it
@@ -117,10 +106,9 @@ export function useAttentionItems(): AttentionSummary {
   const hsaClaimable = isShoebox ? 0 : (data?.hsaClaimable ?? 0);
 
   return {
-    totalCount: unreviewedTransactions + unlinkedMedical + overdueUnpaid,
+    totalCount: unreviewedTransactions + unlinkedMedical,
     unreviewedTransactions,
     unlinkedMedical,
-    overdueUnpaid,
     hsaClaimable,
     isShoebox,
     isLoading: isLoading || strategyLoading,

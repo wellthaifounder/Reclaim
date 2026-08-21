@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,9 +13,7 @@ import {
   TransactionCard,
   type TransactionCardProps,
 } from "@/components/transactions/TransactionCard";
-import { TransactionDetailDialog } from "@/components/transactions/TransactionDetailDialog";
 import { TransactionInlineDetail } from "@/components/transactions/TransactionInlineDetail";
-import { QuickAddTransactionDialog } from "@/components/transactions/QuickAddTransactionDialog";
 import { ReviewFeed } from "@/components/transactions/ReviewFeed";
 import { DuplicateWarnings } from "@/components/transactions/DuplicateWarnings";
 import {
@@ -36,24 +34,17 @@ import { MissingHSADateBanner } from "@/components/dashboard/MissingHSADateBanne
 import { TransactionsSkeleton } from "@/components/skeletons/TransactionsSkeleton";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { logError } from "@/utils/errorHandler";
-import { LinkTransactionDialog } from "@/components/bills/LinkTransactionDialog";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Database } from "@/integrations/supabase/types";
 
 // Derived from the generated row type rather than hand-written. The previous
 // hand-written copy had drifted: it declared category/is_medical/needs_review
 // as non-null when the DB allows null, and predated plaid_account_id and
 // signed_amount, so it silently disagreed with every child that takes a row.
+// The HSA flag comes from the account the charge landed on, not from a
+// hand-maintained "payment method" record (2026-08-21). See fetchTransactions.
 type Transaction = Database["public"]["Tables"]["transactions"]["Row"] & {
-  payment_methods?: {
-    is_hsa_account: boolean;
+  plaid_accounts?: {
+    is_hsa: boolean | null;
   } | null;
 };
 
@@ -64,13 +55,9 @@ export default function Transactions() {
   >([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedTransaction, setSelectedTransaction] =
-    useState<Transaction | null>(null);
   const [expandedTransactionId, setExpandedTransactionId] = useState<
     string | null
   >(null);
-  const [detailDialogOpen, setDetailDialogOpen] = useState(false);
-  const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [splitDialogOpen, setSplitDialogOpen] = useState(false);
   const [transactionToSplit, setTransactionToSplit] =
     useState<Transaction | null>(null);
@@ -90,6 +77,7 @@ export default function Transactions() {
   // parameter, so "Review transactions" quietly dropped people on the All tab
   // instead of the queue they asked for. Kept in the URL rather than state
   // alone so the tab survives a refresh and can be linked to.
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const TABS = ["review", "all", "medical", "non-medical", "to-claim"];
   const requestedTab = searchParams.get("tab");
@@ -104,24 +92,6 @@ export default function Transactions() {
   };
   const [advancedFilters, setAdvancedFilters] = useState<FilterCriteria>({});
   const [hsaOpenedDate, setHsaOpenedDate] = useState<string | null>(null);
-  const [invoicePickerOpen, setInvoicePickerOpen] = useState(false);
-  const [linkDialogOpen, setLinkDialogOpen] = useState(false);
-  const [linkTargetInvoice, setLinkTargetInvoice] = useState<{
-    id: string;
-    vendor: string;
-    amount: number;
-    total_amount: number;
-    date: string;
-  } | null>(null);
-  const [availableInvoices, setAvailableInvoices] = useState<
-    {
-      id: string;
-      vendor: string;
-      amount: number;
-      total_amount: number;
-      date: string;
-    }[]
-  >([]);
 
   useEffect(() => {
     checkAuth();
@@ -192,13 +162,27 @@ export default function Transactions() {
   const fetchTransactions = async () => {
     setLoading(true);
     try {
+      // "Paid with the HSA card" was reading the wrong table (2026-08-21).
+      //
+      // This joined `payment_methods`, a list the user typed in by hand on a
+      // settings screen. Bank sync never fills `payment_method_id` -- it fills
+      // `plaid_account_id` -- so on every imported transaction the join came
+      // back empty and the "HSA card" badge never appeared, no matter which
+      // card paid.
+      //
+      // That badge is not decoration. Money spent straight from the HSA card
+      // has already had its tax break; claiming it again is the double-dip the
+      // IRS cares most about. The sync itself has always had this right --
+      // it reads `plaid_accounts.is_hsa` and marks those expenses
+      // not_reimbursable at capture -- so the ledger was correct while the
+      // screen said otherwise. Now they read the same column.
       const { data, error } = await supabase
         .from("transactions")
         .select(
           `
           *,
-          payment_methods (
-            is_hsa_account
+          plaid_accounts (
+            is_hsa
           )
         `,
         )
@@ -359,42 +343,14 @@ export default function Transactions() {
     }
   };
 
-  const handleLinkToInvoice = async (transaction: Transaction) => {
-    setSelectedTransaction(transaction);
-    try {
-      const { data, error } = await supabase
-        .from("invoices")
-        .select("id, vendor, amount, total_amount, date")
-        .order("date", { ascending: false })
-        .limit(200);
-      if (error) throw error;
-      setAvailableInvoices(
-        (data || []).map((inv) => ({
-          id: inv.id,
-          vendor: inv.vendor,
-          amount: Number(inv.amount),
-          total_amount: Number(inv.total_amount ?? inv.amount),
-          date: inv.date,
-        })),
-      );
-      setInvoicePickerOpen(true);
-    } catch (error) {
-      logError("Error loading invoices for linking:", error);
-      toast.error("Failed to load bills");
-    }
-  };
-
-  const handleInvoiceSelected = (invoice: {
-    id: string;
-    vendor: string;
-    amount: number;
-    total_amount: number;
-    date: string;
-  }) => {
-    setLinkTargetInvoice(invoice);
-    setInvoicePickerOpen(false);
-    setLinkDialogOpen(true);
-  };
+  // "Link to a bill" removed 2026-08-21.
+  //
+  // It opened a picker of every expense on file and let the user attach this
+  // transaction to one of them, recording the attachment in a second payment
+  // table. That is a document hunting for its own transaction, which the
+  // workflow spec defers past v1 -- and it competed with the link the sync
+  // already makes for itself when it turns a medical transaction into an
+  // expense. Two links, written by different code, that could disagree.
 
   const handleIgnore = async (transaction: Transaction) => {
     try {
@@ -559,7 +515,10 @@ export default function Transactions() {
                 Decide what's medical, then get it documented and claimed
               </p>
             </div>
-            <Button variant="outline" onClick={() => setAddDialogOpen(true)}>
+            {/* Was a dialog that wrote a bare transaction with no patient and
+                no date of service -- the two things a claim is refused for
+                lacking. It now goes to the one entry form, which asks. */}
+            <Button variant="outline" onClick={() => navigate("/expenses/new")}>
               <Plus className="mr-2 h-4 w-4" />
               Add manually
             </Button>
@@ -671,7 +630,7 @@ export default function Transactions() {
                 <Card className="p-12 text-center">
                   <p className="text-muted-foreground">Nothing here yet</p>
                   <Button
-                    onClick={() => setAddDialogOpen(true)}
+                    onClick={() => navigate("/expenses/new")}
                     variant="outline"
                     className="mt-4"
                   >
@@ -707,7 +666,7 @@ export default function Transactions() {
                           }
                           isHsaEligible={transaction.is_hsa_eligible ?? false}
                           isFromHsaAccount={
-                            transaction.payment_methods?.is_hsa_account || false
+                            transaction.plaid_accounts?.is_hsa || false
                           }
                           isSplit={transaction.is_split ?? false}
                           classificationExplanation={
@@ -722,9 +681,6 @@ export default function Transactions() {
                           splitParentId={transaction.split_parent_id}
                           onViewDetails={() => handleViewDetails(transaction)}
                           onMarkMedical={() => handleMarkMedical(transaction)}
-                          onLinkToInvoice={() =>
-                            handleLinkToInvoice(transaction)
-                          }
                           onToggleMedical={() =>
                             handleToggleMedical(transaction)
                           }
@@ -756,23 +712,10 @@ export default function Transactions() {
           </Tabs>
         </div>
 
-        <TransactionDetailDialog
-          open={detailDialogOpen}
-          onOpenChange={setDetailDialogOpen}
-          transaction={selectedTransaction}
-          onUpdate={fetchTransactions}
-          onLinkToInvoice={() => {
-            if (selectedTransaction) {
-              handleLinkToInvoice(selectedTransaction);
-            }
-          }}
-        />
-
-        <QuickAddTransactionDialog
-          open={addDialogOpen}
-          onOpenChange={setAddDialogOpen}
-          onSuccess={fetchTransactions}
-        />
+        {/* TransactionDetailDialog removed 2026-08-21: nothing had set its
+            open flag since clicking a row started expanding the row in place
+            instead, so it had quietly become a dialog that could not be
+            opened. TransactionInlineDetail above is the live surface. */}
 
         {transactionToSplit && (
           <TransactionSplitDialog
@@ -806,52 +749,6 @@ export default function Transactions() {
           candidate={ruleCandidate}
           onOpenChange={(open) => !open && setRuleCandidate(null)}
           onCreated={fetchTransactions}
-        />
-
-        {/* Invoice picker — step 1 of transaction linking */}
-        <Dialog open={invoicePickerOpen} onOpenChange={setInvoicePickerOpen}>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>Select a Bill to Link</DialogTitle>
-              <DialogDescription>
-                Choose which bill to link this transaction to.
-              </DialogDescription>
-            </DialogHeader>
-            <ScrollArea className="max-h-80">
-              <div className="space-y-2 pr-2">
-                {availableInvoices.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-4">
-                    No bills found
-                  </p>
-                ) : (
-                  availableInvoices.map((invoice) => (
-                    <button
-                      key={invoice.id}
-                      onClick={() => handleInvoiceSelected(invoice)}
-                      className="w-full text-left p-3 rounded-lg border hover:bg-accent/50 transition-colors"
-                    >
-                      <p className="font-medium text-sm">{invoice.vendor}</p>
-                      <p className="text-xs text-muted-foreground">
-                        ${invoice.total_amount.toFixed(2)} ·{" "}
-                        {new Date(invoice.date).toLocaleDateString()}
-                      </p>
-                    </button>
-                  ))
-                )}
-              </div>
-            </ScrollArea>
-          </DialogContent>
-        </Dialog>
-
-        {/* Link transaction dialog — step 2 */}
-        <LinkTransactionDialog
-          open={linkDialogOpen}
-          onOpenChange={(open) => {
-            setLinkDialogOpen(open);
-            if (!open) fetchTransactions();
-          }}
-          invoice={linkTargetInvoice}
-          onSuccess={fetchTransactions}
         />
       </AuthenticatedLayout>
     </ErrorBoundary>

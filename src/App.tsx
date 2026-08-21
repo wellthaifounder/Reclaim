@@ -43,7 +43,8 @@ const Install = lazy(() => import("./pages/Install"));
 // sessionStorage that only the tripwire offer page ever set, so it became
 // unreachable when that page was cut. Subscription checkout is unaffected --
 // it goes through the create-checkout function to a Stripe-hosted page.
-const NewBillUpload = lazy(() => import("./pages/NewBillUpload"));
+// /bills/new (NewBillUpload + BillUploadWizard) retired 2026-08-21: it was the
+// third way to create an expense. See the note on /bills/new below.
 // Retired 2026-08-20 (workstream F6). These belonged to the pre-bank-sync
 // product and the spec replaces rather than reuses them:
 //   Collections / CollectionDetail / NewCollection — care events. Grouping
@@ -173,20 +174,33 @@ const App = () => (
                           path="/transactions"
                           element={<Navigate to="/expenses" replace />}
                         />
+                        {/* One way in, one way out (2026-08-21).
+
+                          There were three ways to create an expense:
+                          /bills/new ran a five-step upload wizard,
+                          "Add manually" on the expense list opened a dialog
+                          that wrote a *transaction* instead of an expense,
+                          and /expenses/new wrote the expense directly. Three
+                          buttons, three different records, no way for the
+                          person clicking to know which they were getting.
+
+                          /expenses/new survives because it is the only one
+                          that asks for the things an audit needs — patient
+                          from the family roster, date of service separate
+                          from date of payment — and the only one that can
+                          record mileage, which has no transaction at all. It
+                          absorbed the wizard's receipt scanning, so nothing
+                          the wizard did is lost.
+
+                          Both old URLs redirect: /bills/new was linked from
+                          eight places in the app and from onboarding email. */}
                         <Route
                           path="/bills/new"
-                          element={
-                            <ProtectedRoute>
-                              <ErrorBoundary>
-                                <NewBillUpload />
-                              </ErrorBoundary>
-                            </ProtectedRoute>
-                          }
+                          element={<Navigate to="/expenses/new" replace />}
                         />
-                        {/* /bills/upload was a duplicate of /bills/new — kept as a redirect for any external bookmarks */}
                         <Route
                           path="/bills/upload"
-                          element={<Navigate to="/bills/new" replace />}
+                          element={<Navigate to="/expenses/new" replace />}
                         />
                         <Route
                           path="/bills/:id"

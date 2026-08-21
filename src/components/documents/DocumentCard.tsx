@@ -11,7 +11,6 @@ import {
   FileText,
   Link2,
   FolderOpen,
-  Unlink,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -27,24 +26,15 @@ interface DocumentCardProps {
     description: string | null;
     uploaded_at: string;
     invoice_id: string | null;
-    payment_transaction_id: string | null;
-    collection_id?: string | null;
-    collections?: {
-      id: string;
-      title: string;
-      color: string | null;
-    } | null;
   };
   onEdit: () => void;
   onDelete: (id: string) => void;
-  onLinkToCollection?: () => void;
 }
 
 export const DocumentCard = ({
   receipt,
   onEdit,
   onDelete,
-  onLinkToCollection,
 }: DocumentCardProps) => {
   const [viewUrl, setViewUrl] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
@@ -89,9 +79,7 @@ export const DocumentCard = ({
   };
 
   const isImage = receipt.file_type.startsWith("image/");
-  const isAttached = receipt.invoice_id || receipt.payment_transaction_id;
-  const hasCollection = receipt.collection_id && receipt.collections;
-  const isOrphaned = !isAttached && !hasCollection;
+  const isAttached = !!receipt.invoice_id;
 
   return (
     <>
@@ -116,43 +104,29 @@ export const DocumentCard = ({
             </div>
           </div>
 
-          {/* Care-event label. Was a link to /collections/:id until
-              2026-08-20, when that surface was retired; the label stays
-              because documents filed under an old care event should still
-              say so, but there is no longer a page to open. */}
-          {hasCollection && (
-            <div className="flex items-center gap-1 text-xs text-muted-foreground bg-muted/50 p-2 rounded">
-              {receipt.collections!.color && (
-                <div
-                  className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                  style={{ backgroundColor: receipt.collections!.color }}
-                />
-              )}
-              <FolderOpen className="h-3 w-3" />
-              <span className="truncate">{receipt.collections!.title}</span>
-            </div>
-          )}
+          {/* Attached / on file (2026-08-21).
 
-          {/* Bill/Payment Attachment */}
-          {isAttached && (
-            <div className="flex items-center gap-1 text-xs text-muted-foreground bg-muted/50 p-2 rounded">
-              <Link2 className="h-3 w-3" />
-              <span>Attached to {receipt.invoice_id ? "bill" : "payment"}</span>
-            </div>
-          )}
-
-          {/* Orphaned Warning */}
-          {isOrphaned && onLinkToCollection && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onLinkToCollection}
-              className="w-full text-xs gap-1 border-dashed border-amber-500/50 text-amber-600 hover:bg-amber-50 hover:text-amber-700"
-            >
-              <Unlink className="h-3 w-3" />
-              Not linked to any collection
-            </Button>
-          )}
+              This used to be three states: attached to a bill, attached to a
+              payment, or an amber "not linked to any collection" warning with
+              a button to file it under a care event. Payments and care events
+              are both gone, and the warning was wrong anyway -- a document
+              that isn't attached yet is a perfectly good document. It gets
+              picked up from the substantiate dialog, where the expense it
+              belongs to is on screen, and one document can serve several
+              expenses. So an unattached document is now stated, not scolded. */}
+          <div className="flex items-center gap-1 text-xs text-muted-foreground bg-muted/50 p-2 rounded">
+            {isAttached ? (
+              <>
+                <Link2 className="h-3 w-3" />
+                <span>Attached to an expense</span>
+              </>
+            ) : (
+              <>
+                <FolderOpen className="h-3 w-3" />
+                <span>On file — not attached yet</span>
+              </>
+            )}
+          </div>
 
           <div className="flex gap-2 pt-2 border-t">
             <Button

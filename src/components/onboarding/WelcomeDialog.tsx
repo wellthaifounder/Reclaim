@@ -88,7 +88,7 @@ export function WelcomeDialog({
           <Button
             onClick={() => {
               onClose();
-              navigate("/bills/new");
+              navigate("/expenses/new");
             }}
             size="lg"
           >

@@ -23,11 +23,8 @@ import {
   Heart,
   Download,
   RotateCcw,
-  Wallet,
   Building2,
-  Plus,
   Trash2,
-  CreditCard,
   AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -66,26 +63,9 @@ const profileSchema = z.object({
   reimbursementStrategy: z.enum(["regular", "shoebox"]),
 });
 
-const paymentMethodSchema = z.object({
-  name: z.string().min(1, "Name is required").max(100),
-  type: z.string().min(1, "Card type is required"),
-  rewards_rate: z
-    .number({ invalid_type_error: "Enter a valid rate" })
-    .min(0, "Must be 0 or greater")
-    .max(100),
-});
-
 type ProfileFormValues = z.infer<typeof profileSchema>;
-type PaymentMethodFormValues = z.infer<typeof paymentMethodSchema>;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-
-interface PaymentMethod {
-  id: string;
-  name: string;
-  type: string;
-  rewards_rate: number | null;
-}
 
 interface BankConnection {
   id: string;
@@ -102,9 +82,7 @@ const Settings = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [email, setEmail] = useState("");
-  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [bankConnections, setBankConnections] = useState<BankConnection[]>([]);
-  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteConfirmationText, setDeleteConfirmationText] = useState("");
   const [deleting, setDeleting] = useState(false);
@@ -121,14 +99,8 @@ const Settings = () => {
     },
   });
 
-  const paymentMethodForm = useForm<PaymentMethodFormValues>({
-    resolver: zodResolver(paymentMethodSchema),
-    defaultValues: { name: "", type: "", rewards_rate: 0 },
-  });
-
   useEffect(() => {
     loadUserData();
-    loadPaymentMethods();
     loadBankConnections();
   }, []);
 
@@ -237,24 +209,6 @@ const Settings = () => {
     }
   };
 
-  const loadPaymentMethods = async () => {
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
-      const { data, error } = await supabase
-        .from("payment_methods")
-        .select("id, name, type, rewards_rate")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      setPaymentMethods(data || []);
-    } catch (error) {
-      logError("Error loading payment methods", error);
-    }
-  };
-
   const loadBankConnections = async () => {
     try {
       const {
@@ -270,46 +224,6 @@ const Settings = () => {
       setBankConnections(data || []);
     } catch (error) {
       logError("Error loading bank connections", error);
-    }
-  };
-
-  const onSubmitPaymentMethod = async (values: PaymentMethodFormValues) => {
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
-      const { error } = await supabase.from("payment_methods").insert({
-        user_id: user.id,
-        name: values.name,
-        type: values.type,
-        rewards_rate: values.rewards_rate,
-      });
-      if (error) throw error;
-      toast.success("Payment method added successfully");
-      setPaymentDialogOpen(false);
-      paymentMethodForm.reset({ name: "", type: "", rewards_rate: 0 });
-      loadPaymentMethods();
-    } catch (error) {
-      logError("Error adding payment method", error);
-      toast.error("Failed to add payment method");
-    }
-  };
-
-  const handleDeletePaymentMethod = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this payment method?"))
-      return;
-    try {
-      const { error } = await supabase
-        .from("payment_methods")
-        .delete()
-        .eq("id", id);
-      if (error) throw error;
-      toast.success("Payment method deleted");
-      loadPaymentMethods();
-    } catch (error) {
-      logError("Error deleting payment method", error);
-      toast.error("Failed to delete payment method");
     }
   };
 
@@ -566,154 +480,17 @@ const Settings = () => {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Wallet className="h-5 w-5" />
-                  <CardTitle>Payment Methods</CardTitle>
-                </div>
-                <Dialog
-                  open={paymentDialogOpen}
-                  onOpenChange={(open) => {
-                    setPaymentDialogOpen(open);
-                    if (!open)
-                      paymentMethodForm.reset({
-                        name: "",
-                        type: "",
-                        rewards_rate: 0,
-                      });
-                  }}
-                >
-                  <DialogTrigger asChild>
-                    <Button size="sm">
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add Method
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Add Payment Method</DialogTitle>
-                    </DialogHeader>
-                    <form
-                      onSubmit={paymentMethodForm.handleSubmit(
-                        onSubmitPaymentMethod,
-                      )}
-                      className="space-y-4 py-4"
-                    >
-                      <div className="space-y-2">
-                        <Label htmlFor="method-name">Name</Label>
-                        <Input
-                          id="method-name"
-                          placeholder="Chase Sapphire Reserve"
-                          {...paymentMethodForm.register("name")}
-                        />
-                        {paymentMethodForm.formState.errors.name && (
-                          <p className="text-sm text-destructive">
-                            {paymentMethodForm.formState.errors.name.message}
-                          </p>
-                        )}
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Type</Label>
-                        <Controller
-                          name="type"
-                          control={paymentMethodForm.control}
-                          render={({ field }) => (
-                            <Select
-                              value={field.value}
-                              onValueChange={field.onChange}
-                            >
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select type" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="Credit Card">
-                                  Credit Card
-                                </SelectItem>
-                                <SelectItem value="Debit Card">
-                                  Debit Card
-                                </SelectItem>
-                                <SelectItem value="HSA Card">
-                                  HSA Card
-                                </SelectItem>
-                                <SelectItem value="FSA Card">
-                                  FSA Card
-                                </SelectItem>
-                              </SelectContent>
-                            </Select>
-                          )}
-                        />
-                        {paymentMethodForm.formState.errors.type && (
-                          <p className="text-sm text-destructive">
-                            {paymentMethodForm.formState.errors.type.message}
-                          </p>
-                        )}
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="rewards">Rewards Rate (%)</Label>
-                        <Input
-                          id="rewards"
-                          type="number"
-                          step="0.1"
-                          {...paymentMethodForm.register("rewards_rate", {
-                            valueAsNumber: true,
-                          })}
-                        />
-                        {paymentMethodForm.formState.errors.rewards_rate && (
-                          <p className="text-sm text-destructive">
-                            {
-                              paymentMethodForm.formState.errors.rewards_rate
-                                .message
-                            }
-                          </p>
-                        )}
-                      </div>
-                      <DialogFooter>
-                        <Button type="submit">Add Payment Method</Button>
-                      </DialogFooter>
-                    </form>
-                  </DialogContent>
-                </Dialog>
-              </div>
-              <CardDescription>
-                Manage your credit cards, HSA, and FSA cards
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {paymentMethods.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No payment methods added yet
-                </p>
-              ) : (
-                <div className="space-y-3">
-                  {paymentMethods.map((method) => (
-                    <div
-                      key={method.id}
-                      className="flex items-center justify-between p-3 border rounded-lg"
-                    >
-                      <div className="flex items-center gap-3">
-                        <CreditCard className="h-5 w-5 text-muted-foreground" />
-                        <div>
-                          <p className="font-medium">{method.name}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {method.type} • {method.rewards_rate ?? 0}% rewards
-                          </p>
-                        </div>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDeletePaymentMethod(method.id)}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          {/* Payment Methods removed 2026-08-21.
+
+            This was a hand-kept list of your cards, each with a rewards rate,
+            and a checkbox marking one of them as the HSA card. Two problems.
+            It never connected to anything: bank sync records which account a
+            charge landed on and reads the HSA flag from there, so nothing the
+            user typed here was ever consulted. And the rewards rate belonged
+            to the retired "which card should I pay with" tool.
+
+            Cards now come from Bank Accounts below, where connecting them is
+            what makes them real. */}
 
           {/* Workstream C3 — rules were previously written silently with no
               screen at all, so a mislabelled vendor was permanent. */}

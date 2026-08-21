@@ -19,8 +19,14 @@
 // matching the wizard's data model so downstream Phase 3 classification + Phase 4 Substantiation-Record output
 // don't care which surface created the row.
 //
+// 2026-08-21: this is now the ONLY way to create an expense by hand. It
+// absorbed the receipt scanning from the five-step wizard that used to live at
+// /bills/new — attach a photo and it reads the provider, amount and date off
+// it and offers them, which is what the wizard's first three steps did. It
+// offers, it does not fill: OCR is a guess about someone's medical paperwork,
+// and the spec is explicit that a guess never overwrites silently.
+//
 // What this is NOT:
-//   - The OCR-driven flow (that's BillUploadWizard at /bills/new)
 //   - An edit form (Phase 5 BillDetail handles edits)
 //   - The previous pre-Reclaim version that lived here (700 LOC of
 //     payment-plan / reimbursement-strategy / HSA-date wiring; replaced
@@ -28,7 +34,7 @@
 //     no lifecycle/patient fields, and navigated to a non-existent route
 //     on success).
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -61,10 +67,10 @@ import {
   Sparkles,
   X,
   ArrowLeft,
-  ArrowRight,
   Camera,
 } from "lucide-react";
 import { logError } from "@/utils/errorHandler";
+import { formatDateOnly } from "@/lib/dates";
 import { useFamilyRoster } from "@/hooks/useFamilyRoster";
 import { PatientPicker } from "@/components/family/PatientPicker";
 import { MileageEntryForm } from "@/components/expense/MileageEntryForm";
@@ -122,6 +128,22 @@ const ALLOWED_TYPES = [
   "image/webp",
 ];
 
+/** What process-receipt-ocr gives back, narrowed to the fields this form has. */
+interface OcrSuggestion {
+  vendor: string | null;
+  serviceDate: string | null;
+  date: string | null;
+  amount: number | null;
+}
+
+const fileToBase64 = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+
 export default function ExpenseEntry() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -145,6 +167,7 @@ export default function ExpenseEntry() {
     handleSubmit,
     watch,
     control,
+    setValue,
     formState: { errors },
   } = useForm<ExpenseFormValues>({
     resolver: zodResolver(expenseSchema),
@@ -165,6 +188,11 @@ export default function ExpenseEntry() {
   const [file, setFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [suggestion, setSuggestion] = useState<OcrSuggestion | null>(null);
+  // A phone camera and a file browser are the same <input> with a different
+  // `capture` attribute, so there are two of them and a button for each.
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   // A payment and a car trip are different enough that one form serving both
   // would be mostly disabled fields. A savings-calculator hand-off is always a
   // payment, so it never lands on the driving tab.
@@ -174,6 +202,7 @@ export default function ExpenseEntry() {
 
   const onFilePicked = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFileError("");
+    setSuggestion(null);
     const f = e.target.files?.[0] ?? null;
     if (!f) {
       setFile(null);
@@ -188,6 +217,58 @@ export default function ExpenseEntry() {
       return;
     }
     setFile(f);
+    // Read it straight away. The moment the file is in hand is the moment the
+    // user expects something to happen; making them press a second "scan"
+    // button is the step the old wizard charged a whole screen for. Images
+    // only -- the OCR function takes a picture, not a PDF.
+    if (f.type.startsWith("image/")) void runOcr(f);
+  };
+
+  /**
+   * Ask process-receipt-ocr what it can see, and offer the result.
+   *
+   * Never writes to the form directly. A misread amount that silently lands in
+   * the box is a wrong claim the user had no chance to catch, so everything
+   * lands in a banner with the current values still on screen beside it.
+   */
+  const runOcr = async (f: File) => {
+    setScanning(true);
+    setSuggestion(null);
+    try {
+      const imageBase64 = await fileToBase64(f);
+      const { data, error } = await supabase.functions.invoke(
+        "process-receipt-ocr",
+        { body: { imageBase64 } },
+      );
+      if (error || !data?.success) {
+        // Not an error state for the user: they were always going to be able
+        // to type this in, and the file is attached either way.
+        toast.message("We couldn't read that one — type the details in below.");
+        return;
+      }
+      const r = data.data as OcrSuggestion;
+      if (!r?.vendor && r?.amount == null && !(r?.serviceDate ?? r?.date)) {
+        toast.message("Nothing legible on that one — type the details in.");
+        return;
+      }
+      setSuggestion(r);
+    } catch (err) {
+      logError("ExpenseEntry: receipt OCR failed", err);
+      toast.message("We couldn't read that one — type the details in below.");
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  /** Copy the reading into the form. Only ever runs on an explicit click. */
+  const acceptSuggestion = () => {
+    if (!suggestion) return;
+    if (suggestion.vendor) setValue("vendor", suggestion.vendor);
+    if (suggestion.amount != null) setValue("amount", suggestion.amount);
+    const scannedDate = suggestion.serviceDate ?? suggestion.date;
+    if (scannedDate) setValue("date", scannedDate.slice(0, 10));
+    setSuggestion(null);
+    toast.success("Details filled in — check them before saving.");
   };
 
   const onSubmit = async (data: ExpenseFormValues) => {
@@ -283,12 +364,12 @@ export default function ExpenseEntry() {
           "Expense saved. It looks like one you already have — check Possible duplicates under Transactions → Review.",
           { duration: 8000 },
         );
-        navigate("/bills");
+        navigate("/expenses?tab=to-claim");
         return;
       }
 
       toast.success("Expense saved.");
-      navigate("/bills");
+      navigate("/expenses?tab=to-claim");
     } catch (error) {
       logError("ExpenseEntry submit", error);
       toast.error("Failed to save expense. Please try again.");
@@ -309,22 +390,10 @@ export default function ExpenseEntry() {
           Back
         </button>
 
-        {/* Symmetric escape hatch to the scan-driven wizard. The two surfaces
-            link to each other so users can switch capture modes mid-thought
-            without backtracking. Brief §1 kill-shot is scanning, so manual
-            users get a gentle nudge toward the higher-value path when they
-            do have a receipt. */}
-        <div className="mb-4 text-center">
-          <button
-            type="button"
-            onClick={() => navigate("/bills/new")}
-            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <Camera className="h-3.5 w-3.5" />
-            Have a receipt? Snap it instead
-            <ArrowRight className="h-3.5 w-3.5" />
-          </button>
-        </div>
+        {/* "Have a receipt? Snap it instead" linked to the wizard at
+            /bills/new. Scanning happens on this page now, so the link pointed
+            at the page it was already on. The camera button moved down to the
+            receipt field, which is where someone holding a receipt is looking. */}
 
         {/* Workstream D6. Driving is given equal billing rather than buried in
             a category dropdown: it is the claim users most often do not know
@@ -358,8 +427,9 @@ export default function ExpenseEntry() {
           <CardHeader>
             <CardTitle>Log an expense</CardTitle>
             <CardDescription>
-              No receipt to scan? Type it in here. We'll mark it for your
-              review.
+              For anything your bank didn't record — cash, a cheque, an account
+              you haven't connected. Add a photo of the receipt and we'll read
+              it for you, or just type it in.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -485,30 +555,120 @@ export default function ExpenseEntry() {
                   <div className="flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2 text-sm">
                     <Paperclip className="h-4 w-4 text-muted-foreground shrink-0" />
                     <span className="truncate flex-1">{file.name}</span>
-                    <button
-                      type="button"
-                      onClick={() => setFile(null)}
-                      className="text-muted-foreground hover:text-foreground"
-                      aria-label="Remove file"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
+                    {scanning ? (
+                      <span className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        Reading…
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFile(null);
+                          setSuggestion(null);
+                        }}
+                        className="text-muted-foreground hover:text-foreground"
+                        aria-label="Remove file"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
                   </div>
                 ) : (
-                  <Input
-                    id="receipt"
-                    type="file"
-                    accept=".pdf,.png,.jpg,.jpeg,.webp"
-                    onChange={onFilePicked}
-                    className="cursor-pointer"
-                  />
+                  <div className="space-y-2">
+                    <Input
+                      id="receipt"
+                      type="file"
+                      accept=".pdf,.png,.jpg,.jpeg,.webp"
+                      onChange={onFilePicked}
+                      className="cursor-pointer"
+                    />
+                    {/* Same input, camera-first. On a phone this opens the
+                        camera rather than the file browser, which is how most
+                        receipts get captured. */}
+                    <input
+                      ref={cameraInputRef}
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      onChange={onFilePicked}
+                      className="hidden"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => cameraInputRef.current?.click()}
+                      className="gap-1.5"
+                    >
+                      <Camera className="h-3.5 w-3.5" />
+                      Take a photo
+                    </Button>
+                  </div>
                 )}
                 {fileError && (
                   <p className="text-xs text-destructive">{fileError}</p>
                 )}
+
+                {/* The reading, offered rather than applied. The form keeps
+                    whatever is already in it until the user picks. */}
+                {suggestion && (
+                  <Alert className="mt-2">
+                    <Sparkles className="h-4 w-4" />
+                    <AlertDescription className="space-y-2">
+                      <p className="text-sm">Here's what we read off that:</p>
+                      <ul className="text-sm space-y-0.5">
+                        {suggestion.vendor && (
+                          <li>
+                            <span className="text-muted-foreground">
+                              Provider:{" "}
+                            </span>
+                            {suggestion.vendor}
+                          </li>
+                        )}
+                        {suggestion.amount != null && (
+                          <li>
+                            <span className="text-muted-foreground">
+                              Amount:{" "}
+                            </span>
+                            ${suggestion.amount.toFixed(2)}
+                          </li>
+                        )}
+                        {(suggestion.serviceDate ?? suggestion.date) && (
+                          <li>
+                            <span className="text-muted-foreground">
+                              Date:{" "}
+                            </span>
+                            {formatDateOnly(
+                              suggestion.serviceDate ?? suggestion.date,
+                            )}
+                          </li>
+                        )}
+                      </ul>
+                      <div className="flex gap-2 pt-1">
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={acceptSuggestion}
+                        >
+                          Use these
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setSuggestion(null)}
+                        >
+                          I'll type it
+                        </Button>
+                      </div>
+                    </AlertDescription>
+                  </Alert>
+                )}
+
                 <p className="text-xs text-muted-foreground">
-                  PDF, PNG, JPEG, or WebP — up to 10MB. Or skip and add it later
-                  from the bill detail page.
+                  PDF, PNG, JPEG, or WebP — up to 10MB. Photos get read
+                  automatically. You can also skip this and attach it later.
                 </p>
               </div>
 

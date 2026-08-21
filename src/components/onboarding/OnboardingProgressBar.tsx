@@ -13,7 +13,7 @@ interface OnboardingProgressBarProps {
 }
 
 const STEP_ROUTES: Record<string, string> = {
-  bill: "/bills/new",
+  bill: "/expenses/new",
   setup: "/settings",
 };
 

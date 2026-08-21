@@ -11,7 +11,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -21,14 +20,12 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import { toast } from "sonner";
-import { FileText, CreditCard, Upload, Link2 } from "lucide-react";
+import { FileText, Upload } from "lucide-react";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
 import { SubstantiationPanel } from "@/components/expense/SubstantiationPanel";
 import { logError } from "@/utils/errorHandler";
 import { ReceiptGallery } from "@/components/expense/ReceiptGallery";
 import { MultiFileUpload } from "@/components/expense/MultiFileUpload";
-import { LinkTransactionDialog } from "@/components/bills/LinkTransactionDialog";
-import { calculateHSAEligibility } from "@/lib/hsaCalculations";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -42,21 +39,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { useHSA } from "@/contexts/HSAContext";
 import { HSAUpgradePrompt } from "@/components/HSAUpgradePrompt";
-import type { PaymentTransaction } from "@/lib/hsaCalculations";
 
 interface UploadedFile {
   file: File;
   documentType: string;
   description?: string;
-}
-
-interface BillPayment {
-  id: string;
-  payment_date: string;
-  amount: number;
-  payment_source: PaymentTransaction["payment_source"];
-  is_reimbursed: boolean;
-  reimbursed_date: string | null;
 }
 
 const HSA_ELIGIBLE_CATEGORIES = [
@@ -79,8 +66,6 @@ export default function BillDetail() {
   const isNewBill = id === "new";
   const [activeTab, setActiveTab] = useState("overview");
   const [newFiles, setNewFiles] = useState<UploadedFile[]>([]);
-  const [showLinkTransactionDialog, setShowLinkTransactionDialog] =
-    useState(false);
   const [isAnalyzing] = useState(false);
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split("T")[0],
@@ -110,19 +95,7 @@ export default function BillDetail() {
 
       const { data, error } = await supabase
         .from("invoices")
-        .select(
-          `
-          *,
-          payment_transactions (
-            id,
-            payment_date,
-            amount,
-            payment_source,
-            is_reimbursed,
-            reimbursed_date
-          )
-        `,
-        )
+        .select("*")
         .eq("id", id)
         .eq("user_id", user.id) // Explicit ownership check
         .single();
@@ -296,12 +269,6 @@ export default function BillDetail() {
     );
   }
 
-  const breakdown = bill
-    ? calculateHSAEligibility(
-        bill,
-        (bill.payment_transactions || []) as BillPayment[],
-      )
-    : null;
   // Bill review feature archived - removed review and errorCount
 
   return (
@@ -398,7 +365,9 @@ export default function BillDetail() {
             </CardHeader>
             <CardContent>
               <Tabs value={activeTab} onValueChange={setActiveTab}>
-                <TabsList className="grid w-full grid-cols-3">
+                {/* Payments tab removed 2026-08-21 — see the note where the
+                    payment history used to render, below the Documents tab. */}
+                <TabsList className="grid w-full grid-cols-2">
                   <TabsTrigger value="overview">
                     <FileText className="h-4 w-4 mr-2" />
                     Overview
@@ -407,12 +376,6 @@ export default function BillDetail() {
                     <Upload className="h-4 w-4 mr-2" />
                     Documents
                   </TabsTrigger>
-                  {!isNewBill && (
-                    <TabsTrigger value="payments">
-                      <CreditCard className="h-4 w-4 mr-2" />
-                      Payments
-                    </TabsTrigger>
-                  )}
                 </TabsList>
 
                 {/* Overview Tab */}
@@ -537,40 +500,16 @@ export default function BillDetail() {
                       />
                     )}
 
-                  {!isNewBill && breakdown && (
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-muted rounded-lg">
-                      <div>
-                        <p className="text-sm text-muted-foreground">
-                          Total Billed
-                        </p>
-                        <p className="text-lg font-semibold">
-                          ${breakdown.totalInvoiced.toFixed(2)}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">
-                          Paid via HSA
-                        </p>
-                        <p className="text-lg font-semibold text-green-600">
-                          ${breakdown.paidViaHSA.toFixed(2)}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">
-                          Paid Other
-                        </p>
-                        <p className="text-lg font-semibold">
-                          ${breakdown.paidViaOther.toFixed(2)}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">Unpaid</p>
-                        <p className="text-lg font-semibold text-red-600">
-                          ${breakdown.unpaidBalance.toFixed(2)}
-                        </p>
-                      </div>
-                    </div>
-                  )}
+                  {/* The Total Billed / Paid via HSA / Paid Other / Unpaid
+                   * strip was removed with the payment table it summed
+                   * (2026-08-21). Without those rows every figure but the
+                   * first was zero, so the panel would have shown every
+                   * expense as fully unpaid in red -- including the ones the
+                   * user had already paid out of pocket, which is the entire
+                   * population of this app. A wrong number in red is worse
+                   * than no number. What the user actually needs to know here
+                   * -- how much of this is claimable -- is on the
+                   * substantiation panel, computed from the expense itself. */}
 
                   <div className="flex gap-3">
                     <Button onClick={handleSaveBill}>
@@ -639,90 +578,27 @@ export default function BillDetail() {
 
                 {/* Bill review feature archived - removed AI Review tab */}
 
-                {/* Payments Tab */}
-                {!isNewBill && (
-                  <TabsContent value="payments" className="space-y-6 mt-6">
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <h3 className="text-lg font-semibold">
-                          Payment History
-                        </h3>
-                        <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setShowLinkTransactionDialog(true)}
-                          >
-                            <Link2 className="h-4 w-4 mr-2" />
-                            Link Transaction
-                          </Button>
-                          {/* "Add Payment" removed 2026-08-20 with the manual
-                              payment-entry page. The spec replaces the
-                              part-payment ledger with an editable reimbursable
-                              amount plus transaction splitting, so hand-keyed
-                              payments have no successor. Linking a real bank
-                              transaction stays -- that is the supported way to
-                              record that this bill was paid. Existing payment
-                              rows still display below. */}
-                        </div>
-                      </div>
-
-                      {bill?.payment_transactions &&
-                      bill.payment_transactions.length > 0 ? (
-                        <div className="space-y-2">
-                          {/* Inferred, not annotated as BillPayment: the row's
-                              payment_source is a CHECK-constrained text column,
-                              so the generated type is a plain string and the
-                              narrower union only holds at the calculation
-                              boundary below. */}
-                          {bill.payment_transactions.map((payment) => (
-                            <Card key={payment.id}>
-                              <CardContent className="pt-6">
-                                <div className="flex items-center justify-between">
-                                  <div>
-                                    <p className="font-medium">
-                                      ${payment.amount.toFixed(2)}
-                                    </p>
-                                    <p className="text-sm text-muted-foreground">
-                                      {payment.payment_source} •{" "}
-                                      {new Date(
-                                        payment.payment_date,
-                                      ).toLocaleDateString()}
-                                    </p>
-                                  </div>
-                                  {payment.is_reimbursed && (
-                                    <Badge variant="default">Reimbursed</Badge>
-                                  )}
-                                </div>
-                              </CardContent>
-                            </Card>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="text-center py-12">
-                          <p className="text-muted-foreground">
-                            No payments recorded yet
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  </TabsContent>
-                )}
+                {/* Payment history removed 2026-08-21.
+                 *
+                 * It listed rows from a second payment table and offered
+                 * "Link Transaction" to add more by hand. Both are gone. An
+                 * expense in Reclaim comes FROM a payment the bank already
+                 * recorded -- the transaction it was captured from is the
+                 * payment, and there is exactly one. Keeping a separate list
+                 * of payments against the same expense meant the app held two
+                 * answers to "how much has been paid" and no rule for which
+                 * one won.
+                 *
+                 * Part-payment over time is the real feature underneath this,
+                 * and the spec defers it to v1.1 on purpose. Until then the
+                 * amount is editable downward on the expense itself, which
+                 * covers the common case of an insurance refund landing
+                 * later. */}
               </Tabs>
             </CardContent>
           </Card>
         </div>
       </div>
-
-      <LinkTransactionDialog
-        open={showLinkTransactionDialog}
-        onOpenChange={setShowLinkTransactionDialog}
-        invoice={bill ?? null}
-        onSuccess={() => {
-          refetch();
-          setShowLinkTransactionDialog(false);
-        }}
-      />
     </AuthenticatedLayout>
   );
 }

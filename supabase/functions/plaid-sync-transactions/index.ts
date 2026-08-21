@@ -258,39 +258,26 @@ serve(async (req) => {
         }
 
         // Tier 1: auto-link
+        //
+        // This used to write a `payment_transactions` row as well as setting
+        // the link below (2026-08-21). That table is gone. It recorded the
+        // same fact twice: the transaction knows which expense it belongs to,
+        // and the expense knows which transaction it came from, so a third
+        // record joining them could only ever add a way for the three to
+        // disagree. `payment_source` was the one thing it carried that nothing
+        // else did, and it was derived from `plaid_accounts.is_hsa` — which
+        // auto-capture already reads, to set claim_state 'not_reimbursable'
+        // on HSA-card spend at the moment the expense is created.
         if (bestMatch.confidence >= 0.9) {
-          const { error: paymentError } = await supabase
-            .from("payment_transactions")
-            .insert({
+          const { error: linkError } = await supabase
+            .from("transactions")
+            .update({
               invoice_id: bestMatch.invoiceId,
-              transaction_id: txn.id,
-              user_id: user.id,
-              payment_date: txn.transaction_date,
-              amount: txn.amount,
-              // An HSA-account charge is a direct distribution, not an
-              // out-of-pocket payment awaiting reimbursement.
-              // Spend on an HSA card is a direct distribution, not an
-              // out-of-pocket payment awaiting reimbursement. The flag rides
-              // along on the ingested row (resolved from plaid_accounts.is_hsa,
-              // which honours the user's override).
-              payment_source: txn.is_hsa_account
-                ? "hsa_direct"
-                : "out_of_pocket",
-              auto_linked: true,
-              auto_linked_at: new Date().toISOString(),
-              match_confidence: bestMatch.confidence,
-              notes: `Auto-linked from Plaid sync (${Math.round(bestMatch.confidence * 100)}% confidence)`,
-            });
+              reconciliation_status: "linked_to_invoice",
+            })
+            .eq("id", txn.id);
 
-          if (!paymentError) {
-            await supabase
-              .from("transactions")
-              .update({
-                invoice_id: bestMatch.invoiceId,
-                reconciliation_status: "linked_to_invoice",
-              })
-              .eq("id", txn.id);
-
+          if (!linkError) {
             autoLinkedCount++;
             txn.reconciliation_status = "linked_to_invoice";
             const idx = openInvoices.findIndex(
@@ -300,7 +287,7 @@ serve(async (req) => {
           } else {
             console.error(
               `[${requestId}] Auto-link failed for txn ${txn.id}:`,
-              paymentError.message,
+              linkError.message,
             );
             exceptionCount++;
           }
