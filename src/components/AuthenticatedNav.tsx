@@ -10,12 +10,12 @@ import {
   FileText,
   Menu,
   Settings,
-  Wallet,
   LayoutDashboard,
   Building2,
   HelpCircle,
   Camera,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { WellbieAvatar } from "@/components/WellbieAvatar";
 import { toast } from "sonner";
 import {
@@ -32,6 +32,16 @@ import { FF } from "@/lib/featureFlags";
 interface AuthenticatedNavProps {
   unreviewedTransactions?: number;
   pendingReviews?: number;
+}
+
+// Shared so every nav list has the optional badge in its type. Without it,
+// TypeScript infers the badge away from any list that happens not to use one,
+// and the shared render code stops compiling.
+interface NavItem {
+  icon: LucideIcon;
+  label: string;
+  path: string;
+  badge?: number;
 }
 
 export const AuthenticatedNav = ({
@@ -58,36 +68,38 @@ export const AuthenticatedNav = ({
   // Reclaim Phase 5 W1 — primary nav. Top-bar uses the BottomTabNavigation's
   // short labels (Groups / Records) so all 4 fit at lg breakpoints without
   // truncating. The sidebar + mobile hamburger keep the longer names.
-  const mainNavItems = [
+  //
+  // Both counts land on Expenses now that it is one page: transactions waiting
+  // to be categorised are its Review tab, expenses waiting on eligibility are
+  // its To-claim tab. Two badges on one destination would just ask the user to
+  // do arithmetic, so they are summed -- the number means "things on this page
+  // that want you".
+  const expensesBadge = unreviewedTransactions + pendingReviews;
+
+  const mainNavItems: NavItem[] = [
     { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
     {
       icon: Receipt,
       label: "Expenses",
       path: "/expenses",
-      badge: pendingReviews,
+      badge: expensesBadge,
     },
     { icon: FileText, label: "Records", path: "/substantiation" },
   ];
 
   // Mobile hamburger sheet — has drawer space for full names.
-  const coreItems = [
+  const coreItems: NavItem[] = [
     { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
     {
       icon: Receipt,
       label: "Expenses",
       path: "/expenses",
-      badge: pendingReviews,
+      badge: expensesBadge,
     },
     { icon: FileText, label: "Substantiation", path: "/substantiation" },
   ];
 
-  const moreItems = [
-    {
-      icon: Wallet,
-      label: "Transactions",
-      path: "/transactions",
-      badge: unreviewedTransactions,
-    },
+  const moreItems: NavItem[] = [
     { icon: Building2, label: "Bank Accounts", path: "/bank-accounts" },
     { icon: FileText, label: "Documents", path: "/documents" },
     { icon: HelpCircle, label: "HSA Guide", path: "/guide" },

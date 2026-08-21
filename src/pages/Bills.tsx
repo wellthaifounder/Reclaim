@@ -47,7 +47,28 @@ interface Bill {
   payment_transactions: BillPaymentTransaction[];
 }
 
-const Bills = () => {
+interface BillsProps {
+  /**
+   * Render as a panel inside another page rather than as a page of its own.
+   *
+   * The expense list is now a tab on /expenses, which already supplies the
+   * layout chrome and its own heading. Embedding skips both, so there is one
+   * sidebar and one <h1> on the page rather than two of each.
+   */
+  embedded?: boolean;
+}
+
+const Bills = ({ embedded = false }: BillsProps) => {
+  // Every return path in this component goes through Shell, so embedding is
+  // decided once here rather than at each of the loading / error / loaded
+  // branches.
+  const Shell = ({ children }: { children: React.ReactNode }) =>
+    embedded ? (
+      <>{children}</>
+    ) : (
+      <AuthenticatedLayout>{children}</AuthenticatedLayout>
+    );
+
   const navigate = useNavigate();
 
   // Filter states
@@ -180,7 +201,7 @@ const Bills = () => {
 
   if (billsLoading) {
     return (
-      <AuthenticatedLayout>
+      <Shell>
         <div
           className="flex items-center justify-center min-h-[400px]"
           role="status"
@@ -190,7 +211,7 @@ const Bills = () => {
           <span className="sr-only">Loading your bills…</span>
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
-      </AuthenticatedLayout>
+      </Shell>
     );
   }
 
@@ -199,7 +220,7 @@ const Bills = () => {
   // a Retry button so the user has a clear next step.
   if (billsError) {
     return (
-      <AuthenticatedLayout>
+      <Shell>
         <div className="container mx-auto px-4 py-8 max-w-6xl">
           <Card>
             <CardContent className="text-center py-12 space-y-3">
@@ -213,26 +234,35 @@ const Bills = () => {
             </CardContent>
           </Card>
         </div>
-      </AuthenticatedLayout>
+      </Shell>
     );
   }
 
   return (
-    <AuthenticatedLayout>
-      <div className="container mx-auto px-4 py-8 max-w-6xl space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between sticky top-0 z-10 bg-background py-2 -mt-2">
-          <div>
-            <h1 className="text-3xl font-bold mb-1">Expenses</h1>
-            <p className="text-muted-foreground text-sm">
-              Track and manage your medical expenses
-            </p>
+    <Shell>
+      <div
+        className={
+          embedded
+            ? "space-y-6"
+            : "container mx-auto px-4 py-8 max-w-6xl space-y-6"
+        }
+      >
+        {/* Header. Suppressed when embedded -- the host page already carries
+            the "Expenses" heading and the add button. */}
+        {!embedded && (
+          <div className="flex items-center justify-between sticky top-0 z-10 bg-background py-2 -mt-2">
+            <div>
+              <h1 className="text-3xl font-bold mb-1">Expenses</h1>
+              <p className="text-muted-foreground text-sm">
+                Track and manage your medical expenses
+              </p>
+            </div>
+            <Button onClick={() => navigate("/bills/new")}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add expense
+            </Button>
           </div>
-          <Button onClick={() => navigate("/bills/new")}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add expense
-          </Button>
-        </div>
+        )}
 
         {/* Hero Metrics */}
         <BillsHeroMetrics
@@ -404,7 +434,7 @@ const Bills = () => {
           </Card>
         </div>
       </div>
-    </AuthenticatedLayout>
+    </Shell>
   );
 };
 

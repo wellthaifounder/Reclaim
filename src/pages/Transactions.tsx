@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,6 +31,7 @@ import {
 import { canSplitIntoExpenses } from "@/lib/expenseSplitUtils";
 import { SplitTransactionCard } from "@/components/transactions/SplitTransactionCard";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
+import Bills from "@/pages/Bills";
 import { MissingHSADateBanner } from "@/components/dashboard/MissingHSADateBanner";
 import { TransactionsSkeleton } from "@/components/skeletons/TransactionsSkeleton";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -83,7 +85,23 @@ export default function Transactions() {
   const [ruleCandidate, setRuleCandidate] = useState<RuleCandidate | null>(
     null,
   );
-  const [activeTab, setActiveTab] = useState("all");
+  // ?tab= opens a specific tab. The dashboard has linked to
+  // /transactions?tab=review for a while, but nothing here ever read the
+  // parameter, so "Review transactions" quietly dropped people on the All tab
+  // instead of the queue they asked for. Kept in the URL rather than state
+  // alone so the tab survives a refresh and can be linked to.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const TABS = ["review", "all", "medical", "non-medical", "to-claim"];
+  const requestedTab = searchParams.get("tab");
+  const activeTab =
+    requestedTab && TABS.includes(requestedTab) ? requestedTab : "all";
+
+  const setActiveTab = (next: string) => {
+    const sp = new URLSearchParams(searchParams);
+    if (next === "all") sp.delete("tab");
+    else sp.set("tab", next);
+    setSearchParams(sp, { replace: true });
+  };
   const [advancedFilters, setAdvancedFilters] = useState<FilterCriteria>({});
   const [hsaOpenedDate, setHsaOpenedDate] = useState<string | null>(null);
   const [invoicePickerOpen, setInvoicePickerOpen] = useState(false);
@@ -136,17 +154,32 @@ export default function Transactions() {
     filterTransactions();
   }, [transactions, searchQuery, activeTab, advancedFilters]);
 
+  // Open on the review queue when there is something waiting -- but only as a
+  // first-load default, and only when the URL did not ask for a tab.
+  //
+  // Guarded by a ref because the tab now lives in the URL. Without it, this
+  // fires again the moment a user with unreviewed transactions clicks "All"
+  // and snaps them straight back to Review, which reads as the tab being
+  // broken. It must also lose to an explicit ?tab= so a link to a particular
+  // tab actually lands there.
+  const autoTabDone = useRef(false);
   useEffect(() => {
-    // Default to review queue if there are unlinked transactions (runs once on load)
-    if (transactions.length > 0 && activeTab === "all") {
-      const unlinkedCount = transactions.filter(
-        (t) => t.reconciliation_status === "unlinked",
-      ).length;
-      if (unlinkedCount > 0) {
-        setActiveTab("review");
-      }
+    if (autoTabDone.current) return;
+    if (searchParams.get("tab")) {
+      autoTabDone.current = true;
+      return;
     }
-  }, [transactions, activeTab]);
+    if (transactions.length === 0) return;
+
+    autoTabDone.current = true;
+    const unlinked = transactions.filter(
+      (t) => t.reconciliation_status === "unlinked",
+    ).length;
+    if (unlinked > 0) setActiveTab("review");
+    // setActiveTab is recreated each render (it writes to the URL) and
+    // including it would re-run this on every navigation, defeating the ref.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [transactions, searchParams]);
 
   const checkAuth = async () => {
     const {
@@ -521,16 +554,14 @@ export default function Transactions() {
 
           <div className="flex items-center justify-between sticky top-0 z-10 bg-background py-2 mb-4">
             <div>
-              <h1 className="text-3xl font-bold text-foreground">
-                Transactions
-              </h1>
+              <h1 className="text-3xl font-bold text-foreground">Expenses</h1>
               <p className="text-muted-foreground text-sm mt-1">
-                Track and categorize all your financial transactions
+                Decide what's medical, then get it documented and claimed
               </p>
             </div>
-            <Button onClick={() => setAddDialogOpen(true)}>
+            <Button variant="outline" onClick={() => setAddDialogOpen(true)}>
               <Plus className="mr-2 h-4 w-4" />
-              Add Transaction
+              Add manually
             </Button>
           </div>
 
@@ -601,7 +632,19 @@ export default function Transactions() {
               <TabsTrigger value="all">All</TabsTrigger>
               <TabsTrigger value="medical">Medical</TabsTrigger>
               <TabsTrigger value="non-medical">Non-Medical</TabsTrigger>
+              {/* The old /bills list, merged in here 2026-08-20. The tabs to
+                  its left are bank transactions -- money that moved. This one
+                  is expenses: what a medical transaction became once it has a
+                  service date, a patient and documents. They are different
+                  objects, which is why this is a separate tab rather than
+                  another filter, but both are "expenses" to the person
+                  looking at them, so they share a page. */}
+              <TabsTrigger value="to-claim">To claim</TabsTrigger>
             </TabsList>
+
+            <TabsContent value="to-claim" className="space-y-4">
+              <Bills embedded />
+            </TabsContent>
 
             <TabsContent value="review" className="space-y-4">
               {/* Workstream C6. Above the categorize feed on purpose: a
@@ -611,17 +654,29 @@ export default function Transactions() {
               <ReviewFeed />
             </TabsContent>
 
-            <TabsContent value={activeTab} className="space-y-4">
+            {/* One content block serves All / Medical / Non-Medical, keyed to
+                whichever is active. "review" and "to-claim" have their own
+                blocks above, so they are excluded here -- without this guard
+                a `value={activeTab}` block also matches them and the page
+                renders two lists at once. */}
+            <TabsContent
+              value={
+                activeTab === "review" || activeTab === "to-claim"
+                  ? "__inactive__"
+                  : activeTab
+              }
+              className="space-y-4"
+            >
               {filteredTransactions.length === 0 ? (
                 <Card className="p-12 text-center">
-                  <p className="text-muted-foreground">No transactions found</p>
+                  <p className="text-muted-foreground">Nothing here yet</p>
                   <Button
                     onClick={() => setAddDialogOpen(true)}
                     variant="outline"
                     className="mt-4"
                   >
                     <Plus className="mr-2 h-4 w-4" />
-                    Add Your First Transaction
+                    Add one manually
                   </Button>
                 </Card>
               ) : (

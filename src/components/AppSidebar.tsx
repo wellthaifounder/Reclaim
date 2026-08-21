@@ -2,7 +2,6 @@ import { useState } from "react";
 import {
   Receipt,
   FileText,
-  Wallet,
   Settings,
   ChevronDown,
   ChevronRight,
@@ -11,7 +10,6 @@ import {
   Building2,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useNavigate } from "react-router-dom";
 import { NavLink } from "@/components/NavLink";
 import { useHSA } from "@/contexts/HSAContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
@@ -57,7 +55,14 @@ const primaryMenuItems: MenuItem[] = [
     path: "/dashboard",
     badgeKey: null,
   },
-  { icon: Receipt, label: "Expenses", path: "/expenses", badgeKey: null },
+  // Carries the unreviewed count: Expenses is now where reviewing happens,
+  // so the badge belongs on it rather than on a separate Transactions item.
+  {
+    icon: Receipt,
+    label: "Expenses",
+    path: "/expenses",
+    badgeKey: "unreviewedTransactions",
+  },
   {
     icon: FileText,
     label: "Substantiation",
@@ -67,12 +72,6 @@ const primaryMenuItems: MenuItem[] = [
 ];
 
 const moreMenuItems: MenuItem[] = [
-  {
-    icon: Wallet,
-    label: "Transactions",
-    path: "/transactions",
-    badgeKey: "unreviewedTransactions",
-  },
   {
     icon: Building2,
     label: "Bank Accounts",
@@ -85,9 +84,8 @@ const moreMenuItems: MenuItem[] = [
 
 export function AppSidebar({ unreviewedTransactions = 0 }: AppSidebarProps) {
   const { open } = useSidebar();
-  const navigate = useNavigate();
   const { hasHSA, userIntent } = useHSA();
-  const { tier } = useSubscription();
+  const { tier, createCheckoutSession } = useSubscription();
 
   // Show HSA features if user selected HSA intent or actually has an HSA
   const showHSAFeatures =
@@ -216,8 +214,12 @@ export function AppSidebar({ unreviewedTransactions = 0 }: AppSidebarProps) {
 
       {tier === "free" && open && (
         <SidebarFooter className="border-t border-sidebar-border px-4 py-3">
+          {/* Was navigate("/checkout") -- a page removed on 2026-08-19 that
+              only the deleted tripwire offer could reach, so this button had
+              been landing on the 404 page. Subscription checkout goes through
+              the context to a Stripe-hosted page instead. */}
           <button
-            onClick={() => navigate("/checkout")}
+            onClick={() => void createCheckoutSession("plus")}
             className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
           >
             <span>Free Plan</span>

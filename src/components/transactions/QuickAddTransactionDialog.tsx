@@ -82,7 +82,11 @@ export function QuickAddTransactionDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Add Transaction</DialogTitle>
+          {/* "Transaction" is the internal name for the row this writes. To
+              the person filling the form it is a purchase their bank did not
+              import -- cash, a cheque, an account they have not connected --
+              so the label says that instead. */}
+          <DialogTitle>Add a spend your bank missed</DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">

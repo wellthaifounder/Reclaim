@@ -26,8 +26,10 @@ import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 
 // Lazy load non-critical pages for better performance
-const Bills = lazy(() => import("./pages/Bills"));
 const BillDetail = lazy(() => import("./pages/BillDetail"));
+// Serves /expenses. Named for the transactions it categorises; it also hosts
+// the expense list as its "To claim" tab, so Bills is no longer routed
+// directly -- Transactions imports it.
 const Transactions = lazy(() => import("./pages/Transactions"));
 const BankAccounts = lazy(() => import("./pages/BankAccounts"));
 const HistoricalImport = lazy(() => import("./pages/HistoricalImport"));
@@ -137,30 +139,39 @@ const App = () => (
                           }
                         />
 
-                        {/* Reclaim Phase 5 W1: brief §9 renames Bills →
-                          Expenses. /expenses is now canonical; /bills stays
-                          mounted as an alias (not a redirect) for legacy
-                          links + bookmarks until Phase 6 cleanup. */}
+                        {/* One list, one name (2026-08-20).
+
+                            There were three: /transactions (categorize),
+                            /bills and /expenses (the same expense list on two
+                            URLs). Bank transactions and expenses are genuinely
+                            different objects -- one transaction can become
+                            several expenses -- but to the person looking at
+                            them both are "money I spent", and three URLs for
+                            that was the confusion. They are now tabs on one
+                            page: Review / All / Medical / Non-Medical read
+                            transactions, "To claim" renders the expense list
+                            embedded.
+
+                            /bills and /transactions redirect rather than 404:
+                            both have been live long enough to be bookmarked
+                            and to sit in the installed app's history. */}
                         <Route
                           path="/expenses"
                           element={
                             <ProtectedRoute>
                               <ErrorBoundary>
-                                <Bills />
+                                <Transactions />
                               </ErrorBoundary>
                             </ProtectedRoute>
                           }
                         />
-                        {/* Unified Bills Management Routes */}
                         <Route
                           path="/bills"
-                          element={
-                            <ProtectedRoute>
-                              <ErrorBoundary>
-                                <Bills />
-                              </ErrorBoundary>
-                            </ProtectedRoute>
-                          }
+                          element={<Navigate to="/expenses" replace />}
+                        />
+                        <Route
+                          path="/transactions"
+                          element={<Navigate to="/expenses" replace />}
                         />
                         <Route
                           path="/bills/new"
@@ -207,17 +218,6 @@ const App = () => (
                           element={<Navigate to="/substantiation" replace />}
                         />
 
-                        {/* Transactions Route */}
-                        <Route
-                          path="/transactions"
-                          element={
-                            <ProtectedRoute>
-                              <ErrorBoundary>
-                                <Transactions />
-                              </ErrorBoundary>
-                            </ProtectedRoute>
-                          }
-                        />
                         <Route
                           path="/bank-accounts"
                           element={

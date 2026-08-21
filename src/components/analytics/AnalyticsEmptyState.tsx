@@ -71,7 +71,7 @@ export const AnalyticsEmptyState = () => {
               Upload Your First Bill
             </Button>
             <Button
-              onClick={() => navigate("/transactions")}
+              onClick={() => navigate("/expenses?tab=review")}
               variant="outline"
               size="lg"
               className="gap-2"

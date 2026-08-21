@@ -15,7 +15,7 @@ import { NavLink } from "@/components/NavLink";
 import {
   LayoutDashboard,
   Receipt,
-  Wallet,
+  FileCheck,
   FileText,
   MessageCircle,
 } from "lucide-react";
@@ -23,8 +23,8 @@ import { FF } from "@/lib/featureFlags";
 
 const TABS = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
-  { icon: Wallet, label: "Transactions", path: "/transactions" },
   { icon: Receipt, label: "Expenses", path: "/expenses" },
+  { icon: FileCheck, label: "Documents", path: "/documents" },
   { icon: FileText, label: "Records", path: "/substantiation" },
 ];
 

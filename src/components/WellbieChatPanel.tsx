@@ -58,7 +58,7 @@ const quickActionsByPage: Record<string, string[]> = {
   "/dashboard": ["What should I do next?", "Explain my savings potential"],
   "/expenses/new": ["What documents do I need?", "Is this HSA eligible?"],
   "/substantiation": ["When should I reimburse?", "What's the tax impact?"],
-  "/transactions": ["Is this medical?", "Why was this categorized this way?"],
+  "/expenses": ["Is this medical?", "Why was this categorized this way?"],
 };
 
 export const WellbieChatPanel = ({

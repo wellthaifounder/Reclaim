@@ -31,7 +31,7 @@ export function getNextAction(stats: DashboardStats): DashboardAction {
       title: "Review Your Transactions",
       description: `You have ${stats.unreviewedTransactions} ${stats.unreviewedTransactions === 1 ? "transaction" : "transactions"} waiting for review`,
       buttonText: `Review ${stats.unreviewedTransactions} Transaction${stats.unreviewedTransactions === 1 ? "" : "s"}`,
-      route: "/transactions?tab=review",
+      route: "/expenses?tab=review",
       icon: ListChecks,
       timeEstimate:
         stats.unreviewedTransactions <= 5 ? "~2 minutes" : "~5 minutes",

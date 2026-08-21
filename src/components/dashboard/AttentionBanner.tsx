@@ -79,7 +79,7 @@ export function AttentionBanner({ attention }: AttentionBannerProps) {
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => navigate("/transactions")}
+                  onClick={() => navigate("/expenses?tab=review")}
                 >
                   Review
                 </Button>
@@ -95,7 +95,7 @@ export function AttentionBanner({ attention }: AttentionBannerProps) {
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => navigate("/transactions")}
+                  onClick={() => navigate("/expenses?tab=review")}
                 >
                   Link
                 </Button>
