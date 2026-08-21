@@ -15,7 +15,13 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Plus, Loader2, FileText, Search } from "lucide-react";
+import {
+  Plus,
+  Loader2,
+  FileText,
+  Search,
+  ClipboardCheck,
+} from "lucide-react";
 import {
   calculateHSAEligibility,
   getPaymentStatusBadge,
@@ -24,6 +30,8 @@ import {
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
 import { withQueryTimeout } from "@/lib/queryHelpers";
 import { BillsHeroMetrics } from "@/components/bills/BillsHeroMetrics";
+import { SubstantiateDialog } from "@/components/expense/SubstantiateDialog";
+import { formatDateOnly } from "@/lib/dates";
 // Bill review feature archived
 // import { BillReviewCard } from "@/components/bills/BillReviewCard";
 // import { DisputeAnalyticsDashboard } from "@/components/bills/DisputeAnalyticsDashboard";
@@ -70,6 +78,9 @@ const Bills = ({ embedded = false }: BillsProps) => {
     );
 
   const navigate = useNavigate();
+
+  // Which expense the substantiate dialog is open for, or null for closed.
+  const [substantiateId, setSubstantiateId] = useState<string | null>(null);
 
   // Filter states
   const [searchTerm, setSearchTerm] = useState("");
@@ -383,8 +394,24 @@ const Bills = ({ embedded = false }: BillsProps) => {
                           <h4 className="font-medium">{bill.vendor}</h4>
                           <p className="text-sm text-muted-foreground">
                             {bill.category} •{" "}
-                            {new Date(bill.date).toLocaleDateString()}
+                            {formatDateOnly(bill.date)}
                           </p>
+                          {/* Substantiating is the common errand on this list,
+                              so it gets its own control rather than sitting one
+                              page-load away. stopPropagation because the row
+                              itself still opens the full detail page. */}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="mt-2"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSubstantiateId(bill.id);
+                            }}
+                          >
+                            <ClipboardCheck className="h-3.5 w-3.5 mr-1.5" />
+                            Substantiate
+                          </Button>
                         </div>
                         <div className="text-right">
                           <p className="font-semibold">
@@ -433,6 +460,18 @@ const Bills = ({ embedded = false }: BillsProps) => {
             </CardContent>
           </Card>
         </div>
+
+        <SubstantiateDialog
+          expenseId={substantiateId}
+          open={substantiateId !== null}
+          onOpenChange={(next) => {
+            if (!next) setSubstantiateId(null);
+            // Amounts, eligibility and documentation may all have moved while
+            // the dialog was open, so the list behind it is refetched on close
+            // rather than left showing stale badges.
+            if (!next) void refetchBills();
+          }}
+        />
       </div>
     </Shell>
   );

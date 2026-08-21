@@ -54,6 +54,8 @@ export interface SubstantiationPanelProps {
   patientId: string | null;
   mileage?: MileageBreakdown | null;
   onSaved?: () => void;
+  /** Hide the card's own title when the surrounding surface already has one. */
+  hideHeader?: boolean;
 }
 
 export function SubstantiationPanel({
@@ -65,6 +67,7 @@ export function SubstantiationPanel({
   patientId,
   mileage,
   onSaved,
+  hideHeader = false,
 }: SubstantiationPanelProps) {
   const queryClient = useQueryClient();
   const { tags, addTag, removeTag } = useExpenseTags(invoiceId);
@@ -159,18 +162,23 @@ export function SubstantiationPanel({
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <ClipboardCheck className="h-5 w-5" />
-          Substantiate this expense
-        </CardTitle>
-        <CardDescription>
-          The details that decide whether you can claim it, and the paperwork
-          you&rsquo;d want if anyone ever asked.
-        </CardDescription>
-      </CardHeader>
+      {/* Suppressed when the host already says what this is -- the dialog
+          version is titled "Substantiate this expense" itself, and repeating
+          it two inches lower reads as a rendering bug. */}
+      {!hideHeader && (
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ClipboardCheck className="h-5 w-5" />
+            Substantiate this expense
+          </CardTitle>
+          <CardDescription>
+            The details that decide whether you can claim it, and the paperwork
+            you&rsquo;d want if anyone ever asked.
+          </CardDescription>
+        </CardHeader>
+      )}
 
-      <CardContent className="space-y-5">
+      <CardContent className={hideHeader ? "space-y-5 pt-6" : "space-y-5"}>
         <EligibilityGates invoiceId={invoiceId} serviceDate={serviceDate} />
 
         {status && !status.is_complete && status.missing.length > 0 && (
