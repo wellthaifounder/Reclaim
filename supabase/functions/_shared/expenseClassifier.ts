@@ -175,7 +175,11 @@ export async function classifyAndPersist(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
+      // `role` is required on Vertex AI — without it the call fails with
+      // "Please use a valid role: user, model." See the same note in
+      // receiptOcrProcessor.ts; both were written against the AI Studio
+      // endpoint, which defaults the field.
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
       generationConfig: { responseMimeType: "application/json" },
     }),
   });

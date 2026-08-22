@@ -115,6 +115,12 @@ export async function processReceiptOcr(
     body: JSON.stringify({
       contents: [
         {
+          // `role` is required on Vertex AI and rejected as
+          // "Please use a valid role: user, model." when missing. The direct
+          // AI Studio endpoint defaults it, which is why the omission survived
+          // the migration to Vertex unnoticed -- the code was only ever
+          // exercised against the endpoint that forgave it.
+          role: "user",
           parts: [
             { text: PROMPT },
             { inline_data: { mime_type: mimeType, data: rawBase64 } },
