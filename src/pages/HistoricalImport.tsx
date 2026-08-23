@@ -28,6 +28,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { logError } from "@/utils/errorHandler";
+import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 
 interface SyncResult {
   medical_detected: number;
@@ -56,6 +57,12 @@ export default function HistoricalImport() {
   const navigate = useNavigate();
   const location = useLocation();
   const routeState = (location.state ?? {}) as RouteState;
+
+  // Step 0: this page is the hinge between "connect" and "configure". A user
+  // who is still in setup continues into the questions from here; a user who
+  // came back later to sync another bank goes straight to their transactions.
+  const { isComplete: onboardingComplete } = useOnboardingStatus();
+  const midOnboarding = onboardingComplete === false;
 
   const [phase, setPhase] = useState<"loading" | "result" | "error">("loading");
   const [result, setResult] = useState<SyncResult | null>(null);
@@ -210,8 +217,14 @@ export default function HistoricalImport() {
             >
               Manage Bank Accounts
             </Button>
-            <Button onClick={() => navigate("/bills")}>
-              Continue to Bills
+            <Button
+              onClick={() =>
+                navigate(
+                  midOnboarding ? "/welcome?step=household" : "/expenses",
+                )
+              }
+            >
+              {midOnboarding ? "Continue setup" : "Continue to expenses"}
             </Button>
           </div>
         </div>
@@ -259,23 +272,37 @@ export default function HistoricalImport() {
               </p>
             )}
 
+            {/* Mid-setup this is a one-way door on purpose. The spec puts the
+                remaining questions AFTER this moment precisely so the user has
+                seen their own money first; offering "I'll do it later" here
+                would hand back the drop-off the ordering exists to prevent.
+                Every individual question on the next screens is still
+                skippable. */}
             <div className="flex flex-col gap-2 pt-2">
               <Button
                 size="lg"
-                onClick={() => navigate("/bills")}
+                onClick={() =>
+                  navigate(
+                    midOnboarding ? "/welcome?step=household" : "/expenses",
+                  )
+                }
                 className="w-full"
               >
-                Review them now
+                {midOnboarding
+                  ? "Next: a few quick questions"
+                  : "Review them now"}
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
-              <Button
-                size="lg"
-                variant="ghost"
-                onClick={() => navigate("/dashboard")}
-                className="w-full"
-              >
-                I'll review later
-              </Button>
+              {!midOnboarding && (
+                <Button
+                  size="lg"
+                  variant="ghost"
+                  onClick={() => navigate("/dashboard")}
+                  className="w-full"
+                >
+                  I'll review later
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>

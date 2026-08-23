@@ -34,7 +34,7 @@ import { FamilyRosterCard } from "@/components/family/FamilyRosterCard";
 import { useRecomputeTiming } from "@/hooks/useHSAEligibility";
 import { SubscriptionManagement } from "@/components/settings/SubscriptionManagement";
 import { EmailForwardingCard } from "@/components/settings/EmailForwardingCard";
-import { useOnboarding } from "@/contexts/OnboardingContext";
+import { useSetOnboardingComplete } from "@/hooks/useOnboardingStatus";
 import {
   Dialog,
   DialogContent,
@@ -78,7 +78,7 @@ interface BankConnection {
 const Settings = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const onboarding = useOnboarding();
+  const setOnboardingComplete = useSetOnboardingComplete();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [email, setEmail] = useState("");
@@ -323,24 +323,32 @@ const Settings = () => {
                 <ThemeToggleGroup />
               </div>
 
+              {/* Was "Reset Feature Tours", which cleared a localStorage flag
+                  read by three components that no route rendered — so it reset
+                  nothing a user could see. It now clears the real setup marker
+                  on the profile and walks the connect-first flow again. */}
               <div className="space-y-2">
-                <h4 className="font-medium">Feature Discovery</h4>
+                <h4 className="font-medium">Setup</h4>
                 <p className="text-sm text-muted-foreground">
-                  Reset the onboarding tooltips to see feature introductions
-                  again
+                  Walk through connecting a bank, your household, your HSA date
+                  and your reimbursement strategy again. Nothing you've already
+                  saved is erased.
                 </p>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => {
-                    onboarding.resetOnboarding();
-                    toast.success(
-                      "Onboarding reset! Visit the dashboard to see tooltips again.",
-                    );
+                  disabled={setOnboardingComplete.isPending}
+                  onClick={async () => {
+                    try {
+                      await setOnboardingComplete.mutateAsync(false);
+                      navigate("/welcome");
+                    } catch {
+                      toast.error("Couldn't restart setup. Please try again.");
+                    }
                   }}
                 >
                   <RotateCcw className="h-4 w-4 mr-2" />
-                  Reset Feature Tours
+                  Replay setup
                 </Button>
               </div>
             </CardContent>

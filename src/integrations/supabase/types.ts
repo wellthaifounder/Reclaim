@@ -702,9 +702,11 @@ export type Database = {
           has_seen_insurance_prompt: boolean | null
           hsa_custodian: string | null
           hsa_opened_date: string | null
+          hsa_opened_date_is_estimate: boolean
           id: string
           insurance_plan: Json | null
           is_admin: boolean | null
+          onboarding_completed_at: string | null
           privacy_policy_version_accepted: string | null
           reimbursement_strategy_preference: string
           terms_accepted_at: string | null
@@ -721,9 +723,11 @@ export type Database = {
           has_seen_insurance_prompt?: boolean | null
           hsa_custodian?: string | null
           hsa_opened_date?: string | null
+          hsa_opened_date_is_estimate?: boolean
           id: string
           insurance_plan?: Json | null
           is_admin?: boolean | null
+          onboarding_completed_at?: string | null
           privacy_policy_version_accepted?: string | null
           reimbursement_strategy_preference?: string
           terms_accepted_at?: string | null
@@ -740,9 +744,11 @@ export type Database = {
           has_seen_insurance_prompt?: boolean | null
           hsa_custodian?: string | null
           hsa_opened_date?: string | null
+          hsa_opened_date_is_estimate?: boolean
           id?: string
           insurance_plan?: Json | null
           is_admin?: boolean | null
+          onboarding_completed_at?: string | null
           privacy_policy_version_accepted?: string | null
           reimbursement_strategy_preference?: string
           terms_accepted_at?: string | null
@@ -1576,10 +1582,6 @@ export type Database = {
         Args: { p_is_medical: boolean; p_merchant_key: string }
         Returns: number
       }
-      calculate_fair_pricing_score: {
-        Args: { p_provider_id: string }
-        Returns: number
-      }
       can_view_provider_review: {
         Args: { p_is_flagged: boolean; p_user_id: string }
         Returns: boolean
@@ -1613,19 +1615,6 @@ export type Database = {
           expenses_closed: number
           record_id: string
           record_number: string
-        }[]
-      }
-      detect_claimable_care_events: {
-        Args: { p_threshold?: number; p_user_id: string }
-        Returns: {
-          collection_id: string
-          hsa_eligible_amount: number
-          invoice_count: number
-          oop_claimable: number
-          paid_via_hsa: number
-          title: string
-          total_paid: number
-          unreimbursed_invoice_ids: string[]
         }[]
       }
       detect_duplicate_expenses: {
@@ -1800,18 +1789,6 @@ export type Database = {
           merchant_key: string
           total_amount: number
           txn_count: number
-        }[]
-      }
-      suggest_invoice_clusters: {
-        Args: { p_user_id: string }
-        Returns: {
-          cluster_key: string
-          invoice_count: number
-          invoice_ids: string[]
-          max_date: string
-          min_date: string
-          total_amount: number
-          vendor: string
         }[]
       }
       sync_expense_documentation_state: {

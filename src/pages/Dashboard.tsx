@@ -20,6 +20,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useReimbursementStrategy } from "@/hooks/useReimbursementStrategy";
+import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -72,8 +73,23 @@ function fmtMoney(n: number): string {
 export default function Dashboard() {
   const navigate = useNavigate();
   const { isShoebox } = useReimbursementStrategy();
+  const { isComplete: onboardingComplete } = useOnboardingStatus();
   const [data, setData] = useState<DashboardData>(EMPTY_DATA);
   const [loading, setLoading] = useState(true);
+
+  // Step 0. Auth sends every sign-in to /dashboard, which makes this the one
+  // place a new user reliably passes through -- so the setup gate lives here
+  // rather than in ProtectedRoute, where it would have to special-case its own
+  // destination on every authenticated route in the app.
+  //
+  // `null` means we do not know yet and must not act: reading it as "not
+  // complete" would bounce an existing user into the welcome flow for the
+  // moment before their profile row loads.
+  useEffect(() => {
+    if (onboardingComplete === false) {
+      navigate("/welcome", { replace: true });
+    }
+  }, [onboardingComplete, navigate]);
 
   useEffect(() => {
     let cancelled = false;
