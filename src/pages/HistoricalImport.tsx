@@ -18,6 +18,7 @@ import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
+import { FocusedLayout } from "@/components/FocusedLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -52,6 +53,32 @@ const LOADING_COPY = [
   { text: "Checking each against IRS Pub 502…", min_ms: 18_000 },
   { text: "Almost done — assembling your reclaim list…", min_ms: 30_000 },
 ];
+
+/**
+ * This page is reached two ways and needs a different frame for each.
+ *
+ * Mid-setup it is one beat of the Step 0 flow, so it takes the same bare
+ * chrome as /welcome — no sidebar full of empty destinations, no competing
+ * "Snap a receipt" button, and no accidental exits while a sync is running.
+ * Reached later, by someone connecting a second bank from Settings, it is an
+ * ordinary page in an app they already live in and keeps the full navigation.
+ *
+ * No exit control while the sync is in flight: there is nothing to escape to
+ * yet, and the result lands within a minute.
+ */
+function ImportFrame({
+  focused,
+  children,
+}: {
+  focused: boolean;
+  children: React.ReactNode;
+}) {
+  return focused ? (
+    <FocusedLayout>{children}</FocusedLayout>
+  ) : (
+    <AuthenticatedLayout>{children}</AuthenticatedLayout>
+  );
+}
 
 export default function HistoricalImport() {
   const navigate = useNavigate();
@@ -173,7 +200,7 @@ export default function HistoricalImport() {
       LOADING_COPY[0];
 
     return (
-      <AuthenticatedLayout>
+      <ImportFrame focused={midOnboarding}>
         <div className="max-w-xl mx-auto px-4 py-16 text-center">
           <div className="relative inline-block">
             <Loader2 className="h-16 w-16 mx-auto mb-6 animate-spin text-primary" />
@@ -196,14 +223,14 @@ export default function HistoricalImport() {
             {currentCopy.text}
           </p>
         </div>
-      </AuthenticatedLayout>
+      </ImportFrame>
     );
   }
 
   // ── Error state ──────────────────────────────────────────────────────────
   if (phase === "error") {
     return (
-      <AuthenticatedLayout>
+      <ImportFrame focused={midOnboarding}>
         <div className="max-w-xl mx-auto px-4 py-16 text-center">
           <AlertCircle className="h-12 w-12 mx-auto mb-4 text-amber-500" />
           <h1 className="text-2xl font-semibold mb-2">
@@ -228,7 +255,7 @@ export default function HistoricalImport() {
             </Button>
           </div>
         </div>
-      </AuthenticatedLayout>
+      </ImportFrame>
     );
   }
 
@@ -237,7 +264,7 @@ export default function HistoricalImport() {
   const months = Math.round(r.window_days / 30);
 
   return (
-    <AuthenticatedLayout>
+    <ImportFrame focused={midOnboarding}>
       <div className="max-w-xl mx-auto px-4 py-12">
         <Card className="border-primary/20">
           <CardContent className="p-8 text-center space-y-6">
@@ -313,6 +340,6 @@ export default function HistoricalImport() {
           audit-defensible.
         </p>
       </div>
-    </AuthenticatedLayout>
+    </ImportFrame>
   );
 }

@@ -181,7 +181,23 @@ serve(async (req) => {
 - [ ] **PHI-safe logging** — use `safeLog()` from `src/utils/errorHandler.ts` instead of `console.log/error` for any data that might contain user or health information.
 - [ ] **Error boundaries** — all new pages must be wrapped in `<ErrorBoundary>`.
 - [ ] **Protected routes** — all authenticated pages must be wrapped in `<ProtectedRoute>`.
-- [ ] **Authenticated layout** — all authenticated pages must use `<AuthenticatedLayout>` (not standalone `<AuthenticatedNav>`) to ensure sidebar and bottom nav appear on all devices.
+- [ ] **Authenticated layout** — all authenticated pages must use `<AuthenticatedLayout>` (not standalone `<AuthenticatedNav>`) to ensure sidebar and bottom nav appear on all devices. **One exception: setup.** See below.
+
+### The one exception to `<AuthenticatedLayout>`: first-run setup
+
+`<FocusedLayout>` (`src/components/FocusedLayout.tsx`) exists for Step 0 and is used by exactly two pages: `/welcome`, and `/onboarding/import` **when reached mid-setup**. It renders the logo, the flow, a theme toggle, and one visible way out — no sidebar, no bottom tabs, no top nav.
+
+**Why the general rule inverts here.** A brand-new account has no expenses, no records, and nothing to substantiate, so the full chrome offers six doors into empty rooms at the moment we are asking for the user's trust and their bank credentials. Worse, the top bar's "Snap a receipt" button is a competing call to action pointing at manual entry, sitting on the one screen whose entire job is to argue for connecting a bank instead.
+
+**Do not "fix" these two pages back onto `<AuthenticatedLayout>`.** It is a deliberate choice, not an oversight.
+
+**Rules for using `<FocusedLayout>`:**
+
+- **Setup only.** Any other authenticated page uses `<AuthenticatedLayout>`. If a second flow ever seems to need it, that is a conversation, not a copy-paste.
+- **Always give the user a way out.** Pass `onExit` unless the page body already renders an obvious, always-visible way onward (the import page during its sync is the only current case — there is nothing to escape to yet and it resolves within a minute). Chrome-free must never mean trapped.
+- **Exiting completes setup.** Skipping stamps `profiles.onboarding_completed_at` so the flow does not ambush the user again on the next sign-in. Every skipped question is asked again later where it actually blocks something.
+- **Security controls are not chrome.** `useSessionTimeout` stays; do not drop it in the name of a bare layout.
+- **`/onboarding/import` keeps the full layout for returning users** — someone connecting a second bank from Settings is in an app they already live in. `ImportFrame` in that file picks the frame; leave it conditional.
 
 ---
 

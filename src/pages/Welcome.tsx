@@ -27,7 +27,7 @@ import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
-import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
+import { FocusedLayout } from "@/components/FocusedLayout";
 import { PlaidLink } from "@/components/PlaidLink";
 import { FamilyRosterCard } from "@/components/family/FamilyRosterCard";
 import { Button } from "@/components/ui/button";
@@ -107,8 +107,14 @@ export default function Welcome() {
   };
 
   return (
-    <AuthenticatedLayout>
-      <div className="max-w-xl mx-auto px-4 py-8 sm:py-12">
+    <FocusedLayout
+      exitLabel="Skip setup"
+      // Leaving early is allowed and stamps setup complete, so the flow does
+      // not reappear on the next sign-in. Every question it skipped gets asked
+      // again where it actually blocks something.
+      onExit={() => finish("/dashboard")}
+    >
+      <div className="max-w-xl mx-auto px-4 py-4 sm:py-8">
         {/* Progress. Hidden on the first step: showing someone a four-step
             progress bar before they have agreed to step one advertises how
             much work is ahead, which is the drop-off the spec is about. */}
@@ -168,7 +174,7 @@ export default function Welcome() {
           />
         )}
       </div>
-    </AuthenticatedLayout>
+    </FocusedLayout>
   );
 }
 
