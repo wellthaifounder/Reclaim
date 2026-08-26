@@ -65,13 +65,28 @@ Wellth.ai handles Protected Health Information (PHI) and Protected Financial Inf
 
 **Every new edge function MUST satisfy all of the following before being committed:**
 
-- [ ] **JWT validation** — call `supabase.auth.getUser()` and return 401 if the user is not authenticated. The only exceptions are explicitly documented public endpoints.
+- [ ] **JWT validation** — call `supabase.auth.getUser()` and return 401 if the user is not authenticated. The only exceptions are explicitly documented endpoints that declare a compensating control — see below.
 - [ ] **Dynamic CORS** — use `getCorsHeaders(req.headers.get('origin'))` with a whitelist array. Never use `'Access-Control-Allow-Origin': '*'`.
 - [ ] **Input validation** — validate the request body with Zod before using any values.
 - [ ] **URL validation** — if fetching an external URL from user input, validate scheme (`https:` only) and domain against an explicit allowlist.
 - [ ] **Generic error responses** — the catch block returns a generic message to the client and logs details server-side only. Auth errors (401) and input errors (400) may be specific since they are user-actionable.
 - [ ] **Least-privilege key** — use `SUPABASE_ANON_KEY` unless a privileged operation (e.g., admin DB write) requires `SUPABASE_SERVICE_ROLE_KEY`.
 - [ ] **User ownership check** — when accessing user-owned resources, verify `user_id = auth.uid()` in the query or in code.
+
+### Server-to-server endpoints, and how to declare one
+
+A webhook receiver has no end-user JWT — the caller is another company's server — and no browser origin to whitelist. Forcing `auth.getUser()` and CORS onto one is not achievable, and adding CORS headers to a webhook only widens what can reach it.
+
+Such an endpoint declares its exemption in a header comment, naming the control that stands in:
+
+```typescript
+// SECURITY-EXEMPTION(user-jwt): verifyPlaidWebhook
+// SECURITY-EXEMPTION(cors): server-to-server
+```
+
+**A comment on its own exempts nothing.** `.claude/hooks/done-checks.mjs` requires the named control to appear as an actual call in the same file, so the marker can only point at a real control, never wave a rule away. For `cors` the single accepted value is `server-to-server`. Wildcard CORS (`Access-Control-Allow-Origin: *`) is never exemptible on any endpoint.
+
+Anything exempted must still: verify the caller's signature before doing any work, return 401 when verification fails, and scope every write by a user id it resolved itself — never one taken from the request body. `supabase/functions/plaid-webhook/index.ts` is the worked example.
 
 ### Canonical Edge Function Template
 

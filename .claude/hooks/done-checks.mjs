@@ -232,6 +232,42 @@ function checkMigrations(files, dir) {
   return { name: "migrations", errors, warnings: warnings.slice(0, 12) };
 }
 
+/**
+ * Read a declared security exemption for one rule.
+ *
+ * CLAUDE.md's checklist has always allowed "explicitly documented public
+ * endpoints", but this hook could not read intent, so a correct
+ * server-to-server function failed every time anyone touched it. A check that
+ * cries wolf on a file that is right gets ignored, and then it is not
+ * protecting anything.
+ *
+ * A comment alone is NOT enough to exempt a file. The marker must name a
+ * compensating control, and that control must actually appear as a call in the
+ * same file:
+ *
+ *   // SECURITY-EXEMPTION(user-jwt): verifyPlaidWebhook
+ *   // SECURITY-EXEMPTION(cors): server-to-server
+ *
+ * So the escape hatch cannot be used to wave a rule away -- it can only be
+ * used to point at the thing standing in for it, and the pointer is checked.
+ * `server-to-server` is the one accepted control for `cors`, because a
+ * non-browser caller has no origin to whitelist and adding CORS to a webhook
+ * would only widen it.
+ */
+function exemption(body, rule) {
+  const m = new RegExp(
+    `SECURITY-EXEMPTION\\(${rule}\\)\\s*:\\s*([A-Za-z0-9_.-]+)`,
+  ).exec(body);
+  if (!m) return null;
+  const control = m[1];
+  if (rule === "cors" && control === "server-to-server") return control;
+  // Must be called, not merely mentioned in the comment that claims it.
+  const called = new RegExp(`${control}\\s*\\(`).test(
+    body.replace(/SECURITY-EXEMPTION\([^)]*\)\s*:\s*[A-Za-z0-9_.-]+/g, ""),
+  );
+  return called ? control : null;
+}
+
 /** The edge-function security checklist, as greps. */
 function checkEdgeFunctions(files, dir) {
   const targets = files.filter(
@@ -242,25 +278,36 @@ function checkEdgeFunctions(files, dir) {
   );
   if (!targets.length) return null;
   const errors = [];
+  const warnings = [];
   for (const rel of targets) {
     const body = read(join(dir, rel));
     if (body === null) continue;
+
+    // Never exemptible. A wildcard origin is wrong on every endpoint, and a
+    // server-to-server function has no reason to send one at all.
     if (/["']Access-Control-Allow-Origin["']\s*:\s*["']\*["']/.test(body))
       errors.push(
         `${rel}  wildcard CORS — use getCorsHeaders(req.headers.get('origin'))`,
       );
-    if (!/getCorsHeaders/.test(body))
+
+    const corsExempt = exemption(body, "cors");
+    if (!/getCorsHeaders/.test(body) && !corsExempt)
       errors.push(
-        `${rel}  no getCorsHeaders — CORS origin must come from the whitelist`,
+        `${rel}  no getCorsHeaders — CORS origin must come from the whitelist,` +
+          ` or declare // SECURITY-EXEMPTION(cors): server-to-server`,
       );
-    // A function may be a documented public endpoint; that is why this says
-    // "confirm" rather than failing outright on intent it cannot read.
-    if (!/auth\.getUser\s*\(/.test(body))
+    else if (corsExempt) warnings.push(`${rel}  CORS exempt: ${corsExempt}`);
+
+    const jwtExempt = exemption(body, "user-jwt");
+    if (!/auth\.getUser\s*\(/.test(body) && !jwtExempt)
       errors.push(
-        `${rel}  no supabase.auth.getUser() — authenticate, or document why this endpoint is public`,
+        `${rel}  no supabase.auth.getUser() — authenticate, or declare` +
+          ` // SECURITY-EXEMPTION(user-jwt): <the control that replaces it>`,
       );
+    else if (jwtExempt)
+      warnings.push(`${rel}  user-JWT exempt, verified by: ${jwtExempt}()`);
   }
-  return { name: "edge functions", errors };
+  return { name: "edge functions", errors, warnings };
 }
 
 /** No secrets in src/, and only VITE_* off import.meta.env. */

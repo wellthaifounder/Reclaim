@@ -15,6 +15,15 @@
 //   - SERVER-TO-SERVER endpoint. Plaid is the caller; no end-user JWT exists.
 //     The canonical edge-function checklist's user-auth step is replaced by
 //     Plaid's JWT-signed webhook verification (../_shared/plaidWebhookVerification.ts).
+//
+//     SECURITY-EXEMPTION(user-jwt): verifyPlaidWebhook
+//     SECURITY-EXEMPTION(cors): server-to-server
+//
+//     These are read by .claude/hooks/done-checks.mjs, which requires the named
+//     control to actually be called in this file — a comment on its own cannot
+//     exempt anything. No CORS headers are sent deliberately: a browser never
+//     calls this, so there is no origin to whitelist and adding one would only
+//     widen what can reach it.
 //   - Uses SERVICE_ROLE_KEY because it writes across many users' rows on
 //     Plaid's behalf. Every write is scoped by the resolved
 //     plaid_connections.user_id — the webhook body's contents are never
