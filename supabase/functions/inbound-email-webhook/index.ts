@@ -17,6 +17,15 @@
 //   - Uses SERVICE_ROLE_KEY; every write is scoped to the resolved user_id.
 //   - Replies 200 after signature verification even on per-item errors so the
 //     provider does not retry-storm on a logic bug. Verification failure -> 401.
+//
+//     SECURITY-EXEMPTION(user-jwt): verifySvixSignature
+//     SECURITY-EXEMPTION(cors): server-to-server
+//
+//     Read by .claude/hooks/done-checks.mjs, which requires the named control
+//     to be called in this file, and by .github/workflows/deploy-functions.yml,
+//     which derives --no-verify-jwt from it. Declaring the exemption is what
+//     keeps this endpoint reachable by Resend; without it CI would deploy it
+//     behind the gateway's JWT check and inbound mail would stop arriving.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";

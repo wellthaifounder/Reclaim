@@ -403,6 +403,19 @@ Before committing any changes:
 6. For Plaid changes: use sandbox environment (`PLAID_ENV=sandbox`)
 7. For new edge functions: verify OPTIONS → 200, unauthenticated POST → 401, valid POST → expected response
 
+### Continuous integration (`.github/workflows/`)
+
+| Workflow                | Fires on                                         | Does                                                                                                   |
+| ----------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| `deploy-functions.yml`  | push to `main` touching `supabase/functions/**`  | Deploys changed functions (all of them if `_shared/**` changed), then probes each one unauthenticated  |
+| `verify-migrations.yml` | PRs and pushes touching `supabase/migrations/**` | Replays every migration from an empty schema; checks writes to Supabase-managed schemas are idempotent |
+
+**Required repository secrets:** `SUPABASE_ACCESS_TOKEN` (Supabase → Account → Access Tokens) and `SUPABASE_PROJECT_ID` (`fzmdfhdfvayaalhogskm`). Without both, the deploy job fails immediately with a message saying so rather than half-deploying.
+
+**The `--no-verify-jwt` flag is derived, never typed.** It comes from the `SECURITY-EXEMPTION(user-jwt)` marker in the function's own source — and CI re-checks, exactly as the Stop hook does, that the named control is really called before it will open the gateway. Deploying by hand on 2026-08-26, one person got that flag wrong on five functions in a single minute; deriving it means the deploy flag and the declared security model cannot drift apart.
+
+**Migrations are not applied automatically.** CI proves they _can_ run; a human still runs `supabase db push` or `db reset --linked`. Auto-applying schema changes to production on merge is not a mistake this project can afford, and there is no undo.
+
 ### The done-checks hook (automated — steps 1, 2 and part of the security policy)
 
 `.claude/hooks/done-checks.mjs` runs as a Claude Code **Stop** hook: at the end of any turn that wrote a file, it checks **only the files that turn touched** and refuses to let the turn end if they fail. `.claude/hooks/on-file-change.mjs` (PostToolUse) formats each written file with prettier and records its path for the Stop hook to read.

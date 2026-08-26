@@ -1,0 +1,102 @@
+# Prove every migration still runs from an empty schema, before it reaches main.
+#
+# CLAUDE.md has required this since 2026-05-03, when a fresh `supabase start`
+# was found to be broken in two places: a migration ALTERed `profiles` before
+# any migration created it, and another referenced two functions that no
+# migration ever defined. Production survived only because both predated
+# version-controlled migrations. The rule was written down; nothing enforced it.
+#
+# The second check is narrower and comes from 2026-08-26, when rebuilding
+# production died four migrations in. `supabase db reset --linked` truncates the
+# public and auth schemas but NOT storage.buckets, which Supabase manages
+# separately — so a bare `INSERT INTO storage.buckets` fails on duplicate key
+# and strands the rebuild with the database already dropped. A local reset
+# cannot catch that (it recreates storage too), so it is caught by reading the
+# SQL instead.
+
+name: Verify migrations
+
+on:
+  pull_request:
+    paths:
+      - "supabase/migrations/**"
+      - ".github/workflows/verify-migrations.yml"
+  push:
+    branches: [main]
+    paths:
+      - "supabase/migrations/**"
+
+jobs:
+  from-empty:
+    name: Runs from an empty schema
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start a clean stack
+        run: supabase start --exclude studio,realtime,storage-api,imgproxy,inbucket,edge-runtime
+
+      - name: Replay every migration from empty
+        run: supabase db reset --no-seed
+
+      - name: Report what was applied
+        if: always()
+        run: supabase migration list --local || true
+
+  writes-outside-public:
+    name: Writes outside public/auth are idempotent
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Look for non-idempotent inserts into Supabase-managed schemas
+        run: |
+          set -uo pipefail
+          # storage.buckets survives a remote `db reset`, so an INSERT into it
+          # must tolerate already existing or the next rebuild stops dead with
+          # the schema already dropped.
+          bad=0
+          # Process substitution, not a pipe: a `while` on the right of a pipe
+          # runs in a subshell, so anything it sets — including the failure
+          # flag — is discarded and the check silently always passes.
+          while IFS= read -r file; do
+            # Flatten to one line per statement so an ON CONFLICT sitting on a
+            # later line still counts as part of the same INSERT.
+            flat=$(tr '\n' ' ' < "$file")
+            hits=$(echo "$flat" \
+                   | grep -oiE "INSERT INTO[[:space:]]+(storage|auth|realtime)\.[a-z_]+[^;]*;" || true)
+            [ -z "$hits" ] && continue
+            while IFS= read -r stmt; do
+              [ -n "$stmt" ] || continue
+              if ! echo "$stmt" | grep -qiE "ON CONFLICT|WHERE NOT EXISTS"; then
+                echo "::error file=$file::Non-idempotent write to a Supabase-managed schema. Add ON CONFLICT DO NOTHING — these tables are not cleared by \`supabase db reset --linked\`, so this migration cannot be replayed."
+                echo "  in $file:"
+                echo "    $(echo "$stmt" | cut -c1-160)"
+                bad=1
+              fi
+            done <<< "$hits"
+          done < <(find supabase/migrations -name '*.sql')
+
+          if [ "$bad" -ne 0 ]; then exit 1; fi
+          echo "All writes to storage/auth/realtime schemas are idempotent."
+
+      - name: Migration filenames are correctly ordered
+        run: |
+          set -uo pipefail
+          # A migration whose version string is shorter than 14 digits sorts
+          # unpredictably against timestamped ones, and the CLI's migration
+          # list cannot match it against the remote history — which is how
+          # production ended up showing ten "remote-only" records that were
+          # really the same files under a truncated name.
+          short=$(find supabase/migrations -name '*.sql' -printf '%f\n' \
+                  | grep -vE '^[0-9]{14}_' || true)
+          if [ -n "$short" ]; then
+            echo "::warning::These migrations use a short version string and will not match cleanly against the remote history:"
+            echo "$short" | sed 's/^/  /'
+          else
+            echo "All migration filenames use a 14-digit timestamp."
+          fi
