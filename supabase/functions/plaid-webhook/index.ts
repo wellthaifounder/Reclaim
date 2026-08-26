@@ -196,6 +196,13 @@ serve(async (req) => {
     // payment never becomes a phantom expense.
     const transferPairs = await detectTransfers(supabase, {
       userId: connection.user_id,
+      // HISTORICAL_UPDATE is how the 18-month backfill actually arrives — the
+      // first sync returns only the last ~90 days and Plaid announces the rest
+      // later. The 45-day default would leave every card payment in that
+      // backfill counted as spending, so this event gets the same wide sweep
+      // the initial sync uses.
+      lookbackDays:
+        payload.webhook_code === "HISTORICAL_UPDATE" ? 550 : undefined,
     });
 
     // ── 5. Capture + deposit matching (shared with plaid-sync-transactions)

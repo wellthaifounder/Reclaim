@@ -27,11 +27,21 @@ import type { IngestedTransaction } from "./plaidSync.ts";
  */
 export async function detectTransfers(
   supabase: SupabaseClient,
-  opts: { userId: string; requestId?: string },
+  opts: { userId: string; requestId?: string; lookbackDays?: number },
 ): Promise<number> {
   const tag = opts.requestId ? `[${opts.requestId}] ` : "";
   const { data, error } = await supabase.rpc("detect_transfers", {
     p_user_id: opts.userId,
+    // The SQL default is 45 days, which is right for a routine sync where only
+    // the last few days are new. It is wrong for the initial import, which
+    // pulls up to 18 months: every credit-card payment older than 45 days was
+    // left unmatched and counted as spending, inflating the "we found $X"
+    // figure on the one screen where the number has to be trustworthy — and
+    // risking a phantom medical expense for money that only moved between the
+    // user's own accounts. Found by seeding 18 months of realistic history:
+    // three identical card payments, the two recent ones matched, the 73-day-
+    // old one silently missed.
+    ...(opts.lookbackDays ? { p_lookback_days: opts.lookbackDays } : {}),
   });
   if (error) {
     console.warn(`${tag}[transfers] detection failed: ${error.message}`);
