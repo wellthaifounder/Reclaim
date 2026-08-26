@@ -6,11 +6,6 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "13.0.5"
-  }
   graphql_public: {
     Tables: {
       [_ in never]: never
@@ -62,235 +57,165 @@ export type Database = {
         }
         Relationships: []
       }
-      collections: {
+      categorization_rules: {
         Row: {
-          color: string | null
-          created_at: string | null
-          description: string | null
-          hsa_eligible_amount: number | null
-          icon: string | null
+          created_at: string
+          display_label: string | null
           id: string
-          status: Database["public"]["Enums"]["collection_status"]
-          title: string
-          total_billed: number | null
-          total_paid: number | null
-          updated_at: string | null
+          is_medical: boolean
+          match_type: Database["public"]["Enums"]["rule_match_type"]
+          match_value: string
+          updated_at: string
           user_id: string
-          user_responsibility_override: number | null
         }
         Insert: {
-          color?: string | null
-          created_at?: string | null
-          description?: string | null
-          hsa_eligible_amount?: number | null
-          icon?: string | null
+          created_at?: string
+          display_label?: string | null
           id?: string
-          status?: Database["public"]["Enums"]["collection_status"]
-          title: string
-          total_billed?: number | null
-          total_paid?: number | null
-          updated_at?: string | null
+          is_medical: boolean
+          match_type: Database["public"]["Enums"]["rule_match_type"]
+          match_value: string
+          updated_at?: string
           user_id: string
-          user_responsibility_override?: number | null
         }
         Update: {
-          color?: string | null
-          created_at?: string | null
-          description?: string | null
-          hsa_eligible_amount?: number | null
-          icon?: string | null
+          created_at?: string
+          display_label?: string | null
           id?: string
-          status?: Database["public"]["Enums"]["collection_status"]
-          title?: string
-          total_billed?: number | null
-          total_paid?: number | null
-          updated_at?: string | null
+          is_medical?: boolean
+          match_type?: Database["public"]["Enums"]["rule_match_type"]
+          match_value?: string
+          updated_at?: string
           user_id?: string
-          user_responsibility_override?: number | null
         }
         Relationships: []
       }
-      expense_decisions: {
+      expense_duplicate_candidates: {
         Row: {
-          created_at: string | null
-          expense_amount: number
+          confidence: number
+          detected_at: string
+          expense_a_id: string
+          expense_b_id: string
           id: string
-          payment_strategy: Json
-          used_for_expense_id: string | null
+          match_reason: Database["public"]["Enums"]["duplicate_match_reason"]
+          resolved_at: string | null
+          status: Database["public"]["Enums"]["duplicate_status"]
           user_id: string
         }
         Insert: {
-          created_at?: string | null
-          expense_amount: number
+          confidence: number
+          detected_at?: string
+          expense_a_id: string
+          expense_b_id: string
           id?: string
-          payment_strategy: Json
-          used_for_expense_id?: string | null
+          match_reason: Database["public"]["Enums"]["duplicate_match_reason"]
+          resolved_at?: string | null
+          status?: Database["public"]["Enums"]["duplicate_status"]
           user_id: string
         }
         Update: {
-          created_at?: string | null
-          expense_amount?: number
+          confidence?: number
+          detected_at?: string
+          expense_a_id?: string
+          expense_b_id?: string
           id?: string
-          payment_strategy?: Json
-          used_for_expense_id?: string | null
+          match_reason?: Database["public"]["Enums"]["duplicate_match_reason"]
+          resolved_at?: string | null
+          status?: Database["public"]["Enums"]["duplicate_status"]
           user_id?: string
         }
         Relationships: [
           {
-            foreignKeyName: "expense_decisions_used_for_expense_id_fkey"
-            columns: ["used_for_expense_id"]
+            foreignKeyName: "expense_duplicate_candidates_expense_a_id_fkey"
+            columns: ["expense_a_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expense_duplicate_candidates_expense_b_id_fkey"
+            columns: ["expense_b_id"]
             isOneToOne: false
             referencedRelation: "invoices"
             referencedColumns: ["id"]
           },
         ]
       }
-      hospital_pricing: {
+      expense_tags: {
         Row: {
-          additional_generic_notes: string | null
-          additional_payer_notes: string | null
-          billing_class: string | null
-          claim_count: string | null
-          code: string
-          code_type: string
-          created_at: string | null
-          description: string
-          discounted_cash_price: number | null
-          drug_type: string | null
-          drug_unit: number | null
-          gross_charge: number | null
-          hospital_id: string | null
-          id: string
-          last_updated: string | null
-          max_negotiated_charge: number | null
-          median_allowed_amount: number | null
-          methodology: string | null
-          min_negotiated_charge: number | null
-          modifier_codes: string[] | null
-          negotiated_algorithm: string | null
-          negotiated_percentage: number | null
-          negotiated_rate: number | null
-          payer_name: string | null
-          percentile_10_amount: number | null
-          percentile_90_amount: number | null
-          plan_name: string | null
-          setting: string | null
+          created_at: string
+          invoice_id: string
+          tag_id: string
+          user_id: string
         }
         Insert: {
-          additional_generic_notes?: string | null
-          additional_payer_notes?: string | null
-          billing_class?: string | null
-          claim_count?: string | null
-          code: string
-          code_type: string
-          created_at?: string | null
-          description: string
-          discounted_cash_price?: number | null
-          drug_type?: string | null
-          drug_unit?: number | null
-          gross_charge?: number | null
-          hospital_id?: string | null
-          id?: string
-          last_updated?: string | null
-          max_negotiated_charge?: number | null
-          median_allowed_amount?: number | null
-          methodology?: string | null
-          min_negotiated_charge?: number | null
-          modifier_codes?: string[] | null
-          negotiated_algorithm?: string | null
-          negotiated_percentage?: number | null
-          negotiated_rate?: number | null
-          payer_name?: string | null
-          percentile_10_amount?: number | null
-          percentile_90_amount?: number | null
-          plan_name?: string | null
-          setting?: string | null
+          created_at?: string
+          invoice_id: string
+          tag_id: string
+          user_id: string
         }
         Update: {
-          additional_generic_notes?: string | null
-          additional_payer_notes?: string | null
-          billing_class?: string | null
-          claim_count?: string | null
-          code?: string
-          code_type?: string
-          created_at?: string | null
-          description?: string
-          discounted_cash_price?: number | null
-          drug_type?: string | null
-          drug_unit?: number | null
-          gross_charge?: number | null
-          hospital_id?: string | null
-          id?: string
-          last_updated?: string | null
-          max_negotiated_charge?: number | null
-          median_allowed_amount?: number | null
-          methodology?: string | null
-          min_negotiated_charge?: number | null
-          modifier_codes?: string[] | null
-          negotiated_algorithm?: string | null
-          negotiated_percentage?: number | null
-          negotiated_rate?: number | null
-          payer_name?: string | null
-          percentile_10_amount?: number | null
-          percentile_90_amount?: number | null
-          plan_name?: string | null
-          setting?: string | null
+          created_at?: string
+          invoice_id?: string
+          tag_id?: string
+          user_id?: string
         }
         Relationships: [
           {
-            foreignKeyName: "hospital_pricing_hospital_id_fkey"
-            columns: ["hospital_id"]
+            foreignKeyName: "expense_tags_invoice_id_fkey"
+            columns: ["invoice_id"]
             isOneToOne: false
-            referencedRelation: "hospitals"
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expense_tags_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "tags"
             referencedColumns: ["id"]
           },
         ]
       }
-      hospitals: {
+      family_members: {
         Row: {
-          address: Json | null
-          city: string | null
-          cms_id: string
-          created_at: string | null
+          created_at: string
+          date_of_birth: string | null
           id: string
-          last_updated: string | null
-          license_information: Json | null
-          location_name: string[] | null
+          is_active: boolean
           name: string
-          pricing_file_url: string | null
-          state: string | null
-          type_2_npi: string[] | null
-          zip: string | null
+          notes: string | null
+          qualifies_for_hsa: boolean | null
+          relationship: Database["public"]["Enums"]["family_relationship"]
+          tax_dependent: boolean | null
+          updated_at: string
+          user_id: string
         }
         Insert: {
-          address?: Json | null
-          city?: string | null
-          cms_id: string
-          created_at?: string | null
+          created_at?: string
+          date_of_birth?: string | null
           id?: string
-          last_updated?: string | null
-          license_information?: Json | null
-          location_name?: string[] | null
+          is_active?: boolean
           name: string
-          pricing_file_url?: string | null
-          state?: string | null
-          type_2_npi?: string[] | null
-          zip?: string | null
+          notes?: string | null
+          qualifies_for_hsa?: boolean | null
+          relationship: Database["public"]["Enums"]["family_relationship"]
+          tax_dependent?: boolean | null
+          updated_at?: string
+          user_id: string
         }
         Update: {
-          address?: Json | null
-          city?: string | null
-          cms_id?: string
-          created_at?: string | null
+          created_at?: string
+          date_of_birth?: string | null
           id?: string
-          last_updated?: string | null
-          license_information?: Json | null
-          location_name?: string[] | null
+          is_active?: boolean
           name?: string
-          pricing_file_url?: string | null
-          state?: string | null
-          type_2_npi?: string[] | null
-          zip?: string | null
+          notes?: string | null
+          qualifies_for_hsa?: boolean | null
+          relationship?: Database["public"]["Enums"]["family_relationship"]
+          tax_dependent?: boolean | null
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -344,81 +269,60 @@ export type Database = {
           },
         ]
       }
-      invoice_labels: {
-        Row: {
-          created_at: string
-          id: string
-          invoice_id: string
-          label_id: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          invoice_id: string
-          label_id: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          invoice_id?: string
-          label_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "invoice_labels_invoice_id_fkey"
-            columns: ["invoice_id"]
-            isOneToOne: false
-            referencedRelation: "invoices"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "invoice_labels_label_id_fkey"
-            columns: ["label_id"]
-            isOneToOne: false
-            referencedRelation: "labels"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       invoices: {
         Row: {
           amount: number
+          amount_paid: number | null
           card_payoff_months: number | null
           category: string
+          claim_state: Database["public"]["Enums"]["expense_claim_state"]
           classification_confidence: number | null
           classification_reasoning: string | null
           classification_warnings: Json
           classified_at: string | null
-          collection_id: string | null
           confirmed_at: string | null
           created_at: string
           date: string
           deductible_met: boolean | null
           deductible_portion: number | null
+          documentation_state: Database["public"]["Enums"]["expense_documentation_state"]
+          effective_service_date: string | null
           eligibility_basis_rule_id: string | null
+          eligibility_state: Database["public"]["Enums"]["expense_eligibility_state"]
           hsa_account_id: string | null
           id: string
+          ineligible_reason: string | null
           insurance_plan_name: string | null
           insurance_plan_type: string | null
           investment_notes: string | null
           invoice_date: string | null
           invoice_number: string | null
-          is_hsa_eligible: boolean | null
-          is_reimbursed: boolean | null
           lifecycle_status: Database["public"]["Enums"]["invoice_lifecycle_status"]
+          mileage_miles: number | null
+          mileage_parking_tolls: number | null
+          mileage_rate: number | null
+          mileage_trips: number | null
           network_status: string | null
           notes: string | null
           npi_number: string | null
+          patient_id: string | null
           patient_name: string | null
-          payment_method_id: string | null
           payment_plan_installments: number | null
           payment_plan_notes: string | null
           payment_plan_total_amount: number | null
           planned_reimbursement_date: string | null
+          reimbursable_amount: number | null
+          reimbursed_amount: number
           reimbursed_at: string | null
           reimbursement_reminder_date: string | null
           reimbursement_strategy: string | null
+          service_date: string | null
+          service_date_end: string | null
+          source: string | null
+          source_email_message_id: string | null
+          source_email_received_at: string | null
           source_plaid_transaction_id: string | null
+          source_transaction_id: string | null
           status: Database["public"]["Enums"]["invoice_status"]
           submitted_at: string | null
           submitted_record_id: string | null
@@ -430,42 +334,57 @@ export type Database = {
         }
         Insert: {
           amount: number
+          amount_paid?: number | null
           card_payoff_months?: number | null
           category: string
+          claim_state?: Database["public"]["Enums"]["expense_claim_state"]
           classification_confidence?: number | null
           classification_reasoning?: string | null
           classification_warnings?: Json
           classified_at?: string | null
-          collection_id?: string | null
           confirmed_at?: string | null
           created_at?: string
           date: string
           deductible_met?: boolean | null
           deductible_portion?: number | null
+          documentation_state?: Database["public"]["Enums"]["expense_documentation_state"]
+          effective_service_date?: string | null
           eligibility_basis_rule_id?: string | null
+          eligibility_state?: Database["public"]["Enums"]["expense_eligibility_state"]
           hsa_account_id?: string | null
           id?: string
+          ineligible_reason?: string | null
           insurance_plan_name?: string | null
           insurance_plan_type?: string | null
           investment_notes?: string | null
           invoice_date?: string | null
           invoice_number?: string | null
-          is_hsa_eligible?: boolean | null
-          is_reimbursed?: boolean | null
           lifecycle_status?: Database["public"]["Enums"]["invoice_lifecycle_status"]
+          mileage_miles?: number | null
+          mileage_parking_tolls?: number | null
+          mileage_rate?: number | null
+          mileage_trips?: number | null
           network_status?: string | null
           notes?: string | null
           npi_number?: string | null
+          patient_id?: string | null
           patient_name?: string | null
-          payment_method_id?: string | null
           payment_plan_installments?: number | null
           payment_plan_notes?: string | null
           payment_plan_total_amount?: number | null
           planned_reimbursement_date?: string | null
+          reimbursable_amount?: number | null
+          reimbursed_amount?: number
           reimbursed_at?: string | null
           reimbursement_reminder_date?: string | null
           reimbursement_strategy?: string | null
+          service_date?: string | null
+          service_date_end?: string | null
+          source?: string | null
+          source_email_message_id?: string | null
+          source_email_received_at?: string | null
           source_plaid_transaction_id?: string | null
+          source_transaction_id?: string | null
           status?: Database["public"]["Enums"]["invoice_status"]
           submitted_at?: string | null
           submitted_record_id?: string | null
@@ -477,42 +396,57 @@ export type Database = {
         }
         Update: {
           amount?: number
+          amount_paid?: number | null
           card_payoff_months?: number | null
           category?: string
+          claim_state?: Database["public"]["Enums"]["expense_claim_state"]
           classification_confidence?: number | null
           classification_reasoning?: string | null
           classification_warnings?: Json
           classified_at?: string | null
-          collection_id?: string | null
           confirmed_at?: string | null
           created_at?: string
           date?: string
           deductible_met?: boolean | null
           deductible_portion?: number | null
+          documentation_state?: Database["public"]["Enums"]["expense_documentation_state"]
+          effective_service_date?: string | null
           eligibility_basis_rule_id?: string | null
+          eligibility_state?: Database["public"]["Enums"]["expense_eligibility_state"]
           hsa_account_id?: string | null
           id?: string
+          ineligible_reason?: string | null
           insurance_plan_name?: string | null
           insurance_plan_type?: string | null
           investment_notes?: string | null
           invoice_date?: string | null
           invoice_number?: string | null
-          is_hsa_eligible?: boolean | null
-          is_reimbursed?: boolean | null
           lifecycle_status?: Database["public"]["Enums"]["invoice_lifecycle_status"]
+          mileage_miles?: number | null
+          mileage_parking_tolls?: number | null
+          mileage_rate?: number | null
+          mileage_trips?: number | null
           network_status?: string | null
           notes?: string | null
           npi_number?: string | null
+          patient_id?: string | null
           patient_name?: string | null
-          payment_method_id?: string | null
           payment_plan_installments?: number | null
           payment_plan_notes?: string | null
           payment_plan_total_amount?: number | null
           planned_reimbursement_date?: string | null
+          reimbursable_amount?: number | null
+          reimbursed_amount?: number
           reimbursed_at?: string | null
           reimbursement_reminder_date?: string | null
           reimbursement_strategy?: string | null
+          service_date?: string | null
+          service_date_end?: string | null
+          source?: string | null
+          source_email_message_id?: string | null
+          source_email_received_at?: string | null
           source_plaid_transaction_id?: string | null
+          source_transaction_id?: string | null
           status?: Database["public"]["Enums"]["invoice_status"]
           submitted_at?: string | null
           submitted_record_id?: string | null
@@ -523,13 +457,6 @@ export type Database = {
           vendor?: string
         }
         Relationships: [
-          {
-            foreignKeyName: "expenses_payment_method_id_fkey"
-            columns: ["payment_method_id"]
-            isOneToOne: false
-            referencedRelation: "payment_methods"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "expenses_user_id_fkey"
             columns: ["user_id"]
@@ -552,10 +479,17 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "invoices_medical_event_id_fkey"
-            columns: ["collection_id"]
+            foreignKeyName: "invoices_patient_id_fkey"
+            columns: ["patient_id"]
             isOneToOne: false
-            referencedRelation: "collections"
+            referencedRelation: "family_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_source_transaction_id_fkey"
+            columns: ["source_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
             referencedColumns: ["id"]
           },
           {
@@ -566,30 +500,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      labels: {
-        Row: {
-          color: string
-          created_at: string
-          id: string
-          name: string
-          user_id: string
-        }
-        Insert: {
-          color?: string
-          created_at?: string
-          id?: string
-          name: string
-          user_id: string
-        }
-        Update: {
-          color?: string
-          created_at?: string
-          id?: string
-          name?: string
-          user_id?: string
-        }
-        Relationships: []
       }
       matching_run_log: {
         Row: {
@@ -668,287 +578,135 @@ export type Database = {
           },
         ]
       }
-      payment_labels: {
+      plaid_accounts: {
         Row: {
+          connection_id: string
           created_at: string
           id: string
-          label_id: string
-          payment_transaction_id: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          label_id: string
-          payment_transaction_id: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          label_id?: string
-          payment_transaction_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "payment_labels_label_id_fkey"
-            columns: ["label_id"]
-            isOneToOne: false
-            referencedRelation: "labels"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "payment_labels_payment_transaction_id_fkey"
-            columns: ["payment_transaction_id"]
-            isOneToOne: false
-            referencedRelation: "payment_transactions"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      payment_methods: {
-        Row: {
-          created_at: string
-          id: string
-          is_hsa_account: boolean
-          name: string
-          rewards_rate: number | null
-          type: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          is_hsa_account?: boolean
-          name: string
-          rewards_rate?: number | null
-          type: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          is_hsa_account?: boolean
-          name?: string
-          rewards_rate?: number | null
-          type?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "payment_methods_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      payment_transactions: {
-        Row: {
-          amount: number
-          auto_linked: boolean
-          auto_linked_at: string | null
-          created_at: string
-          hsa_account_id: string | null
-          id: string
-          invoice_id: string
-          is_reimbursed: boolean
-          match_confidence: number | null
-          notes: string | null
-          payment_date: string
-          payment_method_id: string | null
-          payment_source: string
-          plaid_transaction_id: string | null
-          reimbursed_date: string | null
-          reimbursement_request_id: string | null
-          transaction_id: string | null
+          is_active: boolean
+          is_hsa: boolean | null
+          is_hsa_detected: boolean
+          is_hsa_override: boolean | null
+          mask: string | null
+          name: string | null
+          official_name: string | null
+          plaid_account_id: string
+          subtype: string | null
+          type: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
-          amount: number
-          auto_linked?: boolean
-          auto_linked_at?: string | null
+          connection_id: string
           created_at?: string
-          hsa_account_id?: string | null
           id?: string
-          invoice_id: string
-          is_reimbursed?: boolean
-          match_confidence?: number | null
-          notes?: string | null
-          payment_date: string
-          payment_method_id?: string | null
-          payment_source: string
-          plaid_transaction_id?: string | null
-          reimbursed_date?: string | null
-          reimbursement_request_id?: string | null
-          transaction_id?: string | null
+          is_active?: boolean
+          is_hsa?: boolean | null
+          is_hsa_detected?: boolean
+          is_hsa_override?: boolean | null
+          mask?: string | null
+          name?: string | null
+          official_name?: string | null
+          plaid_account_id: string
+          subtype?: string | null
+          type?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
-          amount?: number
-          auto_linked?: boolean
-          auto_linked_at?: string | null
+          connection_id?: string
           created_at?: string
-          hsa_account_id?: string | null
           id?: string
-          invoice_id?: string
-          is_reimbursed?: boolean
-          match_confidence?: number | null
-          notes?: string | null
-          payment_date?: string
-          payment_method_id?: string | null
-          payment_source?: string
-          plaid_transaction_id?: string | null
-          reimbursed_date?: string | null
-          reimbursement_request_id?: string | null
-          transaction_id?: string | null
+          is_active?: boolean
+          is_hsa?: boolean | null
+          is_hsa_detected?: boolean
+          is_hsa_override?: boolean | null
+          mask?: string | null
+          name?: string | null
+          official_name?: string | null
+          plaid_account_id?: string
+          subtype?: string | null
+          type?: string | null
           updated_at?: string
           user_id?: string
         }
         Relationships: [
           {
-            foreignKeyName: "payment_transactions_expense_report_id_fkey"
-            columns: ["invoice_id"]
+            foreignKeyName: "plaid_accounts_connection_id_fkey"
+            columns: ["connection_id"]
             isOneToOne: false
-            referencedRelation: "invoices"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "payment_transactions_hsa_account_id_fkey"
-            columns: ["hsa_account_id"]
-            isOneToOne: false
-            referencedRelation: "hsa_accounts"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "payment_transactions_payment_method_id_fkey"
-            columns: ["payment_method_id"]
-            isOneToOne: false
-            referencedRelation: "payment_methods"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "payment_transactions_reimbursement_request_id_fkey"
-            columns: ["reimbursement_request_id"]
-            isOneToOne: false
-            referencedRelation: "reimbursement_requests"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "payment_transactions_transaction_id_fkey"
-            columns: ["transaction_id"]
-            isOneToOne: false
-            referencedRelation: "transactions"
+            referencedRelation: "plaid_connections"
             referencedColumns: ["id"]
           },
         ]
       }
       plaid_connections: {
         Row: {
+          accounts_synced_at: string | null
           created_at: string
           encrypted_access_token: string
           first_sync_completed_at: string | null
           id: string
           initial_medical_count: number | null
           initial_total_count: number | null
+          institution_id: string | null
           institution_name: string | null
           item_id: string
           last_synced_at: string | null
+          transactions_cursor: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
+          accounts_synced_at?: string | null
           created_at?: string
           encrypted_access_token: string
           first_sync_completed_at?: string | null
           id?: string
           initial_medical_count?: number | null
           initial_total_count?: number | null
+          institution_id?: string | null
           institution_name?: string | null
           item_id: string
           last_synced_at?: string | null
+          transactions_cursor?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
+          accounts_synced_at?: string | null
           created_at?: string
           encrypted_access_token?: string
           first_sync_completed_at?: string | null
           id?: string
           initial_medical_count?: number | null
           initial_total_count?: number | null
+          institution_id?: string | null
           institution_name?: string | null
           item_id?: string
           last_synced_at?: string | null
+          transactions_cursor?: string | null
           updated_at?: string
           user_id?: string
         }
         Relationships: []
       }
-      procedure_insights: {
-        Row: {
-          average_patient_cost: number
-          cpt_code: string
-          created_at: string | null
-          fair_price_indicator: string | null
-          id: string
-          median_patient_cost: number | null
-          procedure_category: string | null
-          procedure_name: string
-          provider_id: string | null
-          times_performed: number | null
-          typical_insurance_payment: number | null
-          updated_at: string | null
-        }
-        Insert: {
-          average_patient_cost: number
-          cpt_code: string
-          created_at?: string | null
-          fair_price_indicator?: string | null
-          id?: string
-          median_patient_cost?: number | null
-          procedure_category?: string | null
-          procedure_name: string
-          provider_id?: string | null
-          times_performed?: number | null
-          typical_insurance_payment?: number | null
-          updated_at?: string | null
-        }
-        Update: {
-          average_patient_cost?: number
-          cpt_code?: string
-          created_at?: string | null
-          fair_price_indicator?: string | null
-          id?: string
-          median_patient_cost?: number | null
-          procedure_category?: string | null
-          procedure_name?: string
-          provider_id?: string | null
-          times_performed?: number | null
-          typical_insurance_payment?: number | null
-          updated_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "procedure_insights_provider_id_fkey"
-            columns: ["provider_id"]
-            isOneToOne: false
-            referencedRelation: "providers"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       profiles: {
         Row: {
+          calculator_projection: Json | null
           created_at: string
+          email_forward_enabled: boolean
+          email_forward_token: string
           full_name: string | null
           has_hsa: boolean | null
           has_seen_insurance_prompt: boolean | null
+          hsa_custodian: string | null
           hsa_opened_date: string | null
+          hsa_opened_date_is_estimate: boolean
           id: string
           insurance_plan: Json | null
           is_admin: boolean | null
+          onboarding_completed_at: string | null
           privacy_policy_version_accepted: string | null
           reimbursement_strategy_preference: string
           terms_accepted_at: string | null
@@ -956,14 +714,20 @@ export type Database = {
           user_intent: string | null
         }
         Insert: {
+          calculator_projection?: Json | null
           created_at?: string
+          email_forward_enabled?: boolean
+          email_forward_token?: string
           full_name?: string | null
           has_hsa?: boolean | null
           has_seen_insurance_prompt?: boolean | null
+          hsa_custodian?: string | null
           hsa_opened_date?: string | null
+          hsa_opened_date_is_estimate?: boolean
           id: string
           insurance_plan?: Json | null
           is_admin?: boolean | null
+          onboarding_completed_at?: string | null
           privacy_policy_version_accepted?: string | null
           reimbursement_strategy_preference?: string
           terms_accepted_at?: string | null
@@ -971,354 +735,25 @@ export type Database = {
           user_intent?: string | null
         }
         Update: {
+          calculator_projection?: Json | null
           created_at?: string
+          email_forward_enabled?: boolean
+          email_forward_token?: string
           full_name?: string | null
           has_hsa?: boolean | null
           has_seen_insurance_prompt?: boolean | null
+          hsa_custodian?: string | null
           hsa_opened_date?: string | null
+          hsa_opened_date_is_estimate?: boolean
           id?: string
           insurance_plan?: Json | null
           is_admin?: boolean | null
+          onboarding_completed_at?: string | null
           privacy_policy_version_accepted?: string | null
           reimbursement_strategy_preference?: string
           terms_accepted_at?: string | null
           updated_at?: string
           user_intent?: string | null
-        }
-        Relationships: []
-      }
-      provider_bills: {
-        Row: {
-          bill_amount: number
-          bill_review_id: string | null
-          confirmed_errors: Json | null
-          created_at: string
-          deductible_met: boolean | null
-          dispute_outcome: string | null
-          error_confirmed_at: string | null
-          error_confirmed_by_user: boolean | null
-          error_flagged_at: string | null
-          errors_found: number | null
-          id: string
-          insurance_plan_type: string | null
-          invoice_id: string
-          network_status: string | null
-          overcharge_amount: number | null
-          provider_id: string
-          was_disputed: boolean | null
-        }
-        Insert: {
-          bill_amount: number
-          bill_review_id?: string | null
-          confirmed_errors?: Json | null
-          created_at?: string
-          deductible_met?: boolean | null
-          dispute_outcome?: string | null
-          error_confirmed_at?: string | null
-          error_confirmed_by_user?: boolean | null
-          error_flagged_at?: string | null
-          errors_found?: number | null
-          id?: string
-          insurance_plan_type?: string | null
-          invoice_id: string
-          network_status?: string | null
-          overcharge_amount?: number | null
-          provider_id: string
-          was_disputed?: boolean | null
-        }
-        Update: {
-          bill_amount?: number
-          bill_review_id?: string | null
-          confirmed_errors?: Json | null
-          created_at?: string
-          deductible_met?: boolean | null
-          dispute_outcome?: string | null
-          error_confirmed_at?: string | null
-          error_confirmed_by_user?: boolean | null
-          error_flagged_at?: string | null
-          errors_found?: number | null
-          id?: string
-          insurance_plan_type?: string | null
-          invoice_id?: string
-          network_status?: string | null
-          overcharge_amount?: number | null
-          provider_id?: string
-          was_disputed?: boolean | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "provider_bills_invoice_id_fkey"
-            columns: ["invoice_id"]
-            isOneToOne: false
-            referencedRelation: "invoices"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "provider_bills_provider_id_fkey"
-            columns: ["provider_id"]
-            isOneToOne: false
-            referencedRelation: "providers"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      provider_charge_benchmarks: {
-        Row: {
-          average_charge: number
-          cpt_code: string
-          id: string
-          last_updated: string
-          max_charge: number | null
-          median_charge: number | null
-          medicare_rate: number | null
-          min_charge: number | null
-          procedure_name: string | null
-          provider_id: string
-          sample_size: number | null
-          variance_from_medicare: number | null
-          variance_from_national: number | null
-        }
-        Insert: {
-          average_charge: number
-          cpt_code: string
-          id?: string
-          last_updated?: string
-          max_charge?: number | null
-          median_charge?: number | null
-          medicare_rate?: number | null
-          min_charge?: number | null
-          procedure_name?: string | null
-          provider_id: string
-          sample_size?: number | null
-          variance_from_medicare?: number | null
-          variance_from_national?: number | null
-        }
-        Update: {
-          average_charge?: number
-          cpt_code?: string
-          id?: string
-          last_updated?: string
-          max_charge?: number | null
-          median_charge?: number | null
-          medicare_rate?: number | null
-          min_charge?: number | null
-          procedure_name?: string | null
-          provider_id?: string
-          sample_size?: number | null
-          variance_from_medicare?: number | null
-          variance_from_national?: number | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "provider_charge_benchmarks_provider_id_fkey"
-            columns: ["provider_id"]
-            isOneToOne: false
-            referencedRelation: "providers"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      provider_reviews: {
-        Row: {
-          billing_clarity_rating: number
-          cost_transparency_rating: number
-          created_at: string | null
-          deductible_met: boolean | null
-          flagged_reason: string | null
-          id: string
-          insurance_plan_type: string | null
-          invoice_id: string
-          is_flagged: boolean | null
-          is_verified_patient: boolean | null
-          network_status: string | null
-          overall_experience_rating: number
-          payment_flexibility_rating: number
-          procedure_category: string | null
-          provider_id: string
-          review_text: string | null
-          updated_at: string | null
-          user_id: string
-          would_recommend: boolean | null
-        }
-        Insert: {
-          billing_clarity_rating: number
-          cost_transparency_rating: number
-          created_at?: string | null
-          deductible_met?: boolean | null
-          flagged_reason?: string | null
-          id?: string
-          insurance_plan_type?: string | null
-          invoice_id: string
-          is_flagged?: boolean | null
-          is_verified_patient?: boolean | null
-          network_status?: string | null
-          overall_experience_rating: number
-          payment_flexibility_rating: number
-          procedure_category?: string | null
-          provider_id: string
-          review_text?: string | null
-          updated_at?: string | null
-          user_id: string
-          would_recommend?: boolean | null
-        }
-        Update: {
-          billing_clarity_rating?: number
-          cost_transparency_rating?: number
-          created_at?: string | null
-          deductible_met?: boolean | null
-          flagged_reason?: string | null
-          id?: string
-          insurance_plan_type?: string | null
-          invoice_id?: string
-          is_flagged?: boolean | null
-          is_verified_patient?: boolean | null
-          network_status?: string | null
-          overall_experience_rating?: number
-          payment_flexibility_rating?: number
-          procedure_category?: string | null
-          provider_id?: string
-          review_text?: string | null
-          updated_at?: string | null
-          user_id?: string
-          would_recommend?: boolean | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "provider_reviews_invoice_id_fkey"
-            columns: ["invoice_id"]
-            isOneToOne: false
-            referencedRelation: "invoices"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "provider_reviews_provider_id_fkey"
-            columns: ["provider_id"]
-            isOneToOne: false
-            referencedRelation: "providers"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      providers: {
-        Row: {
-          accuracy_rating: number | null
-          address: string | null
-          average_bill_amount: number | null
-          billing_accuracy_score: number | null
-          billing_clarity_score: number | null
-          city: string | null
-          cost_rating: number | null
-          cost_transparency_score: number | null
-          created_at: string
-          data_last_updated: string | null
-          disputes_lost: number | null
-          disputes_won: number | null
-          fair_pricing_score: number | null
-          id: string
-          insurance_networks: string[] | null
-          most_common_procedures: Json | null
-          name: string
-          network_status: string | null
-          npi_number: string | null
-          overall_rating: number | null
-          payment_flexibility_score: number | null
-          phone: string | null
-          provider_type: string | null
-          regional_pricing_percentile: number | null
-          response_rating: number | null
-          specialties: string[] | null
-          specialties_verified: boolean | null
-          state: string | null
-          tax_id: string | null
-          total_bills_analyzed: number | null
-          total_disputes_filed: number | null
-          total_overcharges_found: number | null
-          total_reviews: number | null
-          transparency_score: number | null
-          updated_at: string
-          verified_patient_reviews: number | null
-          website: string | null
-          zip_code: string | null
-        }
-        Insert: {
-          accuracy_rating?: number | null
-          address?: string | null
-          average_bill_amount?: number | null
-          billing_accuracy_score?: number | null
-          billing_clarity_score?: number | null
-          city?: string | null
-          cost_rating?: number | null
-          cost_transparency_score?: number | null
-          created_at?: string
-          data_last_updated?: string | null
-          disputes_lost?: number | null
-          disputes_won?: number | null
-          fair_pricing_score?: number | null
-          id?: string
-          insurance_networks?: string[] | null
-          most_common_procedures?: Json | null
-          name: string
-          network_status?: string | null
-          npi_number?: string | null
-          overall_rating?: number | null
-          payment_flexibility_score?: number | null
-          phone?: string | null
-          provider_type?: string | null
-          regional_pricing_percentile?: number | null
-          response_rating?: number | null
-          specialties?: string[] | null
-          specialties_verified?: boolean | null
-          state?: string | null
-          tax_id?: string | null
-          total_bills_analyzed?: number | null
-          total_disputes_filed?: number | null
-          total_overcharges_found?: number | null
-          total_reviews?: number | null
-          transparency_score?: number | null
-          updated_at?: string
-          verified_patient_reviews?: number | null
-          website?: string | null
-          zip_code?: string | null
-        }
-        Update: {
-          accuracy_rating?: number | null
-          address?: string | null
-          average_bill_amount?: number | null
-          billing_accuracy_score?: number | null
-          billing_clarity_score?: number | null
-          city?: string | null
-          cost_rating?: number | null
-          cost_transparency_score?: number | null
-          created_at?: string
-          data_last_updated?: string | null
-          disputes_lost?: number | null
-          disputes_won?: number | null
-          fair_pricing_score?: number | null
-          id?: string
-          insurance_networks?: string[] | null
-          most_common_procedures?: Json | null
-          name?: string
-          network_status?: string | null
-          npi_number?: string | null
-          overall_rating?: number | null
-          payment_flexibility_score?: number | null
-          phone?: string | null
-          provider_type?: string | null
-          regional_pricing_percentile?: number | null
-          response_rating?: number | null
-          specialties?: string[] | null
-          specialties_verified?: boolean | null
-          state?: string | null
-          tax_id?: string | null
-          total_bills_analyzed?: number | null
-          total_disputes_filed?: number | null
-          total_overcharges_found?: number | null
-          total_reviews?: number | null
-          transparency_score?: number | null
-          updated_at?: string
-          verified_patient_reviews?: number | null
-          website?: string | null
-          zip_code?: string | null
         }
         Relationships: []
       }
@@ -1331,6 +766,7 @@ export type Database = {
           eligibility_status: string
           examples: string[] | null
           id: string
+          lmn_prompt: string | null
           name: string
           notes: string | null
           section_ref: string | null
@@ -1344,6 +780,7 @@ export type Database = {
           eligibility_status: string
           examples?: string[] | null
           id: string
+          lmn_prompt?: string | null
           name: string
           notes?: string | null
           section_ref?: string | null
@@ -1357,45 +794,13 @@ export type Database = {
           eligibility_status?: string
           examples?: string[] | null
           id?: string
+          lmn_prompt?: string | null
           name?: string
           notes?: string | null
           section_ref?: string | null
           updated_at?: string
         }
         Relationships: []
-      }
-      receipt_labels: {
-        Row: {
-          id: string
-          label_id: string
-          receipt_id: string
-        }
-        Insert: {
-          id?: string
-          label_id: string
-          receipt_id: string
-        }
-        Update: {
-          id?: string
-          label_id?: string
-          receipt_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "receipt_labels_label_id_fkey"
-            columns: ["label_id"]
-            isOneToOne: false
-            referencedRelation: "labels"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "receipt_labels_receipt_id_fkey"
-            columns: ["receipt_id"]
-            isOneToOne: false
-            referencedRelation: "receipts"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       receipt_ocr_data: {
         Row: {
@@ -1464,7 +869,6 @@ export type Database = {
       }
       receipts: {
         Row: {
-          collection_id: string | null
           description: string | null
           display_order: number | null
           document_type: string | null
@@ -1472,12 +876,10 @@ export type Database = {
           file_type: string
           id: string
           invoice_id: string | null
-          payment_transaction_id: string | null
           uploaded_at: string
           user_id: string
         }
         Insert: {
-          collection_id?: string | null
           description?: string | null
           display_order?: number | null
           document_type?: string | null
@@ -1485,12 +887,10 @@ export type Database = {
           file_type: string
           id?: string
           invoice_id?: string | null
-          payment_transaction_id?: string | null
           uploaded_at?: string
           user_id: string
         }
         Update: {
-          collection_id?: string | null
           description?: string | null
           display_order?: number | null
           document_type?: string | null
@@ -1498,7 +898,6 @@ export type Database = {
           file_type?: string
           id?: string
           invoice_id?: string | null
-          payment_transaction_id?: string | null
           uploaded_at?: string
           user_id?: string
         }
@@ -1510,101 +909,18 @@ export type Database = {
             referencedRelation: "invoices"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "receipts_medical_event_id_fkey"
-            columns: ["collection_id"]
-            isOneToOne: false
-            referencedRelation: "collections"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "receipts_payment_transaction_id_fkey"
-            columns: ["payment_transaction_id"]
-            isOneToOne: false
-            referencedRelation: "payment_transactions"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      regional_benchmarks: {
-        Row: {
-          cpt_code: string
-          id: string
-          last_updated: string | null
-          median_charge: number
-          p25_charge: number | null
-          p75_charge: number | null
-          p90_charge: number | null
-          procedure_name: string | null
-          region_code: string
-          sample_size: number | null
-        }
-        Insert: {
-          cpt_code: string
-          id?: string
-          last_updated?: string | null
-          median_charge: number
-          p25_charge?: number | null
-          p75_charge?: number | null
-          p90_charge?: number | null
-          procedure_name?: string | null
-          region_code: string
-          sample_size?: number | null
-        }
-        Update: {
-          cpt_code?: string
-          id?: string
-          last_updated?: string | null
-          median_charge?: number
-          p25_charge?: number | null
-          p75_charge?: number | null
-          p90_charge?: number | null
-          procedure_name?: string | null
-          region_code?: string
-          sample_size?: number | null
-        }
-        Relationships: []
-      }
-      reimbursement_items: {
-        Row: {
-          id: string
-          invoice_id: string
-          reimbursement_request_id: string
-        }
-        Insert: {
-          id?: string
-          invoice_id: string
-          reimbursement_request_id: string
-        }
-        Update: {
-          id?: string
-          invoice_id?: string
-          reimbursement_request_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "reimbursement_items_expense_id_fkey"
-            columns: ["invoice_id"]
-            isOneToOne: false
-            referencedRelation: "invoices"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "reimbursement_items_reimbursement_request_id_fkey"
-            columns: ["reimbursement_request_id"]
-            isOneToOne: false
-            referencedRelation: "reimbursement_requests"
-            referencedColumns: ["id"]
-          },
         ]
       }
       reimbursement_match_candidates: {
         Row: {
+          amount_gap: number | null
           created_at: string
           id: string
           match_amount: number
           match_confidence: number
+          match_group_id: string | null
           match_reason: string | null
+          match_signals: string[]
           resolved_at: string | null
           status: string
           substantiation_record_id: string
@@ -1612,11 +928,14 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          amount_gap?: number | null
           created_at?: string
           id?: string
           match_amount: number
           match_confidence: number
+          match_group_id?: string | null
           match_reason?: string | null
+          match_signals?: string[]
           resolved_at?: string | null
           status?: string
           substantiation_record_id: string
@@ -1624,11 +943,14 @@ export type Database = {
           user_id: string
         }
         Update: {
+          amount_gap?: number | null
           created_at?: string
           id?: string
           match_amount?: number
           match_confidence?: number
+          match_group_id?: string | null
           match_reason?: string | null
+          match_signals?: string[]
           resolved_at?: string | null
           status?: string
           substantiation_record_id?: string
@@ -1652,160 +974,62 @@ export type Database = {
           },
         ]
       }
-      reimbursement_requests: {
+      rule_applications: {
         Row: {
-          created_at: string
-          hsa_provider: string | null
+          applied_at: string
           id: string
-          notes: string | null
-          pdf_file_path: string | null
-          status: string
-          submission_email: string | null
-          submission_method: string | null
-          submitted_at: string | null
-          total_amount: number
+          previous_applied_by_rule_id: string | null
+          previous_classification_explanation: string | null
+          previous_classification_reason: string | null
+          previous_is_medical: boolean | null
+          previous_needs_review: boolean | null
+          reverted_at: string | null
+          rule_id: string
+          transaction_id: string
           user_id: string
         }
         Insert: {
-          created_at?: string
-          hsa_provider?: string | null
+          applied_at?: string
           id?: string
-          notes?: string | null
-          pdf_file_path?: string | null
-          status?: string
-          submission_email?: string | null
-          submission_method?: string | null
-          submitted_at?: string | null
-          total_amount: number
+          previous_applied_by_rule_id?: string | null
+          previous_classification_explanation?: string | null
+          previous_classification_reason?: string | null
+          previous_is_medical?: boolean | null
+          previous_needs_review?: boolean | null
+          reverted_at?: string | null
+          rule_id: string
+          transaction_id: string
           user_id: string
         }
         Update: {
-          created_at?: string
-          hsa_provider?: string | null
+          applied_at?: string
           id?: string
-          notes?: string | null
-          pdf_file_path?: string | null
-          status?: string
-          submission_email?: string | null
-          submission_method?: string | null
-          submitted_at?: string | null
-          total_amount?: number
+          previous_applied_by_rule_id?: string | null
+          previous_classification_explanation?: string | null
+          previous_classification_reason?: string | null
+          previous_is_medical?: boolean | null
+          previous_needs_review?: boolean | null
+          reverted_at?: string | null
+          rule_id?: string
+          transaction_id?: string
           user_id?: string
-        }
-        Relationships: []
-      }
-      review_moderation_log: {
-        Row: {
-          action: string
-          admin_id: string
-          created_at: string
-          id: string
-          reason: string | null
-          review_id: string
-        }
-        Insert: {
-          action: string
-          admin_id: string
-          created_at?: string
-          id?: string
-          reason?: string | null
-          review_id: string
-        }
-        Update: {
-          action?: string
-          admin_id?: string
-          created_at?: string
-          id?: string
-          reason?: string | null
-          review_id?: string
         }
         Relationships: [
           {
-            foreignKeyName: "review_moderation_log_review_id_fkey"
-            columns: ["review_id"]
+            foreignKeyName: "rule_applications_rule_id_fkey"
+            columns: ["rule_id"]
             isOneToOne: false
-            referencedRelation: "reviews"
+            referencedRelation: "categorization_rules"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rule_applications_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
             referencedColumns: ["id"]
           },
         ]
-      }
-      reviews: {
-        Row: {
-          created_at: string | null
-          id: string
-          is_featured: boolean | null
-          moderated_at: string | null
-          moderated_by: string | null
-          moderation_notes: string | null
-          moderation_status: string | null
-          rating: number
-          review_text: string
-          updated_at: string | null
-          user_id: string
-        }
-        Insert: {
-          created_at?: string | null
-          id?: string
-          is_featured?: boolean | null
-          moderated_at?: string | null
-          moderated_by?: string | null
-          moderation_notes?: string | null
-          moderation_status?: string | null
-          rating: number
-          review_text: string
-          updated_at?: string | null
-          user_id: string
-        }
-        Update: {
-          created_at?: string | null
-          id?: string
-          is_featured?: boolean | null
-          moderated_at?: string | null
-          moderated_by?: string | null
-          moderation_notes?: string | null
-          moderation_status?: string | null
-          rating?: number
-          review_text?: string
-          updated_at?: string | null
-          user_id?: string
-        }
-        Relationships: []
-      }
-      savings_goals: {
-        Row: {
-          created_at: string
-          current_amount: number
-          deadline: string | null
-          goal_type: string
-          id: string
-          is_active: boolean
-          target_amount: number
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          current_amount?: number
-          deadline?: string | null
-          goal_type: string
-          id?: string
-          is_active?: boolean
-          target_amount: number
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          current_amount?: number
-          deadline?: string | null
-          goal_type?: string
-          id?: string
-          is_active?: boolean
-          target_amount?: number
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
       }
       substantiation_record_items: {
         Row: {
@@ -1814,10 +1038,13 @@ export type Database = {
           confirmed_at_at_submission: string
           created_at: string
           date_at_submission: string
+          document_manifest_at_submission: Json
+          documentation_state_at_submission: string | null
           eligibility_basis_rule_id_at_submission: string | null
           id: string
           invoice_id: string
           patient_name_at_submission: string | null
+          record_status: string
           substantiation_record_id: string
           vendor_at_submission: string
         }
@@ -1827,10 +1054,13 @@ export type Database = {
           confirmed_at_at_submission: string
           created_at?: string
           date_at_submission: string
+          document_manifest_at_submission?: Json
+          documentation_state_at_submission?: string | null
           eligibility_basis_rule_id_at_submission?: string | null
           id?: string
           invoice_id: string
           patient_name_at_submission?: string | null
+          record_status?: string
           substantiation_record_id: string
           vendor_at_submission: string
         }
@@ -1840,10 +1070,13 @@ export type Database = {
           confirmed_at_at_submission?: string
           created_at?: string
           date_at_submission?: string
+          document_manifest_at_submission?: Json
+          documentation_state_at_submission?: string | null
           eligibility_basis_rule_id_at_submission?: string | null
           id?: string
           invoice_id?: string
           patient_name_at_submission?: string | null
+          record_status?: string
           substantiation_record_id?: string
           vendor_at_submission?: string
         }
@@ -1873,8 +1106,11 @@ export type Database = {
       }
       substantiation_records: {
         Row: {
+          attested_at: string | null
+          attested_no_double_benefit: boolean
           created_at: string
           csv_storage_path: string | null
+          custodian: string | null
           expense_count: number
           formats_generated: string[]
           generated_at: string
@@ -1889,10 +1125,15 @@ export type Database = {
           total_amount: number
           updated_at: string
           user_id: string
+          void_reason: string | null
+          voided_at: string | null
         }
         Insert: {
+          attested_at?: string | null
+          attested_no_double_benefit?: boolean
           created_at?: string
           csv_storage_path?: string | null
+          custodian?: string | null
           expense_count: number
           formats_generated?: string[]
           generated_at?: string
@@ -1907,10 +1148,15 @@ export type Database = {
           total_amount: number
           updated_at?: string
           user_id: string
+          void_reason?: string | null
+          voided_at?: string | null
         }
         Update: {
+          attested_at?: string | null
+          attested_no_double_benefit?: boolean
           created_at?: string
           csv_storage_path?: string | null
+          custodian?: string | null
           expense_count?: number
           formats_generated?: string[]
           generated_at?: string
@@ -1925,6 +1171,8 @@ export type Database = {
           total_amount?: number
           updated_at?: string
           user_id?: string
+          void_reason?: string | null
+          voided_at?: string | null
         }
         Relationships: [
           {
@@ -1936,47 +1184,26 @@ export type Database = {
           },
         ]
       }
-      transaction_invoice_suggestions: {
+      tags: {
         Row: {
-          confidence_score: number
           created_at: string
           id: string
-          invoice_id: string
-          match_reason: string | null
-          transaction_id: string
+          name: string
+          user_id: string
         }
         Insert: {
-          confidence_score: number
           created_at?: string
           id?: string
-          invoice_id: string
-          match_reason?: string | null
-          transaction_id: string
+          name: string
+          user_id: string
         }
         Update: {
-          confidence_score?: number
           created_at?: string
           id?: string
-          invoice_id?: string
-          match_reason?: string | null
-          transaction_id?: string
+          name?: string
+          user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "transaction_invoice_suggestions_invoice_id_fkey"
-            columns: ["invoice_id"]
-            isOneToOne: false
-            referencedRelation: "invoices"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "transaction_invoice_suggestions_transaction_id_fkey"
-            columns: ["transaction_id"]
-            isOneToOne: false
-            referencedRelation: "transactions"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       transaction_splits: {
         Row: {
@@ -2029,71 +1256,129 @@ export type Database = {
       transactions: {
         Row: {
           amount: number
+          applied_by_rule_id: string | null
           category: string | null
+          classification_confidence: number | null
+          classification_explanation: string | null
+          classification_reason: string | null
           created_at: string
           description: string
           id: string
           invoice_id: string | null
           is_hsa_eligible: boolean | null
           is_medical: boolean | null
+          is_pending: boolean
           is_split: boolean | null
+          is_transfer: boolean
+          merchant_category_code: string | null
+          merchant_entity_id: string | null
+          merchant_normalized: string | null
           needs_review: boolean
           notes: string | null
-          payment_method_id: string | null
+          pending_plaid_transaction_id: string | null
+          pfc_confidence: string | null
+          pfc_detailed: string | null
+          pfc_primary: string | null
+          plaid_account_id: string | null
           plaid_transaction_id: string | null
           reconciliation_status: string | null
+          signed_amount: number | null
           source: string | null
           split_parent_id: string | null
           transaction_date: string
+          transfer_counterpart_id: string | null
+          transfer_detected_at: string | null
+          transfer_kind: Database["public"]["Enums"]["transfer_kind"] | null
           updated_at: string
           user_id: string
           vendor: string | null
         }
         Insert: {
           amount: number
+          applied_by_rule_id?: string | null
           category?: string | null
+          classification_confidence?: number | null
+          classification_explanation?: string | null
+          classification_reason?: string | null
           created_at?: string
           description: string
           id?: string
           invoice_id?: string | null
           is_hsa_eligible?: boolean | null
           is_medical?: boolean | null
+          is_pending?: boolean
           is_split?: boolean | null
+          is_transfer?: boolean
+          merchant_category_code?: string | null
+          merchant_entity_id?: string | null
+          merchant_normalized?: string | null
           needs_review?: boolean
           notes?: string | null
-          payment_method_id?: string | null
+          pending_plaid_transaction_id?: string | null
+          pfc_confidence?: string | null
+          pfc_detailed?: string | null
+          pfc_primary?: string | null
+          plaid_account_id?: string | null
           plaid_transaction_id?: string | null
           reconciliation_status?: string | null
+          signed_amount?: number | null
           source?: string | null
           split_parent_id?: string | null
           transaction_date: string
+          transfer_counterpart_id?: string | null
+          transfer_detected_at?: string | null
+          transfer_kind?: Database["public"]["Enums"]["transfer_kind"] | null
           updated_at?: string
           user_id: string
           vendor?: string | null
         }
         Update: {
           amount?: number
+          applied_by_rule_id?: string | null
           category?: string | null
+          classification_confidence?: number | null
+          classification_explanation?: string | null
+          classification_reason?: string | null
           created_at?: string
           description?: string
           id?: string
           invoice_id?: string | null
           is_hsa_eligible?: boolean | null
           is_medical?: boolean | null
+          is_pending?: boolean
           is_split?: boolean | null
+          is_transfer?: boolean
+          merchant_category_code?: string | null
+          merchant_entity_id?: string | null
+          merchant_normalized?: string | null
           needs_review?: boolean
           notes?: string | null
-          payment_method_id?: string | null
+          pending_plaid_transaction_id?: string | null
+          pfc_confidence?: string | null
+          pfc_detailed?: string | null
+          pfc_primary?: string | null
+          plaid_account_id?: string | null
           plaid_transaction_id?: string | null
           reconciliation_status?: string | null
+          signed_amount?: number | null
           source?: string | null
           split_parent_id?: string | null
           transaction_date?: string
+          transfer_counterpart_id?: string | null
+          transfer_detected_at?: string | null
+          transfer_kind?: Database["public"]["Enums"]["transfer_kind"] | null
           updated_at?: string
           user_id?: string
           vendor?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "transactions_applied_by_rule_id_fkey"
+            columns: ["applied_by_rule_id"]
+            isOneToOne: false
+            referencedRelation: "categorization_rules"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "transactions_invoice_id_fkey"
             columns: ["invoice_id"]
@@ -2102,10 +1387,10 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "transactions_payment_method_id_fkey"
-            columns: ["payment_method_id"]
+            foreignKeyName: "transactions_plaid_account_id_fkey"
+            columns: ["plaid_account_id"]
             isOneToOne: false
-            referencedRelation: "payment_methods"
+            referencedRelation: "plaid_accounts"
             referencedColumns: ["id"]
           },
           {
@@ -2115,70 +1400,14 @@ export type Database = {
             referencedRelation: "transactions"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "transactions_transfer_counterpart_id_fkey"
+            columns: ["transfer_counterpart_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
         ]
-      }
-      transparency_metrics: {
-        Row: {
-          common_overcharge_trends: Json | null
-          created_at: string | null
-          id: string
-          metric_date: string
-          regional_insights: Json | null
-          top_overcharging_providers: Json | null
-          top_transparent_providers: Json | null
-        }
-        Insert: {
-          common_overcharge_trends?: Json | null
-          created_at?: string | null
-          id?: string
-          metric_date?: string
-          regional_insights?: Json | null
-          top_overcharging_providers?: Json | null
-          top_transparent_providers?: Json | null
-        }
-        Update: {
-          common_overcharge_trends?: Json | null
-          created_at?: string | null
-          id?: string
-          metric_date?: string
-          regional_insights?: Json | null
-          top_overcharging_providers?: Json | null
-          top_transparent_providers?: Json | null
-        }
-        Relationships: []
-      }
-      user_vendor_preferences: {
-        Row: {
-          confidence_score: number | null
-          created_at: string
-          id: string
-          is_medical: boolean
-          times_confirmed: number | null
-          updated_at: string
-          user_id: string
-          vendor_pattern: string
-        }
-        Insert: {
-          confidence_score?: number | null
-          created_at?: string
-          id?: string
-          is_medical?: boolean
-          times_confirmed?: number | null
-          updated_at?: string
-          user_id: string
-          vendor_pattern: string
-        }
-        Update: {
-          confidence_score?: number | null
-          created_at?: string
-          id?: string
-          is_medical?: boolean
-          times_confirmed?: number | null
-          updated_at?: string
-          user_id?: string
-          vendor_pattern?: string
-        }
-        Relationships: []
       }
       vendor_aliases: {
         Row: {
@@ -2345,41 +1574,270 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      calculate_fair_pricing_score: {
-        Args: { p_provider_id: string }
+      apply_categorization_rule: {
+        Args: { p_rule_id: string }
+        Returns: number
+      }
+      bulk_review_merchant: {
+        Args: { p_is_medical: boolean; p_merchant_key: string }
         Returns: number
       }
       can_view_provider_review: {
-        Args: { review_is_flagged: boolean; review_user_id: string }
+        Args: { p_is_flagged: boolean; p_user_id: string }
         Returns: boolean
       }
-      compute_collection_status: {
-        Args: { p_collection_id: string }
-        Returns: Database["public"]["Enums"]["collection_status"]
-      }
-      compute_invoice_status: {
-        Args: { p_invoice_id: string }
-        Returns: Database["public"]["Enums"]["invoice_status"]
-      }
-      suggest_invoice_clusters: {
-        Args: { p_user_id: string }
+      claimable_expenses: {
+        Args: never
         Returns: {
-          cluster_key: string
-          invoice_count: number
-          invoice_ids: string[]
-          max_date: string
-          min_date: string
-          total_amount: number
+          category: string
+          confirmed_at: string
+          documentation_state: string
+          documents: Json
+          invoice_id: string
+          patient_name: string
+          remaining_amount: number
+          rule_id: string
+          rule_name: string
+          rule_section_ref: string
+          service_date: string
+          tax_year: number
           vendor: string
         }[]
       }
+      classify_patient_name: {
+        Args: { p_name: string }
+        Returns: Database["public"]["Enums"]["family_relationship"]
+      }
+      confirm_deposit_match: {
+        Args: { p_candidate_id: string }
+        Returns: {
+          amount_applied: number
+          expenses_closed: number
+          record_id: string
+          record_number: string
+        }[]
+      }
+      detect_duplicate_expenses: {
+        Args: {
+          p_cross_source_window_days?: number
+          p_same_source_window_days?: number
+          p_tolerance?: number
+          p_user_id: string
+        }
+        Returns: number
+      }
+      detect_transfers: {
+        Args: {
+          p_lookback_days?: number
+          p_tolerance?: number
+          p_user_id: string
+          p_window_days?: number
+        }
+        Returns: number
+      }
+      dismiss_deposit_match: {
+        Args: { p_candidate_id: string }
+        Returns: number
+      }
+      dismiss_duplicate_candidate: {
+        Args: { p_candidate_id: string }
+        Returns: boolean
+      }
+      expense_blocking_gate_reason: {
+        Args: {
+          p_hsa_date: string
+          p_qualifies: boolean
+          p_service_date: string
+        }
+        Returns: string
+      }
+      expense_dependency_gate: {
+        Args: { p_invoice_id: string }
+        Returns: {
+          patient: string
+          reason: string
+          status: string
+        }[]
+      }
+      expense_eligibility_gates: {
+        Args: { p_invoice_id: string }
+        Returns: {
+          action_prompt: string
+          gate: string
+          is_blocking: boolean
+          is_permanent: boolean
+          reason: string
+          status: string
+        }[]
+      }
+      expense_gate_verdict: {
+        Args: {
+          p_has_lmn: boolean
+          p_hsa_date: string
+          p_qualifies: boolean
+          p_rule_status: string
+          p_service_date: string
+        }
+        Returns: {
+          reason: string
+          state: Database["public"]["Enums"]["expense_eligibility_state"]
+        }[]
+      }
+      expense_pub502_gate: {
+        Args: { p_invoice_id: string }
+        Returns: {
+          confidence: number
+          has_lmn: boolean
+          lmn_prompt: string
+          reason: string
+          rule_id: string
+          rule_name: string
+          status: string
+        }[]
+      }
+      expense_remaining_amount: {
+        Args: { p_invoice_id: string }
+        Returns: number
+      }
+      expense_substantiation_status: {
+        Args: { p_invoice_id: string }
+        Returns: {
+          blocking_gate: string
+          document_count: number
+          has_patient: boolean
+          has_service_date: boolean
+          is_complete: boolean
+          missing: string[]
+        }[]
+      }
+      expense_timing_gate: {
+        Args: { p_invoice_id: string }
+        Returns: {
+          establishment_date: string
+          reason: string
+          service_date: string
+          status: string
+          uses_payment_date: boolean
+        }[]
+      }
+      gate_owned_reasons: { Args: never; Returns: string[] }
+      hsa_establishment_date: { Args: { p_user_id: string }; Returns: string }
+      match_reimbursement_deposits: {
+        Args: { p_lookback_days?: number; p_user_id?: string }
+        Returns: number
+      }
+      merge_duplicate_expenses: {
+        Args: { p_candidate_id: string; p_keep_id: string }
+        Returns: string
+      }
+      normalize_merchant_name: { Args: { p_name: string }; Returns: string }
+      preview_categorization_rule: {
+        Args: {
+          p_match_type: Database["public"]["Enums"]["rule_match_type"]
+          p_match_value: string
+        }
+        Returns: number
+      }
+      recompute_expense_eligibility: {
+        Args: { p_invoice_ids?: string[]; p_user_id: string }
+        Returns: {
+          blocked: number
+          restored: number
+        }[]
+      }
+      recompute_timing_eligibility: {
+        Args: { p_user_id: string }
+        Returns: {
+          blocked: number
+          restored: number
+        }[]
+      }
+      record_packet_items: {
+        Args: { p_record_id: string }
+        Returns: {
+          amount: number
+          category: string
+          confirmed_at: string
+          documentation_state: string
+          documents: Json
+          invoice_id: string
+          patient_name: string
+          rule_id: string
+          rule_name: string
+          rule_section_ref: string
+          service_date: string
+          vendor: string
+        }[]
+      }
+      relink_pending_expense: {
+        Args: { p_pending_id: string; p_posted_id: string; p_user_id: string }
+        Returns: string
+      }
+      revert_categorization_rule: {
+        Args: { p_rule_id: string }
+        Returns: number
+      }
+      review_feed_groups: {
+        Args: { p_limit?: number }
+        Returns: {
+          display_name: string
+          earliest_date: string
+          explanation: string
+          latest_date: string
+          mcc: string
+          merchant_entity_id: string
+          merchant_key: string
+          total_amount: number
+          txn_count: number
+        }[]
+      }
+      sync_expense_documentation_state: {
+        Args: { p_invoice_id: string }
+        Returns: undefined
+      }
+      transaction_matches_rule: {
+        Args: {
+          p_match_type: Database["public"]["Enums"]["rule_match_type"]
+          p_match_value: string
+          p_merchant_category_code: string
+          p_merchant_entity_id: string
+          p_merchant_normalized: string
+        }
+        Returns: boolean
+      }
+      unlink_transfer: { Args: { p_transaction_id: string }; Returns: number }
       update_provider_statistics: {
         Args: { p_provider_id: string }
         Returns: undefined
       }
+      void_substantiation_record: {
+        Args: { p_reason?: string; p_record_id: string }
+        Returns: {
+          amount_released: number
+          expenses_released: number
+          record_number: string
+        }[]
+      }
     }
     Enums: {
       collection_status: "active" | "complete" | "needs_attention"
+      duplicate_match_reason: "manual_vs_synced" | "same_charge"
+      duplicate_status: "open" | "dismissed"
+      expense_claim_state:
+        | "unclaimed"
+        | "locked_in_request"
+        | "reimbursed"
+        | "reimbursed_externally"
+        | "not_reimbursable"
+      expense_documentation_state: "none" | "partial" | "complete"
+      expense_eligibility_state:
+        | "unknown"
+        | "eligible"
+        | "conditional"
+        | "ineligible"
+      family_relationship: "self" | "spouse" | "child" | "other_dependent"
+      inbox_item_status: "pending" | "acted" | "dismissed" | "expired"
+      inbox_item_type: "review_transaction" | "confirm_match"
       invoice_lifecycle_status:
         | "captured"
         | "pending_review"
@@ -2394,6 +1852,12 @@ export type Database = {
         | "partially_paid"
         | "fully_paid"
         | "reimbursed"
+      rule_match_type: "merchant_entity" | "mcc" | "name_pattern"
+      transfer_kind:
+        | "card_payment"
+        | "internal"
+        | "hsa_distribution"
+        | "hsa_contribution"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -2517,6 +1981,25 @@ export const Constants = {
   public: {
     Enums: {
       collection_status: ["active", "complete", "needs_attention"],
+      duplicate_match_reason: ["manual_vs_synced", "same_charge"],
+      duplicate_status: ["open", "dismissed"],
+      expense_claim_state: [
+        "unclaimed",
+        "locked_in_request",
+        "reimbursed",
+        "reimbursed_externally",
+        "not_reimbursable",
+      ],
+      expense_documentation_state: ["none", "partial", "complete"],
+      expense_eligibility_state: [
+        "unknown",
+        "eligible",
+        "conditional",
+        "ineligible",
+      ],
+      family_relationship: ["self", "spouse", "child", "other_dependent"],
+      inbox_item_status: ["pending", "acted", "dismissed", "expired"],
+      inbox_item_type: ["review_transaction", "confirm_match"],
       invoice_lifecycle_status: [
         "captured",
         "pending_review",
@@ -2533,9 +2016,13 @@ export const Constants = {
         "fully_paid",
         "reimbursed",
       ],
+      rule_match_type: ["merchant_entity", "mcc", "name_pattern"],
+      transfer_kind: [
+        "card_payment",
+        "internal",
+        "hsa_distribution",
+        "hsa_contribution",
+      ],
     },
   },
 } as const
-Initialising login role...
-A new version of Supabase CLI is available: v2.105.0 (currently installed v2.83.0)
-We recommend updating regularly for new features and bug fixes: https://supabase.com/docs/guides/cli/getting-started#updating-the-supabase-cli

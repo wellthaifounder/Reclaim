@@ -53,16 +53,18 @@ export const FF = {
     "VITE_FF_SCOPE_GET_STARTED_TO_DASHBOARD",
   ),
 
+  // BILLS_LEDGER_IA_COLLAPSE removed 2026-08-20. It existed to test merging
+  // the Ledger into the expense list; the Ledger has since been retired
+  // outright, so there are no longer two arrangements to choose between.
+
   /**
-   * Wave 4 (2026-05) — IA collapse experiment. When on:
-   *   - /ledger redirects to /bills?view=ledger
-   *   - Bills page reads ?view, renders Ledger view inline when view=ledger
-   *   - Sidebar drops the standalone "Ledger" item; bottom-tab repoints
+   * Wellbie AI assistant (chat + mascot). OFF by default for the Reclaim soft
+   * launch — conversational chat is a v1.1 item, and shipping a half-surfaced
+   * assistant dilutes the launch. All Wellbie entry points (nav button, bottom
+   * tab, dashboard tip, "Ask Wellbie" cards, pricing lines, /wellbie route) are
+   * gated on this. Code + DB tables are retained for re-enable.
    *
-   * Smallest reversible test of merging Bills + Ledger IA. Hold ≥7 days of
-   * `bills_view_selected` telemetry before deciding to widen or revert.
-   *
-   * Set VITE_FF_BILLS_LEDGER_IA_COLLAPSE=true to enable.
+   * Set VITE_FF_WELLBIE_ENABLED=true to bring it back.
    */
-  BILLS_LEDGER_IA_COLLAPSE: flagOnByDefault("VITE_FF_BILLS_LEDGER_IA_COLLAPSE"),
+  WELLBIE_ENABLED: flag("VITE_FF_WELLBIE_ENABLED"),
 } as const;

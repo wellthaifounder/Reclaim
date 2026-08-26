@@ -23,7 +23,7 @@ import { logError } from "@/utils/errorHandler";
 interface EditDocumentDialogProps {
   receipt: {
     id: string;
-    document_type: string;
+    document_type: string | null;
     description: string | null;
   };
   open: boolean;
@@ -45,7 +45,9 @@ export const EditDocumentDialog = ({
   onOpenChange,
   onSaved,
 }: EditDocumentDialogProps) => {
-  const [documentType, setDocumentType] = useState(receipt.document_type);
+  const [documentType, setDocumentType] = useState(
+    receipt.document_type ?? "receipt",
+  );
   const [description, setDescription] = useState(receipt.description || "");
   const [saving, setSaving] = useState(false);
 

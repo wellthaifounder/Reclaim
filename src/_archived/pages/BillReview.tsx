@@ -13,7 +13,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { BillErrorCard } from "@/components/bills/BillErrorCard";
-import { PriceBenchmarking } from "@/components/bills/PriceBenchmarking";
+import { PriceBenchmarking } from "@/_archived/components/bills/PriceBenchmarking";
 import { ProviderPerformanceCard } from "@/components/bills/ProviderPerformanceCard";
 import { toast } from "sonner";
 import { logError } from "@/utils/errorHandler";

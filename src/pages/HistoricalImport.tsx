@@ -18,6 +18,7 @@ import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
+import { FocusedLayout } from "@/components/FocusedLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -28,6 +29,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { logError } from "@/utils/errorHandler";
+import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 
 interface SyncResult {
   medical_detected: number;
@@ -52,10 +54,42 @@ const LOADING_COPY = [
   { text: "Almost done — assembling your reclaim list…", min_ms: 30_000 },
 ];
 
+/**
+ * This page is reached two ways and needs a different frame for each.
+ *
+ * Mid-setup it is one beat of the Step 0 flow, so it takes the same bare
+ * chrome as /welcome — no sidebar full of empty destinations, no competing
+ * "Snap a receipt" button, and no accidental exits while a sync is running.
+ * Reached later, by someone connecting a second bank from Settings, it is an
+ * ordinary page in an app they already live in and keeps the full navigation.
+ *
+ * No exit control while the sync is in flight: there is nothing to escape to
+ * yet, and the result lands within a minute.
+ */
+function ImportFrame({
+  focused,
+  children,
+}: {
+  focused: boolean;
+  children: React.ReactNode;
+}) {
+  return focused ? (
+    <FocusedLayout>{children}</FocusedLayout>
+  ) : (
+    <AuthenticatedLayout>{children}</AuthenticatedLayout>
+  );
+}
+
 export default function HistoricalImport() {
   const navigate = useNavigate();
   const location = useLocation();
   const routeState = (location.state ?? {}) as RouteState;
+
+  // Step 0: this page is the hinge between "connect" and "configure". A user
+  // who is still in setup continues into the questions from here; a user who
+  // came back later to sync another bank goes straight to their transactions.
+  const { isComplete: onboardingComplete } = useOnboardingStatus();
+  const midOnboarding = onboardingComplete === false;
 
   const [phase, setPhase] = useState<"loading" | "result" | "error">("loading");
   const [result, setResult] = useState<SyncResult | null>(null);
@@ -166,7 +200,7 @@ export default function HistoricalImport() {
       LOADING_COPY[0];
 
     return (
-      <AuthenticatedLayout>
+      <ImportFrame focused={midOnboarding}>
         <div className="max-w-xl mx-auto px-4 py-16 text-center">
           <div className="relative inline-block">
             <Loader2 className="h-16 w-16 mx-auto mb-6 animate-spin text-primary" />
@@ -189,14 +223,14 @@ export default function HistoricalImport() {
             {currentCopy.text}
           </p>
         </div>
-      </AuthenticatedLayout>
+      </ImportFrame>
     );
   }
 
   // ── Error state ──────────────────────────────────────────────────────────
   if (phase === "error") {
     return (
-      <AuthenticatedLayout>
+      <ImportFrame focused={midOnboarding}>
         <div className="max-w-xl mx-auto px-4 py-16 text-center">
           <AlertCircle className="h-12 w-12 mx-auto mb-4 text-amber-500" />
           <h1 className="text-2xl font-semibold mb-2">
@@ -210,12 +244,18 @@ export default function HistoricalImport() {
             >
               Manage Bank Accounts
             </Button>
-            <Button onClick={() => navigate("/bills")}>
-              Continue to Bills
+            <Button
+              onClick={() =>
+                navigate(
+                  midOnboarding ? "/welcome?step=household" : "/expenses",
+                )
+              }
+            >
+              {midOnboarding ? "Continue setup" : "Continue to expenses"}
             </Button>
           </div>
         </div>
-      </AuthenticatedLayout>
+      </ImportFrame>
     );
   }
 
@@ -224,7 +264,7 @@ export default function HistoricalImport() {
   const months = Math.round(r.window_days / 30);
 
   return (
-    <AuthenticatedLayout>
+    <ImportFrame focused={midOnboarding}>
       <div className="max-w-xl mx-auto px-4 py-12">
         <Card className="border-primary/20">
           <CardContent className="p-8 text-center space-y-6">
@@ -259,23 +299,37 @@ export default function HistoricalImport() {
               </p>
             )}
 
+            {/* Mid-setup this is a one-way door on purpose. The spec puts the
+                remaining questions AFTER this moment precisely so the user has
+                seen their own money first; offering "I'll do it later" here
+                would hand back the drop-off the ordering exists to prevent.
+                Every individual question on the next screens is still
+                skippable. */}
             <div className="flex flex-col gap-2 pt-2">
               <Button
                 size="lg"
-                onClick={() => navigate("/bills")}
+                onClick={() =>
+                  navigate(
+                    midOnboarding ? "/welcome?step=household" : "/expenses",
+                  )
+                }
                 className="w-full"
               >
-                Review them now
+                {midOnboarding
+                  ? "Next: a few quick questions"
+                  : "Review them now"}
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
-              <Button
-                size="lg"
-                variant="ghost"
-                onClick={() => navigate("/dashboard")}
-                className="w-full"
-              >
-                I'll review later
-              </Button>
+              {!midOnboarding && (
+                <Button
+                  size="lg"
+                  variant="ghost"
+                  onClick={() => navigate("/dashboard")}
+                  className="w-full"
+                >
+                  I'll review later
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -286,6 +340,6 @@ export default function HistoricalImport() {
           audit-defensible.
         </p>
       </div>
-    </AuthenticatedLayout>
+    </ImportFrame>
   );
 }

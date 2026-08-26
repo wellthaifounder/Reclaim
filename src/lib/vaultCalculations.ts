@@ -6,7 +6,7 @@ function calculateYearlyInvestmentGrowth(
   years: number,
   annualReturn: number,
   monthlyPayment: number,
-  payoffMonths: number,
+  _payoffMonths: number,
 ): number {
   if (years <= 0) return 0;
 

@@ -1,62 +1,50 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
-import { Plus, Search, CheckCircle2, XCircle } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Plus, Search, ArrowLeftRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { TransactionCard } from "@/components/transactions/TransactionCard";
-import { TransactionDetailDialog } from "@/components/transactions/TransactionDetailDialog";
+import {
+  TransactionCard,
+  type TransactionCardProps,
+} from "@/components/transactions/TransactionCard";
 import { TransactionInlineDetail } from "@/components/transactions/TransactionInlineDetail";
-import { QuickAddTransactionDialog } from "@/components/transactions/QuickAddTransactionDialog";
-import { ReviewQueue } from "@/components/transactions/ReviewQueue";
+import { ReviewFeed } from "@/components/transactions/ReviewFeed";
+import { DuplicateWarnings } from "@/components/transactions/DuplicateWarnings";
 import {
   AdvancedFilters,
   type FilterCriteria,
 } from "@/components/transactions/AdvancedFilters";
 import { TransactionSplitDialog } from "@/components/transactions/TransactionSplitDialog";
+import { ExpenseSplitDialog } from "@/components/transactions/ExpenseSplitDialog";
+import {
+  CreateRulePrompt,
+  type RuleCandidate,
+} from "@/components/transactions/CreateRulePrompt";
+import { canSplitIntoExpenses } from "@/lib/expenseSplitUtils";
 import { SplitTransactionCard } from "@/components/transactions/SplitTransactionCard";
-import { useTransactionSplits } from "@/hooks/useTransactionSplits";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
+import Bills from "@/pages/Bills";
 import { MissingHSADateBanner } from "@/components/dashboard/MissingHSADateBanner";
 import { TransactionsSkeleton } from "@/components/skeletons/TransactionsSkeleton";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { logError } from "@/utils/errorHandler";
-import { LinkTransactionDialog } from "@/components/bills/LinkTransactionDialog";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import type { Database } from "@/integrations/supabase/types";
 
-type Transaction = {
-  id: string;
-  user_id: string;
-  transaction_date: string;
-  vendor: string | null;
-  amount: number;
-  description: string;
-  category: string;
-  is_medical: boolean;
-  reconciliation_status: "unlinked" | "linked_to_invoice" | "ignored";
-  is_hsa_eligible: boolean;
-  needs_review: boolean;
-  notes: string | null;
-  payment_method_id: string | null;
-  invoice_id: string | null;
-  is_split: boolean;
-  split_parent_id: string | null;
-  plaid_transaction_id: string | null;
-  source: string | null;
-  created_at: string;
-  updated_at: string;
-  payment_methods?: {
-    is_hsa_account: boolean;
+// Derived from the generated row type rather than hand-written. The previous
+// hand-written copy had drifted: it declared category/is_medical/needs_review
+// as non-null when the DB allows null, and predated plaid_account_id and
+// signed_amount, so it silently disagreed with every child that takes a row.
+// The HSA flag comes from the account the charge landed on, not from a
+// hand-maintained "payment method" record (2026-08-21). See fetchTransactions.
+type Transaction = Database["public"]["Tables"]["transactions"]["Row"] & {
+  plaid_accounts?: {
+    is_hsa: boolean | null;
   } | null;
 };
 
@@ -67,37 +55,43 @@ export default function Transactions() {
   >([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedTransaction, setSelectedTransaction] =
-    useState<Transaction | null>(null);
   const [expandedTransactionId, setExpandedTransactionId] = useState<
     string | null
   >(null);
-  const [detailDialogOpen, setDetailDialogOpen] = useState(false);
-  const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [splitDialogOpen, setSplitDialogOpen] = useState(false);
   const [transactionToSplit, setTransactionToSplit] =
     useState<Transaction | null>(null);
-  const [activeTab, setActiveTab] = useState("all");
+  // Workstream B3: splitting a transaction into several EXPENSES is a
+  // different operation from TransactionSplitDialog's split across HSA
+  // accounts, so it gets its own dialog and its own state.
+  const [expenseSplitOpen, setExpenseSplitOpen] = useState(false);
+  const [txnToExpenseSplit, setTxnToExpenseSplit] =
+    useState<Transaction | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  // Workstream C3: set after a categorization decision, to offer a rule.
+  const [ruleCandidate, setRuleCandidate] = useState<RuleCandidate | null>(
+    null,
+  );
+  // ?tab= opens a specific tab. The dashboard has linked to
+  // /transactions?tab=review for a while, but nothing here ever read the
+  // parameter, so "Review transactions" quietly dropped people on the All tab
+  // instead of the queue they asked for. Kept in the URL rather than state
+  // alone so the tab survives a refresh and can be linked to.
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const TABS = ["review", "all", "medical", "non-medical", "to-claim"];
+  const requestedTab = searchParams.get("tab");
+  const activeTab =
+    requestedTab && TABS.includes(requestedTab) ? requestedTab : "all";
+
+  const setActiveTab = (next: string) => {
+    const sp = new URLSearchParams(searchParams);
+    if (next === "all") sp.delete("tab");
+    else sp.set("tab", next);
+    setSearchParams(sp, { replace: true });
+  };
   const [advancedFilters, setAdvancedFilters] = useState<FilterCriteria>({});
   const [hsaOpenedDate, setHsaOpenedDate] = useState<string | null>(null);
-  const [invoicePickerOpen, setInvoicePickerOpen] = useState(false);
-  const [linkDialogOpen, setLinkDialogOpen] = useState(false);
-  const [linkTargetInvoice, setLinkTargetInvoice] = useState<{
-    id: string;
-    vendor: string;
-    amount: number;
-    total_amount: number;
-    date: string;
-  } | null>(null);
-  const [availableInvoices, setAvailableInvoices] = useState<
-    {
-      id: string;
-      vendor: string;
-      amount: number;
-      total_amount: number;
-      date: string;
-    }[]
-  >([]);
 
   useEffect(() => {
     checkAuth();
@@ -110,6 +104,7 @@ export default function Transactions() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return;
+      setCurrentUserId(user.id);
 
       const { data: profile, error } = await supabase
         .from("profiles")
@@ -129,17 +124,32 @@ export default function Transactions() {
     filterTransactions();
   }, [transactions, searchQuery, activeTab, advancedFilters]);
 
+  // Open on the review queue when there is something waiting -- but only as a
+  // first-load default, and only when the URL did not ask for a tab.
+  //
+  // Guarded by a ref because the tab now lives in the URL. Without it, this
+  // fires again the moment a user with unreviewed transactions clicks "All"
+  // and snaps them straight back to Review, which reads as the tab being
+  // broken. It must also lose to an explicit ?tab= so a link to a particular
+  // tab actually lands there.
+  const autoTabDone = useRef(false);
   useEffect(() => {
-    // Default to review queue if there are unlinked transactions (runs once on load)
-    if (transactions.length > 0 && activeTab === "all") {
-      const unlinkedCount = transactions.filter(
-        (t) => t.reconciliation_status === "unlinked",
-      ).length;
-      if (unlinkedCount > 0) {
-        setActiveTab("review");
-      }
+    if (autoTabDone.current) return;
+    if (searchParams.get("tab")) {
+      autoTabDone.current = true;
+      return;
     }
-  }, [transactions, activeTab]);
+    if (transactions.length === 0) return;
+
+    autoTabDone.current = true;
+    const unlinked = transactions.filter(
+      (t) => t.reconciliation_status === "unlinked",
+    ).length;
+    if (unlinked > 0) setActiveTab("review");
+    // setActiveTab is recreated each render (it writes to the URL) and
+    // including it would re-run this on every navigation, defeating the ref.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [transactions, searchParams]);
 
   const checkAuth = async () => {
     const {
@@ -152,13 +162,27 @@ export default function Transactions() {
   const fetchTransactions = async () => {
     setLoading(true);
     try {
+      // "Paid with the HSA card" was reading the wrong table (2026-08-21).
+      //
+      // This joined `payment_methods`, a list the user typed in by hand on a
+      // settings screen. Bank sync never fills `payment_method_id` -- it fills
+      // `plaid_account_id` -- so on every imported transaction the join came
+      // back empty and the "HSA card" badge never appeared, no matter which
+      // card paid.
+      //
+      // That badge is not decoration. Money spent straight from the HSA card
+      // has already had its tax break; claiming it again is the double-dip the
+      // IRS cares most about. The sync itself has always had this right --
+      // it reads `plaid_accounts.is_hsa` and marks those expenses
+      // not_reimbursable at capture -- so the ledger was correct while the
+      // screen said otherwise. Now they read the same column.
       const { data, error } = await supabase
         .from("transactions")
         .select(
           `
           *,
-          payment_methods (
-            is_hsa_account
+          plaid_accounts (
+            is_hsa
           )
         `,
         )
@@ -182,8 +206,6 @@ export default function Transactions() {
       filtered = filtered.filter((t) => t.is_medical);
     } else if (activeTab === "non-medical") {
       filtered = filtered.filter((t) => t.is_medical === false);
-    } else if (activeTab === "needs-review") {
-      filtered = filtered.filter((t) => t.needs_review);
     } else if (activeTab === "all") {
       // Show all transactions including ignored ones
       // No filtering needed
@@ -263,26 +285,22 @@ export default function Transactions() {
     try {
       const newIsMedical = !transaction.is_medical;
 
-      // Check if transaction is before HSA opened date
-      let isHsaEligible = newIsMedical;
-      if (newIsMedical && hsaOpenedDate) {
-        const transactionDate = new Date(transaction.transaction_date);
-        const hsaDate = new Date(hsaOpenedDate);
-        if (transactionDate < hsaDate) {
-          isHsaEligible = false;
-          toast.warning(
-            `This transaction occurred before your HSA was opened (${new Date(hsaOpenedDate).toLocaleDateString()}). It's marked as medical but not HSA-eligible.`,
-          );
-        }
-      }
-
+      // Workstream C2: no is_hsa_eligible here, and no HSA-establishment-date
+      // warning. Both decided eligibility at categorization, which is the
+      // wrong step -- eligibility needs date of service, patient and Pub 502
+      // category, none of which are known from a bank transaction. The
+      // establishment-date gate is reported during substantiation instead.
       const { error } = await supabase
         .from("transactions")
         .update({
           is_medical: newIsMedical,
-          is_hsa_eligible: isHsaEligible,
+          needs_review: false,
           category: newIsMedical ? "medical" : transaction.category,
           reconciliation_status: newIsMedical ? "unlinked" : "ignored",
+          classification_reason: "user",
+          classification_explanation: newIsMedical
+            ? "You confirmed this as a medical expense."
+            : "You marked this as not medical.",
         })
         .eq("id", transaction.id);
 
@@ -291,6 +309,10 @@ export default function Transactions() {
         newIsMedical ? "Marked as medical expense" : "Marked as non-medical",
       );
       fetchTransactions();
+      // Workstream C4: rules are reachable from any transaction, including
+      // ones already filed in the archive -- that is how a user corrects a
+      // vendor they disagree with rather than fixing rows one by one.
+      setRuleCandidate({ ...transaction, isMedical: newIsMedical });
     } catch (error) {
       logError("Error toggling medical:", error);
       toast.error("Failed to update transaction");
@@ -303,132 +325,32 @@ export default function Transactions() {
         .from("transactions")
         .update({
           is_medical: true,
-          is_hsa_eligible: true,
+          needs_review: false,
           category: "medical",
+          classification_reason: "user",
+          classification_explanation:
+            "You confirmed this as a medical expense.",
         })
         .eq("id", transaction.id);
 
       if (error) throw error;
       toast.success("Marked as medical expense");
       fetchTransactions();
+      setRuleCandidate({ ...transaction, isMedical: true });
     } catch (error) {
       logError("Error updating transaction:", error);
       toast.error("Failed to update transaction");
     }
   };
 
-  const handleLinkToInvoice = async (transaction: Transaction) => {
-    setSelectedTransaction(transaction);
-    try {
-      const { data, error } = await supabase
-        .from("invoices")
-        .select("id, vendor, amount, total_amount, date")
-        .order("date", { ascending: false })
-        .limit(200);
-      if (error) throw error;
-      setAvailableInvoices(
-        (data || []).map((inv) => ({
-          id: inv.id,
-          vendor: inv.vendor,
-          amount: Number(inv.amount),
-          total_amount: Number(inv.total_amount ?? inv.amount),
-          date: inv.date,
-        })),
-      );
-      setInvoicePickerOpen(true);
-    } catch (error) {
-      logError("Error loading invoices for linking:", error);
-      toast.error("Failed to load bills");
-    }
-  };
-
-  const handleInvoiceSelected = (invoice: {
-    id: string;
-    vendor: string;
-    amount: number;
-    total_amount: number;
-    date: string;
-  }) => {
-    setLinkTargetInvoice(invoice);
-    setInvoicePickerOpen(false);
-    setLinkDialogOpen(true);
-  };
-
-  const handleConfirmMedical = async (transaction: Transaction) => {
-    try {
-      const { error } = await supabase
-        .from("transactions")
-        .update({
-          is_medical: true,
-          is_hsa_eligible: true,
-          needs_review: false,
-          category: "medical",
-        })
-        .eq("id", transaction.id);
-      if (error) throw error;
-
-      // Save vendor preference so future syncs don't flag this vendor
-      if (transaction.vendor) {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        if (user) {
-          await supabase.from("user_vendor_preferences").upsert(
-            {
-              user_id: user.id,
-              vendor_pattern: transaction.vendor,
-              is_medical: true,
-            },
-            { onConflict: "user_id,vendor_pattern" },
-          );
-        }
-      }
-
-      toast.success("Confirmed as medical expense");
-      fetchTransactions();
-    } catch (error) {
-      logError("Error confirming medical transaction:", error);
-      toast.error("Failed to update transaction");
-    }
-  };
-
-  const handleRejectMedical = async (transaction: Transaction) => {
-    try {
-      const { error } = await supabase
-        .from("transactions")
-        .update({
-          is_medical: false,
-          is_hsa_eligible: false,
-          needs_review: false,
-          reconciliation_status: "ignored",
-        })
-        .eq("id", transaction.id);
-      if (error) throw error;
-
-      // Save vendor preference so future syncs skip this vendor
-      if (transaction.vendor) {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        if (user) {
-          await supabase.from("user_vendor_preferences").upsert(
-            {
-              user_id: user.id,
-              vendor_pattern: transaction.vendor,
-              is_medical: false,
-            },
-            { onConflict: "user_id,vendor_pattern" },
-          );
-        }
-      }
-
-      toast.success("Marked as non-medical");
-      fetchTransactions();
-    } catch (error) {
-      logError("Error rejecting medical categorization:", error);
-      toast.error("Failed to update transaction");
-    }
-  };
+  // "Link to a bill" removed 2026-08-21.
+  //
+  // It opened a picker of every expense on file and let the user attach this
+  // transaction to one of them, recording the attachment in a second payment
+  // table. That is a document hunting for its own transaction, which the
+  // workflow spec defers past v1 -- and it competed with the link the sync
+  // already makes for itself when it turns a medical transaction into an
+  // expense. Two links, written by different code, that could disagree.
 
   const handleIgnore = async (transaction: Transaction) => {
     try {
@@ -491,16 +413,56 @@ export default function Transactions() {
     setSplitDialogOpen(true);
   };
 
+  // Workstream B3. Distinct from handleSplitTransaction above, which splits a
+  // transaction across HSA accounts for allocation. This splits it into
+  // separate EXPENSES — the mixed-basket case ($12 of Tylenol in an $87
+  // Walmart run) and the bundled-payment case (one hospital charge covering
+  // several visits for different family members).
+  const handleUnlinkTransfer = async (transaction: Transaction) => {
+    try {
+      const { error } = await supabase.rpc("unlink_transfer", {
+        p_transaction_id: transaction.id,
+      });
+      if (error) throw error;
+      // Both halves come back, so say so — the user clicked on one row but two
+      // reappear in the review queue.
+      toast.success("Transfer undone. Both transactions are back for review.");
+      fetchTransactions();
+    } catch (error) {
+      logError("Error unlinking transfer:", error);
+      toast.error("Failed to undo the transfer");
+    }
+  };
+
+  const handleSplitIntoExpenses = (transaction: Transaction) => {
+    const check = canSplitIntoExpenses(transaction);
+    if (!check.canSplit) {
+      toast.error(check.reason ?? "This transaction can't be split.");
+      return;
+    }
+    setTxnToExpenseSplit(transaction);
+    setExpenseSplitOpen(true);
+  };
+
+  // Workstream C5: transfers are excluded from every total. Moving $500 from
+  // checking to a credit card is not $1,000 of spending, and counting it as
+  // any spending at all is what makes the app's own numbers visibly wrong.
+  const spending = transactions.filter((t) => !t.is_transfer);
+  const cardPayments = transactions.filter(
+    (t) => t.transfer_kind === "card_payment",
+  );
+
   const stats = {
-    total: transactions.length,
-    medical: transactions.filter((t) => t.is_medical).length,
-    unlinked: transactions.filter((t) => t.reconciliation_status === "unlinked")
+    total: spending.length,
+    medical: spending.filter((t) => t.is_medical).length,
+    unlinked: spending.filter((t) => t.reconciliation_status === "unlinked")
       .length,
-    needsReview: transactions.filter((t) => t.needs_review).length,
-    totalAmount: transactions.reduce((sum, t) => sum + Number(t.amount), 0),
-    medicalAmount: transactions
+    needsReview: spending.filter((t) => t.needs_review).length,
+    totalAmount: spending.reduce((sum, t) => sum + Number(t.amount), 0),
+    medicalAmount: spending
       .filter((t) => t.is_medical)
       .reduce((sum, t) => sum + Number(t.amount), 0),
+    transfers: transactions.length - spending.length,
   };
 
   if (loading) {
@@ -524,18 +486,41 @@ export default function Transactions() {
         <div className="container mx-auto px-4 py-8 max-w-6xl">
           {!hsaOpenedDate && <MissingHSADateBanner onDateSet={fetchHSADate} />}
 
+          {/* Workstream C5. The spec asks for this warning explicitly: a card
+              payment is not a reimbursable expense, and users who reimburse it
+              instead of the underlying charges either double-claim or claim
+              something that was never a medical purchase. */}
+          {cardPayments.length > 0 && (
+            <Alert className="mb-6">
+              <ArrowLeftRight className="h-4 w-4" />
+              <AlertTitle>
+                Credit card payments aren&rsquo;t expenses
+              </AlertTitle>
+              <AlertDescription>
+                We found {cardPayments.length} payment
+                {cardPayments.length === 1 ? "" : "s"} to your credit card and
+                left {cardPayments.length === 1 ? "it" : "them"} out of your
+                totals. Claim the original charges on the card &mdash; the
+                pharmacy, the doctor &mdash; not the payment that settles the
+                balance. Claiming the payment would either double up on those
+                charges or claim something that was never a medical purchase.
+              </AlertDescription>
+            </Alert>
+          )}
+
           <div className="flex items-center justify-between sticky top-0 z-10 bg-background py-2 mb-4">
             <div>
-              <h1 className="text-3xl font-bold text-foreground">
-                Transactions
-              </h1>
+              <h1 className="text-3xl font-bold text-foreground">Expenses</h1>
               <p className="text-muted-foreground text-sm mt-1">
-                Track and categorize all your financial transactions
+                Decide what's medical, then get it documented and claimed
               </p>
             </div>
-            <Button onClick={() => setAddDialogOpen(true)}>
+            {/* Was a dialog that wrote a bare transaction with no patient and
+                no date of service -- the two things a claim is refused for
+                lacking. It now goes to the one entry form, which asks. */}
+            <Button variant="outline" onClick={() => navigate("/expenses/new")}>
               <Plus className="mr-2 h-4 w-4" />
-              Add Transaction
+              Add manually
             </Button>
           </div>
 
@@ -587,11 +572,13 @@ export default function Transactions() {
           {/* Tabs */}
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="mb-6">
-              <TabsTrigger value="review">
-                Review Queue {stats.unlinked > 0 && `(${stats.unlinked})`}
-              </TabsTrigger>
-              <TabsTrigger value="needs-review" className="relative">
-                Needs Review
+              {/* One review tab, not two. "Review Queue" (one-at-a-time
+                  swipe) and "Needs Review" (flat list) were two routes to the
+                  same decision, and the flat list still told users confirming
+                  a transaction made it HSA-eligible — which stopped being true
+                  when eligibility moved to substantiation. */}
+              <TabsTrigger value="review" className="relative">
+                Review
                 {stats.needsReview > 0 && (
                   <Badge
                     variant="destructive"
@@ -604,81 +591,51 @@ export default function Transactions() {
               <TabsTrigger value="all">All</TabsTrigger>
               <TabsTrigger value="medical">Medical</TabsTrigger>
               <TabsTrigger value="non-medical">Non-Medical</TabsTrigger>
+              {/* The old /bills list, merged in here 2026-08-20. The tabs to
+                  its left are bank transactions -- money that moved. This one
+                  is expenses: what a medical transaction became once it has a
+                  service date, a patient and documents. They are different
+                  objects, which is why this is a separate tab rather than
+                  another filter, but both are "expenses" to the person
+                  looking at them, so they share a page. */}
+              <TabsTrigger value="to-claim">To claim</TabsTrigger>
             </TabsList>
 
+            <TabsContent value="to-claim" className="space-y-4">
+              <Bills embedded />
+            </TabsContent>
+
             <TabsContent value="review" className="space-y-4">
-              <ReviewQueue />
+              {/* Workstream C6. Above the categorize feed on purpose: a
+                  duplicate is money already at risk, whereas an unreviewed
+                  transaction is only undecided. */}
+              <DuplicateWarnings />
+              <ReviewFeed />
             </TabsContent>
 
-            <TabsContent value="needs-review" className="space-y-3">
+            {/* One content block serves All / Medical / Non-Medical, keyed to
+                whichever is active. "review" and "to-claim" have their own
+                blocks above, so they are excluded here -- without this guard
+                a `value={activeTab}` block also matches them and the page
+                renders two lists at once. */}
+            <TabsContent
+              value={
+                activeTab === "review" || activeTab === "to-claim"
+                  ? "__inactive__"
+                  : activeTab
+              }
+              className="space-y-4"
+            >
               {filteredTransactions.length === 0 ? (
                 <Card className="p-12 text-center">
-                  <CheckCircle2 className="h-10 w-10 text-green-500 mx-auto mb-3" />
-                  <p className="text-muted-foreground">
-                    All transactions have been reviewed
-                  </p>
-                </Card>
-              ) : (
-                <>
-                  <p className="text-sm text-muted-foreground">
-                    These transactions were auto-detected as medical but need
-                    your confirmation to become HSA-eligible.
-                  </p>
-                  {filteredTransactions.map((transaction) => (
-                    <Card
-                      key={transaction.id}
-                      className="p-4 border-yellow-200 dark:border-yellow-800"
-                    >
-                      <div className="flex items-center justify-between gap-4">
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium truncate">
-                            {transaction.vendor || transaction.description}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            {new Date(
-                              transaction.transaction_date,
-                            ).toLocaleDateString()}{" "}
-                            · ${Number(transaction.amount).toFixed(2)}
-                          </p>
-                        </div>
-                        <div className="flex gap-2 shrink-0">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="text-green-600 border-green-300 hover:bg-green-50"
-                            onClick={() => handleConfirmMedical(transaction)}
-                          >
-                            <CheckCircle2 className="h-4 w-4 mr-1" />
-                            Medical
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="text-red-600 border-red-300 hover:bg-red-50"
-                            onClick={() => handleRejectMedical(transaction)}
-                          >
-                            <XCircle className="h-4 w-4 mr-1" />
-                            Not Medical
-                          </Button>
-                        </div>
-                      </div>
-                    </Card>
-                  ))}
-                </>
-              )}
-            </TabsContent>
-
-            <TabsContent value={activeTab} className="space-y-4">
-              {filteredTransactions.length === 0 ? (
-                <Card className="p-12 text-center">
-                  <p className="text-muted-foreground">No transactions found</p>
+                  <p className="text-muted-foreground">Nothing here yet</p>
                   <Button
-                    onClick={() => setAddDialogOpen(true)}
+                    onClick={() => navigate("/expenses/new")}
                     variant="outline"
                     className="mt-4"
                   >
                     <Plus className="mr-2 h-4 w-4" />
-                    Add Your First Transaction
+                    Add one manually
                   </Button>
                 </Card>
               ) : (
@@ -702,22 +659,28 @@ export default function Transactions() {
                           vendor={transaction.vendor || "Unknown"}
                           amount={transaction.amount}
                           description={transaction.description}
-                          isMedical={transaction.is_medical}
+                          isMedical={transaction.is_medical ?? false}
                           reconciliationStatus={
-                            transaction.reconciliation_status
+                            (transaction.reconciliation_status ??
+                              "unlinked") as TransactionCardProps["reconciliationStatus"]
                           }
-                          isHsaEligible={transaction.is_hsa_eligible}
+                          isHsaEligible={transaction.is_hsa_eligible ?? false}
                           isFromHsaAccount={
-                            transaction.payment_methods?.is_hsa_account || false
+                            transaction.plaid_accounts?.is_hsa || false
                           }
-                          isSplit={transaction.is_split}
+                          isSplit={transaction.is_split ?? false}
+                          classificationExplanation={
+                            transaction.classification_explanation
+                          }
+                          isTransfer={transaction.is_transfer ?? false}
+                          transferKind={transaction.transfer_kind}
+                          onUnlinkTransfer={() =>
+                            handleUnlinkTransfer(transaction)
+                          }
                           invoiceId={transaction.invoice_id}
                           splitParentId={transaction.split_parent_id}
                           onViewDetails={() => handleViewDetails(transaction)}
                           onMarkMedical={() => handleMarkMedical(transaction)}
-                          onLinkToInvoice={() =>
-                            handleLinkToInvoice(transaction)
-                          }
                           onToggleMedical={() =>
                             handleToggleMedical(transaction)
                           }
@@ -728,6 +691,9 @@ export default function Transactions() {
                           }
                           onSplitTransaction={() =>
                             handleSplitTransaction(transaction)
+                          }
+                          onSplitIntoExpenses={() =>
+                            handleSplitIntoExpenses(transaction)
                           }
                         />
                         {expandedTransactionId === transaction.id && (
@@ -746,23 +712,10 @@ export default function Transactions() {
           </Tabs>
         </div>
 
-        <TransactionDetailDialog
-          open={detailDialogOpen}
-          onOpenChange={setDetailDialogOpen}
-          transaction={selectedTransaction}
-          onUpdate={fetchTransactions}
-          onLinkToInvoice={() => {
-            if (selectedTransaction) {
-              handleLinkToInvoice(selectedTransaction);
-            }
-          }}
-        />
-
-        <QuickAddTransactionDialog
-          open={addDialogOpen}
-          onOpenChange={setAddDialogOpen}
-          onSuccess={fetchTransactions}
-        />
+        {/* TransactionDetailDialog removed 2026-08-21: nothing had set its
+            open flag since clicking a row started expanding the row in place
+            instead, so it had quietly become a dialog that could not be
+            opened. TransactionInlineDetail above is the live surface. */}
 
         {transactionToSplit && (
           <TransactionSplitDialog
@@ -778,50 +731,24 @@ export default function Transactions() {
           />
         )}
 
-        {/* Invoice picker — step 1 of transaction linking */}
-        <Dialog open={invoicePickerOpen} onOpenChange={setInvoicePickerOpen}>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>Select a Bill to Link</DialogTitle>
-              <DialogDescription>
-                Choose which bill to link this transaction to.
-              </DialogDescription>
-            </DialogHeader>
-            <ScrollArea className="max-h-80">
-              <div className="space-y-2 pr-2">
-                {availableInvoices.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-4">
-                    No bills found
-                  </p>
-                ) : (
-                  availableInvoices.map((invoice) => (
-                    <button
-                      key={invoice.id}
-                      onClick={() => handleInvoiceSelected(invoice)}
-                      className="w-full text-left p-3 rounded-lg border hover:bg-accent/50 transition-colors"
-                    >
-                      <p className="font-medium text-sm">{invoice.vendor}</p>
-                      <p className="text-xs text-muted-foreground">
-                        ${invoice.total_amount.toFixed(2)} ·{" "}
-                        {new Date(invoice.date).toLocaleDateString()}
-                      </p>
-                    </button>
-                  ))
-                )}
-              </div>
-            </ScrollArea>
-          </DialogContent>
-        </Dialog>
+        {txnToExpenseSplit && currentUserId && (
+          <ExpenseSplitDialog
+            open={expenseSplitOpen}
+            onOpenChange={(open) => {
+              setExpenseSplitOpen(open);
+              if (!open) setTxnToExpenseSplit(null);
+            }}
+            transaction={txnToExpenseSplit}
+            userId={currentUserId}
+            onSplit={fetchTransactions}
+          />
+        )}
 
-        {/* Link transaction dialog — step 2 */}
-        <LinkTransactionDialog
-          open={linkDialogOpen}
-          onOpenChange={(open) => {
-            setLinkDialogOpen(open);
-            if (!open) fetchTransactions();
-          }}
-          invoice={linkTargetInvoice}
-          onSuccess={fetchTransactions}
+        {/* Workstream C3 — offer a rule after a categorization decision. */}
+        <CreateRulePrompt
+          candidate={ruleCandidate}
+          onOpenChange={(open) => !open && setRuleCandidate(null)}
+          onCreated={fetchTransactions}
         />
       </AuthenticatedLayout>
     </ErrorBoundary>

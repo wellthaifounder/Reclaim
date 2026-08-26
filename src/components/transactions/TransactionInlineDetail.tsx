@@ -24,15 +24,16 @@ interface TransactionInlineDetailProps {
     vendor: string | null;
     amount: number;
     description: string;
-    category: string;
-    is_medical: boolean;
-    is_hsa_eligible: boolean;
+    category: string | null;
+    is_medical: boolean | null;
+    is_hsa_eligible: boolean | null;
     notes: string | null;
-    reconciliation_status: string;
-    payment_method_id: string | null;
+    reconciliation_status: string | null;
     invoice_id: string | null;
-    payment_methods?: {
-      is_hsa_account: boolean;
+    // Whether the HSA card paid for this, taken from the account the charge
+    // landed on. See the note in Transactions.tsx's fetchTransactions.
+    plaid_accounts?: {
+      is_hsa: boolean | null;
     } | null;
   };
   onClose: () => void;
@@ -175,11 +176,11 @@ export function TransactionInlineDetail({
               >
                 {transaction.reconciliation_status}
               </Badge>
-              {transaction.payment_methods?.is_hsa_account && (
+              {transaction.plaid_accounts?.is_hsa && (
                 <Badge variant="success">Paid via HSA</Badge>
               )}
               {transaction.is_hsa_eligible &&
-                !transaction.payment_methods?.is_hsa_account && (
+                !transaction.plaid_accounts?.is_hsa && (
                   <Badge className="bg-primary/10 text-primary">
                     HSA Eligible
                   </Badge>

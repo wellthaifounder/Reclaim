@@ -1,84 +1,50 @@
-// Reclaim Phase 4 W3 — deposit → Substantiation Record matcher.
+// Reclaim Workstream E4 — deposit → Substantiation Record matcher.
 //
 // Shared by plaid-sync-transactions and plaid-webhook so both paths surface
-// the same set of reimbursement candidates regardless of which channel
-// delivered the deposit txn first. Upsert semantics make the cross-path
-// race a no-op (the UNIQUE (transaction_id, substantiation_record_id)
-// constraint dedupes; the second writer just no-ops).
+// the same candidates regardless of which channel delivered the deposit first.
 //
-// Matching rule (v1, deliberately simple — fuzzy heuristics later if real
-// users miss matches):
-//   - rawTxnAmount must be < 0 (Plaid convention: negative = credit/deposit)
-//   - open record means substantiation_records.status = 'generated'
-//   - record must have been generated within the last 90 days (deposit-
-//     delay sanity window; HSA custodians typically transfer within 1–14d)
-//   - record.total_amount must match |rawTxnAmount| within $0.01
+// The matching itself moved into SQL (match_reimbursement_deposits, migration
+// 20260817180000) for three reasons, each of which was a defect here:
 //
-// All candidates are stamped match_confidence=1.0 because the matching is
-// exact. The column is shaped to accept lower values for future relaxations
-// (partial deposits, deposits split across records, etc.).
+//   * It used to run over the transactions of ONE sync. A record generated an
+//     hour after its deposit posted was never matched, because nothing looked
+//     at that deposit again. The SQL function scans open records against all
+//     unresolved deposits, so it is safe — and useful — to call repeatedly.
+//   * It used to upsert candidates with status 'pending' ON CONFLICT DO
+//     UPDATE, which reinstated matches the user had dismissed, on every single
+//     sync, for ever. The scan now does ON CONFLICT DO NOTHING.
+//   * A per-transaction loop issued one SELECT over open records per deposit.
+//     One call now handles the whole batch.
+//
+// This module is the call site, not the algorithm. Keeping the rule in the
+// database is also what lets the Substantiation page run the same scan on load
+// without a second implementation to drift from this one.
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const TOLERANCE_USD = 0.01;
-const WINDOW_DAYS = 90;
-
+/**
+ * Scan for deposits that may close an open substantiation record.
+ *
+ * Failure is logged and swallowed, consistent with transfer and duplicate
+ * detection: surfacing a reimbursement prompt is an improvement on top of
+ * ingestion, never a precondition for it. A sync that aborted here would lose
+ * the cursor advance for the whole batch.
+ */
 export async function findReimbursementMatches(opts: {
   supabase: SupabaseClient;
   userId: string;
-  transactionRowId: string;
-  rawTxnAmount: number;
+  requestId?: string;
 }): Promise<{ matched: number }> {
-  const { supabase, userId, transactionRowId, rawTxnAmount } = opts;
-  if (rawTxnAmount >= 0) return { matched: 0 };
-  const depositAmount = Math.abs(rawTxnAmount);
+  const { supabase, userId } = opts;
+  const tag = opts.requestId ? `[${opts.requestId}] ` : "";
 
-  const windowStart = new Date(
-    Date.now() - WINDOW_DAYS * 24 * 60 * 60 * 1000,
-  ).toISOString();
+  const { data, error } = await supabase.rpc("match_reimbursement_deposits", {
+    p_user_id: userId,
+  });
 
-  const { data: records, error: recordErr } = await supabase
-    .from("substantiation_records")
-    .select("id, total_amount")
-    .eq("user_id", userId)
-    .eq("status", "generated")
-    .gte("generated_at", windowStart);
-
-  if (recordErr) {
-    console.warn(
-      "[depositMatcher] could not load open records:",
-      recordErr.message,
-    );
+  if (error) {
+    console.warn(`${tag}[depositMatcher] scan failed: ${error.message}`);
     return { matched: 0 };
   }
-
-  let matched = 0;
-  for (const r of records ?? []) {
-    if (Math.abs(Number(r.total_amount) - depositAmount) > TOLERANCE_USD) {
-      continue;
-    }
-    const { error: upsertErr } = await supabase
-      .from("reimbursement_match_candidates")
-      .upsert(
-        {
-          user_id: userId,
-          transaction_id: transactionRowId,
-          substantiation_record_id: r.id,
-          match_amount: depositAmount,
-          match_confidence: 1.0,
-          match_reason: `Exact amount match within $${TOLERANCE_USD.toFixed(2)} tolerance, deposit within ${WINDOW_DAYS}d of record generation.`,
-          status: "pending",
-        },
-        { onConflict: "transaction_id,substantiation_record_id" },
-      );
-    if (upsertErr) {
-      console.warn(
-        "[depositMatcher] candidate upsert failed:",
-        upsertErr.message,
-      );
-      continue;
-    }
-    matched++;
-  }
-  return { matched };
+  return { matched: Number(data ?? 0) };
 }

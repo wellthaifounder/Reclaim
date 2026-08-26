@@ -2,6 +2,7 @@
 // Can be extended to integrate with Google Analytics, Mixpanel, PostHog, etc.
 
 import { supabase } from "@/integrations/supabase/client";
+import type { Json } from "@/integrations/supabase/types";
 import { safeLog, logError } from "@/utils/errorHandler";
 
 type EventType =
@@ -38,9 +39,15 @@ type EventType =
   | "onboarding_wizard_completed"
   | "onboarding_wizard_skipped"
   | "get_started_step_clicked"
-  | "get_started_completed"
-  // Wave 4 (2026-05) — Bills/Ledger IA collapse experiment
-  | "bills_view_selected";
+  | "get_started_completed";
+
+// Extra per-event detail. This is write-only: it is spread into the jsonb
+// `event_properties` column and never read back into typed code, so the honest
+// type is "whatever survives JSON", not `any`. Using Supabase's own Json type
+// also means a value that could not actually be stored -- a Date, a Map, a
+// function -- is rejected at the call site rather than silently serialised to
+// {} or dropped once it reaches the database.
+type AnalyticsMetadata = Record<string, Json | undefined>;
 
 interface AnalyticsEvent {
   type: EventType;
@@ -48,17 +55,12 @@ interface AnalyticsEvent {
   action?: string;
   label?: string;
   value?: number;
-  metadata?: Record<string, any>;
+  metadata?: AnalyticsMetadata;
 }
 
 class Analytics {
-  private enabled: boolean;
-  private sessionStartTime: number;
-
   constructor() {
     // Enable analytics in production
-    this.enabled = import.meta.env.PROD;
-    this.sessionStartTime = Date.now();
   }
 
   async track(event: AnalyticsEvent) {
@@ -188,7 +190,7 @@ class Analytics {
     this.track({
       type: "report_view",
       action: reportType,
-      page: "/reports",
+      page: "/substantiation",
     });
   }
 
@@ -277,7 +279,7 @@ class Analytics {
     });
   }
 
-  trackBillingCohortAction(action: string, metadata?: Record<string, any>) {
+  trackBillingCohortAction(action: string, metadata?: AnalyticsMetadata) {
     this.track({
       type: "billing_cohort_action",
       action,
@@ -288,7 +290,7 @@ class Analytics {
     });
   }
 
-  trackHSACohortAction(action: string, metadata?: Record<string, any>) {
+  trackHSACohortAction(action: string, metadata?: AnalyticsMetadata) {
     this.track({
       type: "hsa_cohort_action",
       action,
@@ -300,7 +302,7 @@ class Analytics {
   }
 
   // Convenience method for tracking cohort-specific events
-  trackEvent(eventName: string, properties?: Record<string, any>) {
+  trackEvent(eventName: string, properties?: AnalyticsMetadata) {
     this.track({
       type: "button_click", // Generic type for custom events
       action: eventName,

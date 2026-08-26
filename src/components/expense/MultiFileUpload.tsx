@@ -9,7 +9,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { Upload, X, FileText, Image as ImageIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
@@ -136,7 +135,7 @@ export function MultiFileUpload({
 
       {files.length > 0 && (
         <div className="space-y-3">
-          {files.map((fileData, index) => (
+          {files.map((fileData, _index) => (
             <div
               key={fileData.id}
               className="border rounded-lg p-4 space-y-3 bg-card"

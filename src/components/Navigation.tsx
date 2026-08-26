@@ -1,7 +1,8 @@
 import { Button } from "@/components/ui/button";
 import { Link, useNavigate } from "react-router-dom";
-import { WellthLogo } from "./WellthLogo";
-import { Menu, X } from "lucide-react";
+import { ReclaimLogo } from "./ReclaimLogo";
+import { ThemeToggle } from "@/components/ThemeToggle";
+import { Menu } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -49,17 +50,17 @@ export const Navigation = () => {
       aria-label="Main navigation"
     >
       <div className="container mx-auto flex h-14 sm:h-16 items-center justify-between px-4 sm:px-6">
-        <Link to="/" className="cursor-pointer group" aria-label="Wellth home">
+        <Link to="/" className="cursor-pointer group" aria-label="Reclaim home">
           {/* Show full logo on desktop, icon only on mobile */}
           <div className="hidden md:block">
-            <WellthLogo
+            <ReclaimLogo
               size="sm"
               showTagline
               className="transition-transform group-hover:scale-105"
             />
           </div>
           <div className="md:hidden">
-            <WellthLogo
+            <ReclaimLogo
               variant="icon"
               size="sm"
               className="transition-transform group-hover:scale-110"
@@ -98,17 +99,7 @@ export const Navigation = () => {
           role="group"
           aria-label="Authentication"
         >
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              analytics.navigationClick("calculator");
-              navigate("/calculator");
-            }}
-            className="text-sm"
-          >
-            Savings Calculator
-          </Button>
+          <ThemeToggle />
           <Button
             variant="ghost"
             size="sm"
@@ -198,19 +189,6 @@ export const Navigation = () => {
                     className="text-base sm:text-lg font-medium text-foreground transition-all duration-150 hover:text-primary py-2 px-3 sm:px-4 rounded-md hover:bg-accent/5"
                   >
                     Pricing
-                  </a>
-                </SheetClose>
-
-                <SheetClose asChild>
-                  <a
-                    href="/calculator"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      handleNavClick("/calculator");
-                    }}
-                    className="text-base sm:text-lg font-medium text-foreground transition-all duration-150 hover:text-primary py-2 px-3 sm:px-4 rounded-md hover:bg-accent/5"
-                  >
-                    Savings Calculator
                   </a>
                 </SheetClose>
               </div>

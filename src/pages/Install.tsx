@@ -124,7 +124,7 @@ const Install = () => {
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mb-4">
             <Download className="h-8 w-8 text-primary" />
           </div>
-          <h1 className="text-4xl font-bold mb-4">Install Wellth.ai</h1>
+          <h1 className="text-4xl font-bold mb-4">Install Reclaim</h1>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
             Get the full app experience with instant access, offline support,
             and push notifications
@@ -141,7 +141,7 @@ const Install = () => {
                     App Already Installed!
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    You're using Wellth.ai as an installed app.
+                    You're using Reclaim as an installed app.
                   </p>
                 </div>
               </div>
@@ -192,7 +192,7 @@ const Install = () => {
                   {deferredPrompt ? (
                     <div className="space-y-4">
                       <p className="text-sm text-muted-foreground">
-                        Click the button below to install Wellth.ai on your
+                        Click the button below to install Reclaim on your
                         device:
                       </p>
                       <Button
@@ -259,8 +259,7 @@ const Install = () => {
                       1
                     </span>
                     <span>
-                      Open Wellth.ai in Safari (this won't work in Chrome on
-                      iOS)
+                      Open Reclaim in Safari (this won't work in Chrome on iOS)
                     </span>
                   </li>
                   <li className="flex gap-3">
@@ -289,7 +288,7 @@ const Install = () => {
                       5
                     </span>
                     <span>
-                      The Wellth.ai icon will appear on your home screen
+                      The Reclaim icon will appear on your home screen
                     </span>
                   </li>
                 </ol>

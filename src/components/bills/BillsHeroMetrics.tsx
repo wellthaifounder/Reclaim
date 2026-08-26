@@ -1,172 +1,186 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  BarChart,
-  Bar,
-  Cell,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+// The summary above the expense list.
+//
+// Rewritten 2026-08-21. It used to answer "how much of this is paid?" —
+// Total Billed, Paid via HSA, Paid Other, Unpaid, with unpaid money labelled
+// "Opportunity for rewards". That is the question the old bill-tracking
+// product asked, and two things were wrong with it here:
+//
+//   1. Every expense in Reclaim is already paid. It exists because the bank
+//      recorded the money leaving. "Unpaid" was a category with nothing in it,
+//      and once the payments table came out it would have swallowed every
+//      expense and shown the whole list in red.
+//   2. It called unpaid money "Eligible for HSA Reimbursement". You cannot be
+//      reimbursed for money you have not spent.
+//
+// The question that matters is "how much of what I have already spent can I
+// still get back, and what is holding up the rest". So the bands are the
+// stages of a claim, and they add up to everything spent:
+//
+//   Ready to claim — eligible, not yet claimed, something still owed on it.
+//                    Same rule as the claimable_expenses() database function
+//                    that builds the actual claim, so this figure and the one
+//                    on the claim screen cannot disagree.
+//   Needs work     — spent, unclaimed, but not established as eligible yet:
+//                    no date of service, no patient, no documents, or a
+//                    letter of medical necessity still to fetch.
+//   Claimed        — in an open claim, reimbursed, or paid straight from the
+//                    HSA card and therefore never reimbursable.
 
-interface BillsHeroMetricsProps {
-  totalBilled: number;
-  paidViaHSA: number;
-  paidOther: number;
-  unpaidBalance: number;
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
+interface ExpenseMoneyRow {
+  amount: number;
+  amount_paid?: number | null;
+  reimbursable_amount?: number | null;
+  reimbursed_amount?: number | null;
+  eligibility_state?: string | null;
+  claim_state?: string | null;
 }
 
-export function BillsHeroMetrics({
-  totalBilled,
-  paidViaHSA,
-  paidOther,
-  unpaidBalance,
-}: BillsHeroMetricsProps) {
-  const hsaEligible = paidOther + unpaidBalance;
+const money = (n: number) =>
+  n.toLocaleString(undefined, {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  });
 
-  // Compute unpaid from inputs to guarantee consistency in the bar
-  const unpaidCalc =
-    totalBilled > 0
-      ? Math.max(0, totalBilled - paidViaHSA - paidOther)
-      : unpaidBalance;
+/**
+ * Split what the user has spent into the three stages of a claim.
+ *
+ * `remaining` mirrors claimable_expenses(): the reimbursable amount less
+ * whatever has already come back, floored at zero, falling back through
+ * amount_paid to amount when the newer columns are not set.
+ */
+function summariseExpenses(rows: ExpenseMoneyRow[]) {
+  let readyToClaim = 0;
+  let needsWork = 0;
+  let claimed = 0;
+  let totalSpent = 0;
 
-  // Calculate percentages
-  const paidViaHSAPercent =
-    totalBilled > 0 ? (paidViaHSA / totalBilled) * 100 : 0;
-  const paidOtherPercent =
-    totalBilled > 0 ? (paidOther / totalBilled) * 100 : 0;
-  const unpaidPercent = totalBilled > 0 ? (unpaidCalc / totalBilled) * 100 : 0;
+  for (const row of rows) {
+    const spent = Number(row.amount_paid ?? row.amount ?? 0);
+    totalSpent += spent;
 
-  // Data for the stacked bar chart
-  // If all values are 0, show a minimal placeholder bar
-  const chartData =
-    totalBilled === 0
-      ? [
-          {
-            name: "Total",
-            paidViaHSA: 0,
-            paidOther: 0,
-            unpaid: 1, // minimal placeholder so the bar is visible
-          },
-        ]
-      : [
-          {
-            name: "Total",
-            paidViaHSA,
-            paidOther,
-            unpaid: unpaidCalc,
-          },
-        ];
+    const reimbursable = Number(
+      row.reimbursable_amount ?? row.amount_paid ?? row.amount ?? 0,
+    );
+    const remaining = Math.max(
+      reimbursable - Number(row.reimbursed_amount ?? 0),
+      0,
+    );
 
-  const CustomTooltip = ({ active, payload }: any) => {
-    if (active && payload && payload.length) {
-      return (
-        <div className="bg-background border rounded-lg shadow-lg p-3">
-          {payload.map((entry: any, index: number) => (
-            <div key={index} className="flex items-center gap-2">
-              <div
-                className="w-3 h-3 rounded"
-                style={{ backgroundColor: entry.fill }}
-              />
-              <span className="text-sm">
-                {entry.name}: ${entry.value.toFixed(2)}
-              </span>
-            </div>
-          ))}
-        </div>
-      );
+    const unclaimed = (row.claim_state ?? "unclaimed") === "unclaimed";
+
+    if (!unclaimed) {
+      claimed += spent;
+    } else if (row.eligibility_state === "eligible" && remaining > 0) {
+      readyToClaim += remaining;
+    } else {
+      needsWork += spent;
     }
-    return null;
-  };
+  }
+
+  return { readyToClaim, needsWork, claimed, totalSpent };
+}
+
+interface BillsHeroMetricsProps {
+  rows: ExpenseMoneyRow[];
+}
+
+export function BillsHeroMetrics({ rows }: BillsHeroMetricsProps) {
+  const { readyToClaim, needsWork, claimed, totalSpent } =
+    summariseExpenses(rows);
+
+  // The bar is drawn from the same three numbers shown as text, so it can
+  // never tell a different story from the figures beside it.
+  const bands = [
+    {
+      key: "ready",
+      label: "Ready to claim",
+      value: readyToClaim,
+      swatch: "bg-primary",
+      text: "text-primary",
+      hint: "Eligible and nothing claimed against it yet",
+    },
+    {
+      key: "needs",
+      label: "Needs work",
+      value: needsWork,
+      swatch: "bg-amber-500",
+      text: "text-amber-600 dark:text-amber-400",
+      hint: "Spent, but not established as eligible yet",
+    },
+    {
+      key: "claimed",
+      label: "Claimed",
+      value: claimed,
+      swatch: "bg-muted-foreground/40",
+      text: "text-muted-foreground",
+      hint: "In a claim, reimbursed, or paid on the HSA card",
+    },
+  ];
+
+  const barTotal = bands.reduce((sum, b) => sum + b.value, 0);
 
   return (
     <Card className="mb-8">
-      <CardHeader>
-        <CardTitle>Payment Status Overview</CardTitle>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base font-medium text-muted-foreground">
+          Where your medical spending stands
+        </CardTitle>
       </CardHeader>
-      <CardContent>
-        <div className="flex flex-col md:flex-row gap-6 items-center">
-          {/* Stacked Bar Chart */}
-          <div className="flex-1 w-full">
-            <ResponsiveContainer width="100%" height={80}>
-              <BarChart data={chartData} layout="vertical" barSize={24}>
-                <Tooltip content={<CustomTooltip />} />
-                <XAxis type="number" hide domain={[0, "dataMax"]} />
-                <YAxis type="category" dataKey="name" hide />
-                <Bar
-                  dataKey="paidViaHSA"
-                  stackId="a"
-                  fill="hsl(var(--success))"
-                  radius={[4, 0, 0, 4]}
-                />
-                <Bar
-                  dataKey="paidOther"
-                  stackId="a"
-                  fill="hsl(var(--primary))"
-                />
-                <Bar
-                  dataKey="unpaid"
-                  stackId="a"
-                  fill="hsl(var(--muted))"
-                  radius={[0, 4, 4, 0]}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-
-            {/* Legend */}
-            <div className="flex flex-wrap gap-4 mt-4 text-sm">
-              <div className="flex items-center gap-2">
-                <div
-                  className="w-3 h-3 rounded"
-                  style={{ backgroundColor: "hsl(var(--success))" }}
-                />
-                <span className="text-muted-foreground">
-                  Paid via HSA (${paidViaHSA.toFixed(2)}) ·{" "}
-                  {paidViaHSAPercent.toFixed(0)}% · Tax savings maximized ✓
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div
-                  className="w-3 h-3 rounded"
-                  style={{ backgroundColor: "hsl(var(--primary))" }}
-                />
-                <span className="text-muted-foreground">
-                  Paid Other (${paidOther.toFixed(2)}) ·{" "}
-                  {paidOtherPercent.toFixed(0)}% · Ready to reimburse
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded bg-muted" />
-                <span className="text-muted-foreground">
-                  Unpaid (${unpaidCalc.toFixed(2)}) · {unpaidPercent.toFixed(0)}
-                  % · Opportunity for rewards
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Summary Values */}
-          <div className="flex flex-col gap-3 min-w-[200px]">
-            <div className="text-right">
-              <p className="text-sm text-muted-foreground">Total Billed</p>
-              <p className="text-2xl font-bold">${totalBilled.toFixed(2)}</p>
-            </div>
-            <div className="text-right border-t pt-3">
-              <p className="text-sm text-muted-foreground mb-1">
-                Eligible for HSA Reimbursement
-              </p>
-              <p className="text-3xl font-bold text-primary">
-                ${hsaEligible.toFixed(2)}
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                {totalBilled > 0
-                  ? ((hsaEligible / totalBilled) * 100).toFixed(0)
-                  : 0}
-                % of total
-              </p>
-            </div>
-          </div>
+      <CardContent className="space-y-5">
+        <div>
+          <p className="text-3xl font-bold text-primary tabular-nums">
+            {money(readyToClaim)}
+          </p>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            ready to claim, of {money(totalSpent)} spent
+          </p>
         </div>
+
+        {/* Empty state gets a flat track rather than a misleading full bar. */}
+        <div
+          className="flex h-2.5 w-full overflow-hidden rounded-full bg-muted"
+          role="img"
+          aria-label={
+            barTotal > 0
+              ? bands
+                  .filter((b) => b.value > 0)
+                  .map((b) => `${b.label}: ${money(b.value)}`)
+                  .join(", ")
+              : "No expenses yet"
+          }
+        >
+          {barTotal > 0 &&
+            bands
+              .filter((b) => b.value > 0)
+              .map((b) => (
+                <div
+                  key={b.key}
+                  className={b.swatch}
+                  style={{ width: `${(b.value / barTotal) * 100}%` }}
+                />
+              ))}
+        </div>
+
+        <dl className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {bands.map((b) => (
+            <div key={b.key} className="flex items-start gap-2">
+              <span
+                className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${b.swatch}`}
+                aria-hidden="true"
+              />
+              <div className="min-w-0">
+                <dt className="text-sm text-muted-foreground">{b.label}</dt>
+                <dd className={`text-lg font-semibold tabular-nums ${b.text}`}>
+                  {money(b.value)}
+                </dd>
+                <p className="text-xs text-muted-foreground mt-0.5">{b.hint}</p>
+              </div>
+            </div>
+          ))}
+        </dl>
       </CardContent>
     </Card>
   );

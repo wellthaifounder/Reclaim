@@ -1,4 +1,4 @@
-import { isMedicalVendor } from "./medicalVendors";
+import { findGoverningRule, type MatchableRule } from "@/lib/merchantNormalize";
 
 export interface Transaction {
   id: string;
@@ -6,13 +6,15 @@ export interface Transaction {
   amount: number;
   transaction_date: string;
   description: string;
-  is_medical?: boolean;
-  reconciliation_status?: string;
-  category?: string;
-  is_hsa_eligible?: boolean;
+  is_medical?: boolean | null;
+  reconciliation_status?: string | null;
+  category?: string | null;
+  is_hsa_eligible?: boolean | null;
   notes?: string | null;
-  payment_method_id?: string | null;
   invoice_id?: string | null;
+  // Rule keys, persisted as of 20260815120000.
+  merchant_entity_id?: string | null;
+  merchant_category_code?: string | null;
 }
 
 export interface Invoice {
@@ -20,7 +22,7 @@ export interface Invoice {
   vendor: string;
   amount: number;
   date: string;
-  invoice_date?: string;
+  invoice_date?: string | null;
 }
 
 export interface VendorAlias {
@@ -217,30 +219,28 @@ export function findTieredMatch(
 export function getSuggestion(
   transaction: Transaction,
   invoices: Invoice[],
-  userPreferences: Array<{ vendor_pattern: string; is_medical: boolean }>,
+  rules: readonly MatchableRule[],
 ): MatchSuggestion {
-  // Check user's learned preferences first
-  const vendorText = (
-    transaction.vendor || transaction.description
-  ).toUpperCase();
-  const userPref = userPreferences.find((pref) =>
-    vendorText.includes(pref.vendor_pattern.toUpperCase()),
-  );
+  // Workstream C3. This previously matched with
+  // `vendorText.includes(pref.vendor_pattern.toUpperCase())` — an unanchored
+  // substring, the same defect that made the classifier flag Dr Pepper. A
+  // saved pattern of "cvs" matched "MYCVSHEALTHYSNACKS". Rules now match on a
+  // precedence chain with normalized, boundary-anchored comparison.
+  const rule = findGoverningRule(rules, transaction);
 
-  if (userPref) {
-    if (userPref.is_medical) {
-      return {
-        type: "mark_medical",
-        confidence: 0.95,
-        reason: `You previously marked ${userPref.vendor_pattern} as medical`,
-      };
-    } else {
-      return {
-        type: "not_medical",
-        confidence: 0.95,
-        reason: `You previously marked ${userPref.vendor_pattern} as not medical`,
-      };
-    }
+  if (rule) {
+    const label = rule.display_label || rule.match_value;
+    return rule.is_medical
+      ? {
+          type: "mark_medical",
+          confidence: 0.95,
+          reason: `Your rule marks ${label} as medical`,
+        }
+      : {
+          type: "not_medical",
+          confidence: 0.95,
+          reason: `Your rule marks ${label} as not medical`,
+        };
   }
 
   // Try to find matching invoice
@@ -254,12 +254,17 @@ export function getSuggestion(
     };
   }
 
-  // Check if vendor is known medical provider
-  if (isMedicalVendor(transaction.vendor || transaction.description)) {
+  // Fall back to the server's classification. This used to re-run a
+  // client-side copy of the keyword list (src/lib/medicalVendors.ts), which
+  // drifted from the server's and matched unanchored substrings — so Dr Pepper
+  // and Univision were suggested as healthcare providers. The row already
+  // carries `is_medical` from _shared/medicalClassifier.ts; there is no reason
+  // to guess again in the browser.
+  if (transaction.is_medical) {
     return {
       type: "mark_medical",
       confidence: 0.8,
-      reason: "Vendor appears to be a healthcare provider",
+      reason: "Classified as a healthcare merchant during sync",
     };
   }
 

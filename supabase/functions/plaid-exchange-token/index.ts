@@ -1,8 +1,15 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { encryptPlaidToken } from "../_shared/encryption.ts";
+import {
+  resolveInstitutionName,
+  syncAccounts,
+  type PlaidCreds,
+} from "../_shared/plaidSync.ts";
 
 const allowedOrigins = [
+  "https://reclaim.health",
+  "https://www.reclaim.health",
   "https://wellth-ai.app",
   "https://www.wellth-ai.app",
   Deno.env.get("ALLOWED_ORIGIN"),
@@ -14,7 +21,7 @@ function getCorsHeaders(requestOrigin: string | null) {
       ? requestOrigin
       : allowedOrigins[1];
   return {
-    "Access-Control-Allow-Origin": origin,
+    "Access-Control-Allow-Origin": origin as string,
     "Access-Control-Allow-Headers":
       "authorization, x-client-info, apikey, content-type",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -92,7 +99,15 @@ serve(async (req) => {
 
     const { access_token, item_id } = exchangeData;
 
-    // Get account info
+    const creds: PlaidCreds = {
+      clientId: plaidClientId,
+      secret: plaidSecretKey,
+      baseUrl: plaidBaseUrl,
+    };
+
+    // Get account info. We need `item.institution_id` here to resolve the
+    // display name; the account rows themselves are persisted below by
+    // syncAccounts (they used to be returned to the client and discarded).
     const accountsResponse = await fetch(`${plaidBaseUrl}/accounts/get`, {
       method: "POST",
       headers: {
@@ -121,14 +136,21 @@ serve(async (req) => {
     console.log(`[${requestId}] Encrypting Plaid access token`);
     const encryptedToken = await encryptPlaidToken(access_token);
 
-    // Store connection in database with encrypted token
-    const institutionName = accountsData.item?.institution_id || "Unknown";
+    // Store connection. `institution_name` previously held Plaid's raw
+    // institution_id, so users saw strings like "ins_109508". We now store the
+    // id in its own column and resolve the human-readable name.
+    const institutionId = accountsData.item?.institution_id || null;
+    const institutionName = institutionId
+      ? await resolveInstitutionName(creds, institutionId)
+      : "Unknown";
+
     const { data: connectionRow, error: insertError } = await supabase
       .from("plaid_connections")
       .insert({
         user_id: user.id,
         encrypted_access_token: encryptedToken,
         item_id,
+        institution_id: institutionId,
         institution_name: institutionName,
       })
       .select("id")
@@ -139,14 +161,41 @@ serve(async (req) => {
       throw new Error("Failed to store connection");
     }
 
+    // Persist the accounts. Without these rows we cannot distinguish an HSA
+    // account from checking, which blocks HSA-card handling, transfer
+    // detection, and reimbursement-deposit matching.
+    let hsaAccountCount = 0;
+    try {
+      await syncAccounts(supabase, {
+        connectionId: connectionRow.id,
+        userId: user.id,
+        accessToken: access_token,
+        creds,
+      });
+      const { count } = await supabase
+        .from("plaid_accounts")
+        .select("id", { count: "exact", head: true })
+        .eq("connection_id", connectionRow.id)
+        .eq("is_hsa", true);
+      hsaAccountCount = count ?? 0;
+    } catch (acctErr) {
+      // A failed account sync must not orphan the connection — the next
+      // transaction sync refreshes accounts before ingesting.
+      console.error(
+        `[${requestId}] Account persistence failed:`,
+        acctErr instanceof Error ? acctErr.message : acctErr,
+      );
+    }
+
     // Reclaim Phase 2 W3: return connection_id + institution_name so the
-    // frontend can immediately trigger the 18-month historical pull and
-    // render the activation-moment screen.
+    // frontend can immediately trigger the historical pull and render the
+    // activation-moment screen.
     return new Response(
       JSON.stringify({
         success: true,
         connection_id: connectionRow.id,
         institution_name: institutionName,
+        hsa_account_count: hsaAccountCount,
         accounts: accountsData.accounts,
       }),
       {

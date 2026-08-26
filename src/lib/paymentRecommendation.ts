@@ -64,7 +64,7 @@ export const getPaymentRecommendation = (
   const {
     amount,
     isHsaEligible,
-    hasRewardsCard = true,
+    hasRewardsCard: _hasRewardsCard = true,
     rewardsRate = 0.02, // Default 2%
     taxRate = 0.22, // Default 22% marginal tax rate
     investmentReturnRate = 0.07, // Default 7% annual return

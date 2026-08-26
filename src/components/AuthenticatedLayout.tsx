@@ -5,7 +5,7 @@ import { AuthenticatedNav } from "@/components/AuthenticatedNav";
 import { BottomTabNavigation } from "@/components/BottomTabNavigation";
 import { WellbieChat } from "@/components/WellbieChat";
 import { useSessionTimeout } from "@/hooks/useSessionTimeout";
-import { useHSA } from "@/contexts/HSAContext";
+import { FF } from "@/lib/featureFlags";
 
 interface AuthenticatedLayoutProps {
   children: ReactNode;
@@ -27,19 +27,15 @@ export const AuthenticatedLayout = ({
 }: AuthenticatedLayoutProps) => {
   // Enable session timeout for security (15 min inactivity, 2 min warning)
   useSessionTimeout(15, 2);
-  const { hasHSA, userIntent } = useHSA();
-  const showHSAFeatures =
-    userIntent === "hsa" || userIntent === "both" || hasHSA;
 
   return (
     <SidebarProvider defaultOpen={true}>
       <div className="min-h-screen flex w-full overflow-x-hidden">
         {/* Desktop Sidebar - hidden on mobile */}
         <div className="hidden lg:block">
-          <AppSidebar
-            unreviewedTransactions={unreviewedTransactions}
-            pendingReviews={pendingReviews}
-          />
+          {/* AppSidebar takes no pendingReviews prop; only AuthenticatedNav
+              renders that badge. */}
+          <AppSidebar unreviewedTransactions={unreviewedTransactions} />
         </div>
 
         <div className="flex-1 flex flex-col w-full">
@@ -60,17 +56,15 @@ export const AuthenticatedLayout = ({
           </main>
 
           {/* Bottom Tab Navigation - mobile only, hidden for focused-task pages */}
-          {!hideBottomNav && (
-            <BottomTabNavigation
-              unreviewedTransactions={unreviewedTransactions}
-              showHSAFeatures={showHSAFeatures}
-            />
-          )}
+          {/* BottomTabNavigation reads what it needs from context and takes
+              no props. */}
+          {!hideBottomNav && <BottomTabNavigation />}
         </div>
       </div>
 
-      {/* Wellbie Chat - only for authenticated users */}
-      <WellbieChat />
+      {/* Wellbie Chat - only for authenticated users; hidden for soft launch
+          (v1.1) behind FF.WELLBIE_ENABLED. */}
+      {FF.WELLBIE_ENABLED && <WellbieChat />}
     </SidebarProvider>
   );
 };

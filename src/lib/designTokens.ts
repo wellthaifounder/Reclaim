@@ -1,5 +1,5 @@
 /**
- * Wellth.ai Design System Tokens
+ * Reclaim Design System Tokens
  *
  * TypeScript constants for design tokens to ensure type safety and consistency
  * across the application. These should be used alongside Tailwind utilities.

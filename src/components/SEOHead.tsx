@@ -10,7 +10,7 @@ interface SEOHeadProps {
 }
 
 export const SEOHead = ({
-  title = "Wellth - HSA/FSA Expense Management & Tax Savings",
+  title = "Reclaim - HSA/FSA Expense Management & Tax Savings",
   description = "Track medical expenses, organize by episode of care, and optimize your HSA or FSA for maximum tax savings. Free to start.",
   keywords = "HSA, health savings account, FSA, flexible spending account, medical expense tracking, tax savings, healthcare finance, HSA optimization, reimbursement timing",
   ogImage = "https://wellth.ai/og-image.jpg",
@@ -71,7 +71,7 @@ export const SEOHead = ({
     const structuredData = {
       "@context": "https://schema.org",
       "@type": "SoftwareApplication",
-      name: "Wellth",
+      name: "Reclaim",
       applicationCategory: "FinanceApplication",
       description: description,
       offers: {

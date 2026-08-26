@@ -25,9 +25,9 @@ interface Receipt {
   id: string;
   file_path: string;
   file_type: string;
-  document_type: string;
+  document_type: string | null;
   description?: string | null;
-  display_order: number;
+  display_order: number | null;
   uploaded_at: string;
 }
 
@@ -65,7 +65,7 @@ const DOCUMENT_TYPE_COLORS = {
 };
 
 export function ReceiptGallery({
-  expenseId,
+  expenseId: _expenseId,
   receipts,
   onReceiptDeleted,
   onReceiptUpdated,
@@ -196,7 +196,9 @@ export function ReceiptGallery({
           const typeLabel =
             DOCUMENT_TYPE_LABELS[
               receipt.document_type as keyof typeof DOCUMENT_TYPE_LABELS
-            ] ?? receipt.document_type;
+            ] ??
+            receipt.document_type ??
+            "Document";
           const typeColor =
             DOCUMENT_TYPE_COLORS[
               receipt.document_type as keyof typeof DOCUMENT_TYPE_COLORS

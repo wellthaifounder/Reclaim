@@ -17,7 +17,7 @@ export const HowItWorks = () => {
           className={`mx-auto max-w-3xl text-center mb-16 scroll-fade-in ${headerVisible ? "visible" : ""}`}
         >
           <h2 className="mb-4 text-3xl font-bold sm:text-4xl lg:text-5xl">
-            How Wellth Works
+            How Reclaim Works
           </h2>
           <p className="text-lg text-muted-foreground sm:text-xl">
             Four steps to take control of your healthcare expenses and maximize
@@ -81,7 +81,7 @@ export const HowItWorks = () => {
                 Connect Your HSA/FSA
               </h4>
               <p className="text-sm text-muted-foreground">
-                Link your accounts securely via Plaid. Wellth automatically
+                Link your accounts securely via Plaid. Reclaim automatically
                 detects which expenses are HSA-eligible and tracks your
                 claimable balance.
               </p>
@@ -99,9 +99,9 @@ export const HowItWorks = () => {
               </div>
               <h4 className="mb-2 text-lg font-semibold">Optimize & Save</h4>
               <p className="text-sm text-muted-foreground">
-                Use the savings calculator to model reimbursement timing. Track
-                your tax savings, and let your HSA grow tax-free until you're
-                ready to reimburse.
+                Claim now, or hold the documentation and let your HSA grow
+                tax-free for years. Either way the paper trail is ready the day
+                you decide.
               </p>
             </div>
           </div>

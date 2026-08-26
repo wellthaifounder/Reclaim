@@ -24,7 +24,7 @@ interface AttachDocumentDialogProps {
 
 interface UnattachedReceipt {
   id: string;
-  document_type: string;
+  document_type: string | null;
   description: string | null;
   uploaded_at: string;
   file_type: string;
@@ -60,7 +60,6 @@ export const AttachDocumentDialog = ({
         .select("id, document_type, description, uploaded_at, file_type")
         .eq("user_id", user.id)
         .is("invoice_id", null)
-        .is("payment_transaction_id", null)
         .order("uploaded_at", { ascending: false });
 
       if (error) throw error;
@@ -146,7 +145,7 @@ export const AttachDocumentDialog = ({
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
                     <Badge variant="secondary" className="text-xs">
-                      {receipt.document_type.replace(/_/g, " ")}
+                      {receipt.document_type?.replace(/_/g, " ") ?? "document"}
                     </Badge>
                   </div>
                   {receipt.description && (

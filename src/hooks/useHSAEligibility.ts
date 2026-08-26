@@ -1,155 +1,178 @@
-import { useQuery } from "@tanstack/react-query";
+// Workstream D2 — Gate 1, timing.
+//
+// Rewritten. The previous version reimplemented the establishment-date cliff
+// in TypeScript: it read hsa_accounts with SELECT * (against the rule in
+// CLAUDE.md), fell back to profiles.hsa_opened_date, and compared dates in the
+// browser. It also had no callers at all.
+//
+// Two implementations of a hard IRS rule that can disagree is the exact defect
+// class this rebuild keeps unwinding, so the cliff now lives in one place —
+// `hsa_establishment_date` and `expense_timing_gate` in the database — and
+// this file only reads it.
+//
+// The rule itself: HSA money can only pay for care received ON OR AFTER the
+// day the HSA was established. One day early is never eligible, ever, and no
+// amount of documentation changes that. It is reported, never asked.
+//
+// Note it keys on DATE OF SERVICE, not date of payment. A December visit paid
+// in January is a December expense, and against a January 1 cliff those are
+// opposite answers.
+
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { getEligibleHSAAccounts } from "@/lib/hsaAccountUtils";
-import type { HSAAccount } from "@/lib/hsaAccountUtils";
 import { logError } from "@/utils/errorHandler";
 import { useAuthUser } from "@/hooks/useAuthUser";
 
-type HSAEligibilityResult = {
-  isEligible: boolean;
-  eligibleAccounts: HSAAccount[];
-  requiresAccountSelection: boolean;
-  message: string | null;
-};
+export type TimingStatus = "eligible" | "ineligible" | "unknown";
 
-/**
- * Hook to determine HSA eligibility for a given bill date
- * Checks both new hsa_accounts table and legacy profiles.hsa_opened_date
- */
-export function useHSAEligibility(
-  billDate: string | Date | null,
-): HSAEligibilityResult & { isLoading: boolean } {
+export interface TimingGateResult {
+  status: TimingStatus;
+  service_date: string | null;
+  establishment_date: string | null;
+  /**
+   * True when we fell back to the payment date because no date of service was
+   * recorded. Worth surfacing: the fallback is safe against the cliff (payment
+   * is never earlier than care) but it can mis-assign a tax year.
+   */
+  uses_payment_date: boolean;
+  reason: string;
+}
+
+/** The day this user's HSA became usable. null = they haven't told us. */
+export function useHSAEstablishmentDate() {
   const { user } = useAuthUser();
-  const userId = user?.id;
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["hsa-eligibility", billDate, userId],
-    enabled: !!billDate && !!userId,
-    queryFn: async () => {
-      if (!billDate) {
-        return {
-          isEligible: false,
-          eligibleAccounts: [],
-          requiresAccountSelection: false,
-          message: "No bill date provided",
-        };
-      }
-
-      if (!userId) {
-        return {
-          isEligible: false,
-          eligibleAccounts: [],
-          requiresAccountSelection: false,
-          message: "User not authenticated",
-        };
-      }
-
-      // First, check for HSA accounts in the new table
-      const { data: accounts, error: accountsError } = await supabase
-        .from("hsa_accounts")
-        .select("*")
-        .eq("user_id", userId);
-
-      if (accountsError) {
-        logError("Error fetching HSA accounts", accountsError);
-      }
-
-      if (accounts && accounts.length > 0) {
-        // Use new multi-account system
-        const eligibleAccounts = getEligibleHSAAccounts(billDate, accounts);
-
-        if (eligibleAccounts.length === 0) {
-          return {
-            isEligible: false,
-            eligibleAccounts: [],
-            requiresAccountSelection: false,
-            message: "Bill date does not fall within any HSA account period",
-          };
-        }
-
-        if (eligibleAccounts.length === 1) {
-          return {
-            isEligible: true,
-            eligibleAccounts,
-            requiresAccountSelection: false,
-            message: `Eligible for ${eligibleAccounts[0].account_name}`,
-          };
-        }
-
-        // Multiple accounts eligible - user needs to select
-        return {
-          isEligible: true,
-          eligibleAccounts,
-          requiresAccountSelection: true,
-          message: `Eligible for ${eligibleAccounts.length} HSA accounts - selection required`,
-        };
-      }
-
-      // Fall back to legacy hsa_opened_date from profiles
-      const { data: profile, error: profileError } = await supabase
-        .from("profiles")
-        .select("hsa_opened_date")
-        .eq("id", userId)
-        .maybeSingle();
-
-      if (profileError) {
-        logError("Error fetching profile", profileError);
-        return {
-          isEligible: false,
-          eligibleAccounts: [],
-          requiresAccountSelection: false,
-          message: "Error checking HSA eligibility",
-        };
-      }
-
-      if (!profile?.hsa_opened_date) {
-        return {
-          isEligible: false,
-          eligibleAccounts: [],
-          requiresAccountSelection: false,
-          message: "No HSA account configured",
-        };
-      }
-
-      // Check if bill date is on or after HSA opened date
-      const billDateObj = new Date(billDate);
-      const hsaOpenedDateObj = new Date(profile.hsa_opened_date);
-
-      if (billDateObj >= hsaOpenedDateObj) {
-        // Create a virtual account for legacy data
-        const legacyAccount: HSAAccount = {
-          id: "legacy",
-          user_id: userId,
-          account_name: "Primary HSA (Legacy)",
-          opened_date: profile.hsa_opened_date,
-          closed_date: null,
-          is_active: true,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        };
-
-        return {
-          isEligible: true,
-          eligibleAccounts: [legacyAccount],
-          requiresAccountSelection: false,
-          message: "Eligible (legacy HSA date)",
-        };
-      }
-
-      return {
-        isEligible: false,
-        eligibleAccounts: [],
-        requiresAccountSelection: false,
-        message: `Bill date is before HSA opened date (${hsaOpenedDateObj.toLocaleDateString()})`,
-      };
+  const query = useQuery({
+    queryKey: ["hsa-establishment-date", user?.id],
+    enabled: !!user?.id,
+    staleTime: 10 * 60 * 1000,
+    queryFn: async (): Promise<string | null> => {
+      const { data, error } = await supabase.rpc("hsa_establishment_date", {
+        p_user_id: user!.id,
+      });
+      if (error) throw error;
+      return (data as string | null) ?? null;
     },
   });
 
   return {
-    isEligible: data?.isEligible ?? false,
-    eligibleAccounts: data?.eligibleAccounts ?? [],
-    requiresAccountSelection: data?.requiresAccountSelection ?? false,
-    message: data?.message ?? null,
-    isLoading,
+    establishmentDate: query.data ?? null,
+    /** No date on file — the gate can't run and the user should be asked. */
+    isUnset: !query.isLoading && !query.data,
+    isLoading: query.isLoading,
   };
+}
+
+/** Gate 1 for one saved expense, with the explanation to show the user. */
+export function useTimingGate(invoiceId: string | null) {
+  const query = useQuery({
+    queryKey: ["timing-gate", invoiceId],
+    enabled: !!invoiceId,
+    staleTime: 60 * 1000,
+    queryFn: async (): Promise<TimingGateResult | null> => {
+      const { data, error } = await supabase.rpc("expense_timing_gate", {
+        p_invoice_id: invoiceId!,
+      });
+      if (error) throw error;
+      const row = Array.isArray(data) ? data[0] : data;
+      return (row as TimingGateResult) ?? null;
+    },
+  });
+
+  return { gate: query.data ?? null, isLoading: query.isLoading };
+}
+
+/**
+ * Check a date before an expense exists — for entry forms, where there is no
+ * row to pass to the gate yet.
+ *
+ * Compares against the same establishment date the database uses, so the
+ * warning a user sees while typing matches the verdict they get after saving.
+ */
+export function useHSAEligibility(serviceDate: string | Date | null): {
+  status: TimingStatus;
+  establishmentDate: string | null;
+  message: string | null;
+  isLoading: boolean;
+} {
+  const { establishmentDate, isLoading } = useHSAEstablishmentDate();
+
+  if (isLoading || !serviceDate) {
+    return { status: "unknown", establishmentDate, message: null, isLoading };
+  }
+  if (!establishmentDate) {
+    return {
+      status: "unknown",
+      establishmentDate: null,
+      message:
+        "Add the date you opened your HSA and we can tell you whether this is claimable.",
+      isLoading: false,
+    };
+  }
+
+  // Compare as plain calendar dates. Constructing a Date from "2024-01-01"
+  // yields UTC midnight, which is the previous day in any negative-offset
+  // timezone — enough to flip a cliff decision for anyone in the US.
+  const asKey = (d: string | Date) =>
+    typeof d === "string" ? d.slice(0, 10) : d.toLocaleDateString("en-CA");
+
+  const service = asKey(serviceDate);
+  if (service < establishmentDate) {
+    return {
+      status: "ineligible",
+      establishmentDate,
+      message: `Care received before ${establishmentDate} can't be paid from your HSA — that's the day it was opened.`,
+      isLoading: false,
+    };
+  }
+  return {
+    status: "eligible",
+    establishmentDate,
+    message: null,
+    isLoading: false,
+  };
+}
+
+/**
+ * Re-apply the cliff across every expense. Run whenever the HSA date changes.
+ *
+ * Replaces two hand-written bulk updates that were both filtered on
+ * `is_hsa_eligible = true` — a generated column meaning eligibility_state is
+ * 'eligible'. Since expenses default to 'unknown', that filter matched almost
+ * nothing and the gate had effectively stopped firing.
+ *
+ * It also restores, which the old code never did: a user who mistyped their
+ * HSA year and corrected it previously kept every wrongly-blocked expense
+ * blocked forever, with no way back and nothing telling them.
+ */
+export function useRecomputeTiming() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (): Promise<{ blocked: number; restored: number }> => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Please sign in.");
+
+      const { data, error } = await supabase.rpc(
+        "recompute_timing_eligibility",
+        { p_user_id: user.id },
+      );
+      if (error) throw error;
+      const row = Array.isArray(data) ? data[0] : data;
+      return {
+        blocked: Number(row?.blocked ?? 0),
+        restored: Number(row?.restored ?? 0),
+      };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["hsa-establishment-date"] });
+      queryClient.invalidateQueries({ queryKey: ["timing-gate"] });
+      queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["claimable-events"] });
+    },
+    onError: (error) => logError("Recomputing HSA timing failed", error),
+  });
 }

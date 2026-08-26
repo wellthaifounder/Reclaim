@@ -3,6 +3,11 @@ project_id = "fzmdfhdfvayaalhogskm"
 [functions.process-receipt-ocr]
 verify_jwt = true
 
+# Welcome email on signup. Auth-gated: only mails the authenticated caller's
+# own address, so it relies on the JWT being present.
+[functions.send-welcome-email]
+verify_jwt = true
+
 # Reclaim Phase 3: user-authenticated wrapper around the Gemini-based
 # Pub 502 classifier. Default verify_jwt is correct here — the function
 # uses the caller's JWT to RLS-scope the invoice lookup.
@@ -32,6 +37,13 @@ verify_jwt = true
 # Plaid's published JWK (see _shared/plaidWebhookVerification.ts). Do not
 # flip verify_jwt back to true — that would 401 all real Plaid webhooks.
 [functions.plaid-webhook]
+verify_jwt = false
+
+# Resend posts inbound "email.received" events here server-to-server with no
+# end-user JWT. The function verifies the Svix webhook signature and resolves
+# the user from the secret token in the recipient address. Do not flip
+# verify_jwt back to true — that would 401 all real inbound-email webhooks.
+[functions.inbound-email-webhook]
 verify_jwt = false
 
 [functions.sync-npi-data]

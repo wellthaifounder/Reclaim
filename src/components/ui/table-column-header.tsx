@@ -68,7 +68,7 @@ export function TableColumnHeader({
   const [textFilter, setTextFilter] = useState(filterValue || "");
   const [numberFrom, setNumberFrom] = useState<string>("");
   const [numberTo, setNumberTo] = useState<string>("");
-  const [comboboxOpen, setComboboxOpen] = useState(false);
+  const [, setComboboxOpen] = useState(false);
 
   const handleTextFilterApply = () => {
     onFilter?.(textFilter);

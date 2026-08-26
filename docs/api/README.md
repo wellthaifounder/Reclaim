@@ -338,9 +338,7 @@ if (error || !user) {
 
 ```typescript
 const { data, error } = await supabase.functions.invoke("function-name", {
-  body: {
-    /* your data */
-  },
+  body: {/* your data */},
 });
 // JWT automatically included by Supabase client
 ```
@@ -402,9 +400,7 @@ Functions return JSON with appropriate data:
 ```json
 {
   "success": true,
-  "data": {
-    /* response data */
-  }
+  "data": {/* response data */}
 }
 ```
 

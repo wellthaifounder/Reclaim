@@ -39,7 +39,7 @@ export const TaxPackageExport = () => {
         .select("*")
         .gte("date", `${selectedYear}-01-01`)
         .lte("date", `${selectedYear}-12-31`)
-        .eq("is_hsa_eligible", true)
+        .eq("eligibility_state", "eligible")
         .order("date", { ascending: true });
 
       if (invoicesError) throw invoicesError;
@@ -72,7 +72,7 @@ export const TaxPackageExport = () => {
       const url = URL.createObjectURL(pdfBlob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `Wellth_Tax_Package_${selectedYear}.pdf`;
+      a.download = `Reclaim_Tax_Package_${selectedYear}.pdf`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);

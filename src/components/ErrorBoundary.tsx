@@ -1,4 +1,4 @@
-import React, { Component, ErrorInfo, ReactNode } from "react";
+import { Component, ErrorInfo, ReactNode } from "react";
 import { logError } from "@/utils/errorHandler";
 import { Button } from "@/components/ui/button";
 import {

@@ -1,27 +1,18 @@
 import { useState } from "react";
 import {
-  Calculator,
   Receipt,
   FileText,
-  TrendingUp,
-  Wallet,
   Settings,
-  MessageSquare,
-  Shield,
   ChevronDown,
   ChevronRight,
-  FolderHeart,
-  ClipboardList,
   HelpCircle,
   LayoutDashboard,
   Building2,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import type { LucideIcon } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useHSA } from "@/contexts/HSAContext";
-import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { useSubscription } from "@/contexts/SubscriptionContext";
-import { Badge } from "@/components/ui/badge";
 import {
   Sidebar,
   SidebarContent,
@@ -45,7 +36,7 @@ interface AppSidebarProps {
 }
 
 interface MenuItem {
-  icon: any;
+  icon: LucideIcon;
   label: string;
   path: string;
   badgeKey: string | null;
@@ -64,12 +55,13 @@ const primaryMenuItems: MenuItem[] = [
     path: "/dashboard",
     badgeKey: null,
   },
-  { icon: Receipt, label: "Expenses", path: "/expenses", badgeKey: null },
+  // Carries the unreviewed count: Expenses is now where reviewing happens,
+  // so the badge belongs on it rather than on a separate Transactions item.
   {
-    icon: FolderHeart,
-    label: "Expense Groups",
-    path: "/expense-groups",
-    badgeKey: null,
+    icon: Receipt,
+    label: "Expenses",
+    path: "/expenses",
+    badgeKey: "unreviewedTransactions",
   },
   {
     icon: FileText,
@@ -81,40 +73,19 @@ const primaryMenuItems: MenuItem[] = [
 
 const moreMenuItems: MenuItem[] = [
   {
-    icon: Wallet,
-    label: "Transactions",
-    path: "/transactions",
-    badgeKey: "unreviewedTransactions",
-  },
-  {
     icon: Building2,
     label: "Bank Accounts",
     path: "/bank-accounts",
     badgeKey: null,
   },
-  {
-    icon: ClipboardList,
-    label: "HSA Claims",
-    path: "/reimbursement-requests",
-    badgeKey: null,
-  },
-  {
-    icon: Calculator,
-    label: "HSA Calculator",
-    path: "/savings-calculator",
-    badgeKey: null,
-  },
-  { icon: TrendingUp, label: "Reports", path: "/reports", badgeKey: null },
   { icon: FileText, label: "Documents", path: "/documents", badgeKey: null },
   { icon: HelpCircle, label: "HSA Guide", path: "/guide", badgeKey: null },
 ];
 
 export function AppSidebar({ unreviewedTransactions = 0 }: AppSidebarProps) {
   const { open } = useSidebar();
-  const navigate = useNavigate();
   const { hasHSA, userIntent } = useHSA();
-  const { isAdmin } = useIsAdmin();
-  const { tier } = useSubscription();
+  const { tier, createCheckoutSession } = useSubscription();
 
   // Show HSA features if user selected HSA intent or actually has an HSA
   const showHSAFeatures =
@@ -224,34 +195,8 @@ export function AppSidebar({ unreviewedTransactions = 0 }: AppSidebarProps) {
             <CollapsibleContent>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {isAdmin && (
-                    <SidebarMenuItem>
-                      <SidebarMenuButton asChild tooltip="Manage Reviews">
-                        <NavLink to="/admin/reviews">
-                          <Shield className="h-4 w-4" />
-                          {open && (
-                            <span className="flex items-center gap-2">
-                              Manage Reviews
-                              <Badge
-                                variant="secondary"
-                                className="text-[10px] px-1 py-0"
-                              >
-                                Admin
-                              </Badge>
-                            </span>
-                          )}
-                        </NavLink>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  )}
-                  <SidebarMenuItem>
-                    <SidebarMenuButton asChild tooltip="Share Your Feedback">
-                      <NavLink to="/user-reviews">
-                        <MessageSquare className="h-4 w-4" />
-                        {open && <span>Share Feedback</span>}
-                      </NavLink>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
+                  {/* "Manage Reviews" (admin) and "Share Feedback" removed
+                      2026-08-19 with the provider-reviews pages. */}
                   <SidebarMenuItem>
                     <SidebarMenuButton asChild tooltip="Settings">
                       <NavLink to="/settings">
@@ -269,8 +214,12 @@ export function AppSidebar({ unreviewedTransactions = 0 }: AppSidebarProps) {
 
       {tier === "free" && open && (
         <SidebarFooter className="border-t border-sidebar-border px-4 py-3">
+          {/* Was navigate("/checkout") -- a page removed on 2026-08-19 that
+              only the deleted tripwire offer could reach, so this button had
+              been landing on the 404 page. Subscription checkout goes through
+              the context to a Stripe-hosted page instead. */}
           <button
-            onClick={() => navigate("/checkout")}
+            onClick={() => void createCheckoutSession("plus")}
             className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
           >
             <span>Free Plan</span>

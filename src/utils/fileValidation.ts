@@ -44,14 +44,21 @@ export function validateFileSize(
  * Validates file type (MIME type and extension)
  */
 export function validateFileType(file: File): string | null {
+  // The `as const` on FILE_VALIDATION narrows these to readonly literal
+  // tuples, so `.includes()` rejects an arbitrary string. Widen at the point
+  // of use and keep the literal types on the constant itself.
+  const allowedTypes: readonly string[] = FILE_VALIDATION.ALLOWED_TYPES;
+  const allowedExtensions: readonly string[] =
+    FILE_VALIDATION.ALLOWED_EXTENSIONS;
+
   // Check MIME type
-  if (!FILE_VALIDATION.ALLOWED_TYPES.includes(file.type)) {
+  if (!allowedTypes.includes(file.type)) {
     return `File type "${file.type}" is not allowed. Allowed types: JPG, PNG, PDF, GIF, WebP`;
   }
 
   // Check file extension
   const extension = "." + file.name.split(".").pop()?.toLowerCase();
-  if (!extension || !FILE_VALIDATION.ALLOWED_EXTENSIONS.includes(extension)) {
+  if (!extension || !allowedExtensions.includes(extension)) {
     return `File extension "${extension}" is not allowed`;
   }
 

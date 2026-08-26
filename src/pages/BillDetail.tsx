@@ -11,7 +11,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -21,25 +20,12 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import { toast } from "sonner";
-import {
-  FileText,
-  AlertTriangle,
-  CreditCard,
-  Scale,
-  Upload,
-  Link2,
-  CheckCircle2,
-  Plus,
-} from "lucide-react";
+import { FileText, Upload } from "lucide-react";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
+import { SubstantiationPanel } from "@/components/expense/SubstantiationPanel";
 import { logError } from "@/utils/errorHandler";
-import { BillErrorCard } from "@/components/bills/BillErrorCard";
-import { PriceBenchmarking } from "@/components/bills/PriceBenchmarking";
-import { ProviderPerformanceCard } from "@/components/bills/ProviderPerformanceCard";
 import { ReceiptGallery } from "@/components/expense/ReceiptGallery";
 import { MultiFileUpload } from "@/components/expense/MultiFileUpload";
-import { LinkTransactionDialog } from "@/components/bills/LinkTransactionDialog";
-import { calculateHSAEligibility } from "@/lib/hsaCalculations";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -53,21 +39,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { useHSA } from "@/contexts/HSAContext";
 import { HSAUpgradePrompt } from "@/components/HSAUpgradePrompt";
-import type { PaymentTransaction } from "@/lib/hsaCalculations";
 
 interface UploadedFile {
   file: File;
   documentType: string;
   description?: string;
-}
-
-interface BillPayment {
-  id: string;
-  payment_date: string;
-  amount: number;
-  payment_source: PaymentTransaction["payment_source"];
-  is_reimbursed: boolean;
-  reimbursed_date: string | null;
 }
 
 const HSA_ELIGIBLE_CATEGORIES = [
@@ -90,9 +66,7 @@ export default function BillDetail() {
   const isNewBill = id === "new";
   const [activeTab, setActiveTab] = useState("overview");
   const [newFiles, setNewFiles] = useState<UploadedFile[]>([]);
-  const [showLinkTransactionDialog, setShowLinkTransactionDialog] =
-    useState(false);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isAnalyzing] = useState(false);
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split("T")[0],
     vendor: "",
@@ -111,7 +85,7 @@ export default function BillDetail() {
   } = useQuery({
     queryKey: ["bill", id],
     queryFn: async () => {
-      if (isNewBill) return null;
+      if (isNewBill || !id) return null;
 
       // Get current user for ownership verification
       const {
@@ -121,19 +95,7 @@ export default function BillDetail() {
 
       const { data, error } = await supabase
         .from("invoices")
-        .select(
-          `
-          *,
-          payment_transactions (
-            id,
-            payment_date,
-            amount,
-            payment_source,
-            is_reimbursed,
-            reimbursed_date
-          )
-        `,
-        )
+        .select("*")
         .eq("id", id)
         .eq("user_id", user.id) // Explicit ownership check
         .single();
@@ -149,7 +111,7 @@ export default function BillDetail() {
   const { data: receipts, refetch: refetchReceipts } = useQuery({
     queryKey: ["receipts", id],
     queryFn: async () => {
-      if (isNewBill) return [];
+      if (isNewBill || !id) return [];
       const { data, error } = await supabase
         .from("receipts")
         .select("*")
@@ -164,20 +126,10 @@ export default function BillDetail() {
 
   // Bill review feature archived - removed error fetching
 
-  // Fetch provider data
-  const { data: providerData } = useQuery({
-    queryKey: ["provider-for-bill", bill?.vendor],
-    queryFn: async () => {
-      if (!bill?.vendor) return null;
-      const { data } = await supabase
-        .from("providers")
-        .select("*")
-        .ilike("name", bill.vendor)
-        .maybeSingle();
-      return data;
-    },
-    enabled: !!bill?.vendor,
-  });
+  // A provider-directory lookup used to run here. It was already inert -- the
+  // query result was never bound to anything, so it fetched a row on every
+  // bill view and threw it away. Removed 2026-08-20 with the provider
+  // directory tables it read from.
 
   // Bill review feature archived - removed AI analysis function
 
@@ -192,7 +144,7 @@ export default function BillDetail() {
         category: bill.category,
         notes: bill.notes || "",
         invoiceNumber: bill.invoice_number || "",
-        isHsaEligible: bill.is_hsa_eligible || false,
+        isHsaEligible: bill.eligibility_state === "eligible",
       });
     }
   }, [bill, isNewBill]);
@@ -227,7 +179,13 @@ export default function BillDetail() {
         category: formData.category,
         notes: formData.notes || null,
         invoice_number: formData.invoiceNumber || null,
-        is_hsa_eligible: formData.isHsaEligible,
+        // Workstream B: is_hsa_eligible is derived from eligibility_state.
+        // Ticking the box on this form IS an explicit user determination, so
+        // it earns 'eligible'; unticking returns to 'unknown' rather than
+        // asserting ineligibility, which is a stronger and different claim.
+        eligibility_state: formData.isHsaEligible
+          ? ("eligible" as const)
+          : ("unknown" as const),
       };
 
       let billId = id;
@@ -245,6 +203,7 @@ export default function BillDetail() {
         toast.success("Bill created successfully!");
         navigate(`/bills/${billId}`);
       } else {
+        if (!id) throw new Error("Missing bill id");
         const { error } = await supabase
           .from("invoices")
           .update(billData)
@@ -257,8 +216,6 @@ export default function BillDetail() {
 
       // Upload new files if any
       if (newFiles.length > 0 && billId) {
-        const uploadedReceipts: { id: string; document_type: string }[] = [];
-
         for (let i = 0; i < newFiles.length; i++) {
           const fileData = newFiles[i];
           const fileExt = fileData.file.name.split(".").pop();
@@ -271,7 +228,9 @@ export default function BillDetail() {
 
           if (uploadError) throw uploadError;
 
-          const { data: receiptData, error: receiptError } = await supabase
+          // Nothing consumes the inserted row — the only reader was the
+          // archived bill-review analysis — so skip the select round-trip.
+          const { error: receiptError } = await supabase
             .from("receipts")
             .insert({
               user_id: user.id,
@@ -281,23 +240,16 @@ export default function BillDetail() {
               document_type: fileData.documentType,
               description: fileData.description || null,
               display_order: i,
-            })
-            .select()
-            .single();
+            });
 
           if (receiptError) throw receiptError;
-          if (receiptData) uploadedReceipts.push(receiptData);
         }
 
         setNewFiles([]);
         refetchReceipts();
 
-        // Trigger AI review if medical bill or EOB was uploaded
-        const billOrEOBReceipt = uploadedReceipts.find(
-          (r) => r.document_type === "bill" || r.document_type === "eob",
-        );
-
-        // Bill review feature archived - removed AI analysis trigger
+        // Bill review feature archived — the AI analysis trigger and the
+        // bill/EOB lookup that fed it were removed with it.
       }
     } catch (error) {
       logError("Error saving bill", error);
@@ -317,12 +269,6 @@ export default function BillDetail() {
     );
   }
 
-  const breakdown = bill
-    ? calculateHSAEligibility(
-        bill,
-        (bill.payment_transactions || []) as BillPayment[],
-      )
-    : null;
   // Bill review feature archived - removed review and errorCount
 
   return (
@@ -359,6 +305,44 @@ export default function BillDetail() {
         </div>
 
         <div className="max-w-5xl mx-auto">
+          {/* Workstream D5. The substantiation step, above the bill record
+              itself: the gates inside it can be a hard no, and finding that
+              out below the fold is finding it out too late. */}
+          {!isNewBill && bill?.id && (
+            <div className="mb-4">
+              <SubstantiationPanel
+                invoiceId={bill.id}
+                amountPaid={Number(bill.amount_paid ?? bill.amount ?? 0)}
+                reimbursableAmount={
+                  bill.reimbursable_amount === null ||
+                  bill.reimbursable_amount === undefined
+                    ? null
+                    : Number(bill.reimbursable_amount)
+                }
+                serviceDate={bill.service_date ?? null}
+                serviceDateEnd={bill.service_date_end ?? null}
+                patientId={bill.patient_id ?? null}
+                mileage={
+                  bill.mileage_miles == null
+                    ? null
+                    : {
+                        miles: Number(bill.mileage_miles),
+                        rate: Number(bill.mileage_rate ?? 0),
+                        trips:
+                          bill.mileage_trips == null
+                            ? null
+                            : Number(bill.mileage_trips),
+                        parkingAndTolls:
+                          bill.mileage_parking_tolls == null
+                            ? null
+                            : Number(bill.mileage_parking_tolls),
+                      }
+                }
+                onSaved={refetch}
+              />
+            </div>
+          )}
+
           <Card>
             <CardHeader>
               <div className="flex items-start justify-between">
@@ -381,7 +365,9 @@ export default function BillDetail() {
             </CardHeader>
             <CardContent>
               <Tabs value={activeTab} onValueChange={setActiveTab}>
-                <TabsList className="grid w-full grid-cols-3">
+                {/* Payments tab removed 2026-08-21 — see the note where the
+                    payment history used to render, below the Documents tab. */}
+                <TabsList className="grid w-full grid-cols-2">
                   <TabsTrigger value="overview">
                     <FileText className="h-4 w-4 mr-2" />
                     Overview
@@ -390,12 +376,6 @@ export default function BillDetail() {
                     <Upload className="h-4 w-4 mr-2" />
                     Documents
                   </TabsTrigger>
-                  {!isNewBill && (
-                    <TabsTrigger value="payments">
-                      <CreditCard className="h-4 w-4 mr-2" />
-                      Payments
-                    </TabsTrigger>
-                  )}
                 </TabsList>
 
                 {/* Overview Tab */}
@@ -520,40 +500,16 @@ export default function BillDetail() {
                       />
                     )}
 
-                  {!isNewBill && breakdown && (
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-muted rounded-lg">
-                      <div>
-                        <p className="text-sm text-muted-foreground">
-                          Total Billed
-                        </p>
-                        <p className="text-lg font-semibold">
-                          ${breakdown.totalInvoiced.toFixed(2)}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">
-                          Paid via HSA
-                        </p>
-                        <p className="text-lg font-semibold text-green-600">
-                          ${breakdown.paidViaHSA.toFixed(2)}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">
-                          Paid Other
-                        </p>
-                        <p className="text-lg font-semibold">
-                          ${breakdown.paidViaOther.toFixed(2)}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">Unpaid</p>
-                        <p className="text-lg font-semibold text-red-600">
-                          ${breakdown.unpaidBalance.toFixed(2)}
-                        </p>
-                      </div>
-                    </div>
-                  )}
+                  {/* The Total Billed / Paid via HSA / Paid Other / Unpaid
+                   * strip was removed with the payment table it summed
+                   * (2026-08-21). Without those rows every figure but the
+                   * first was zero, so the panel would have shown every
+                   * expense as fully unpaid in red -- including the ones the
+                   * user had already paid out of pocket, which is the entire
+                   * population of this app. A wrong number in red is worse
+                   * than no number. What the user actually needs to know here
+                   * -- how much of this is claimable -- is on the
+                   * substantiation panel, computed from the expense itself. */}
 
                   <div className="flex gap-3">
                     <Button onClick={handleSaveBill}>
@@ -622,90 +578,27 @@ export default function BillDetail() {
 
                 {/* Bill review feature archived - removed AI Review tab */}
 
-                {/* Payments Tab */}
-                {!isNewBill && (
-                  <TabsContent value="payments" className="space-y-6 mt-6">
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <h3 className="text-lg font-semibold">
-                          Payment History
-                        </h3>
-                        <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setShowLinkTransactionDialog(true)}
-                          >
-                            <Link2 className="h-4 w-4 mr-2" />
-                            Link Transaction
-                          </Button>
-                          <Button
-                            size="sm"
-                            onClick={() =>
-                              navigate(`/payment/new?invoice=${id}`)
-                            }
-                          >
-                            <Plus className="h-4 w-4 mr-2" />
-                            Add Payment
-                          </Button>
-                        </div>
-                      </div>
-
-                      {bill?.payment_transactions &&
-                      bill.payment_transactions.length > 0 ? (
-                        <div className="space-y-2">
-                          {bill.payment_transactions.map(
-                            (payment: BillPayment) => (
-                              <Card key={payment.id}>
-                                <CardContent className="pt-6">
-                                  <div className="flex items-center justify-between">
-                                    <div>
-                                      <p className="font-medium">
-                                        ${payment.amount.toFixed(2)}
-                                      </p>
-                                      <p className="text-sm text-muted-foreground">
-                                        {payment.payment_source} •{" "}
-                                        {new Date(
-                                          payment.payment_date,
-                                        ).toLocaleDateString()}
-                                      </p>
-                                    </div>
-                                    {payment.is_reimbursed && (
-                                      <Badge variant="default">
-                                        Reimbursed
-                                      </Badge>
-                                    )}
-                                  </div>
-                                </CardContent>
-                              </Card>
-                            ),
-                          )}
-                        </div>
-                      ) : (
-                        <div className="text-center py-12">
-                          <p className="text-muted-foreground">
-                            No payments recorded yet
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  </TabsContent>
-                )}
+                {/* Payment history removed 2026-08-21.
+                 *
+                 * It listed rows from a second payment table and offered
+                 * "Link Transaction" to add more by hand. Both are gone. An
+                 * expense in Reclaim comes FROM a payment the bank already
+                 * recorded -- the transaction it was captured from is the
+                 * payment, and there is exactly one. Keeping a separate list
+                 * of payments against the same expense meant the app held two
+                 * answers to "how much has been paid" and no rule for which
+                 * one won.
+                 *
+                 * Part-payment over time is the real feature underneath this,
+                 * and the spec defers it to v1.1 on purpose. Until then the
+                 * amount is editable downward on the expense itself, which
+                 * covers the common case of an insurance refund landing
+                 * later. */}
               </Tabs>
             </CardContent>
           </Card>
         </div>
       </div>
-
-      <LinkTransactionDialog
-        open={showLinkTransactionDialog}
-        onOpenChange={setShowLinkTransactionDialog}
-        invoice={bill}
-        onSuccess={() => {
-          refetch();
-          setShowLinkTransactionDialog(false);
-        }}
-      />
     </AuthenticatedLayout>
   );
 }

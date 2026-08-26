@@ -1,23 +1,4 @@
 {
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Write|Edit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "npx prettier --write \"$CLAUDE_FILE_PATH\" 2>/dev/null || true"
-          }
-        ]
-      }
-    ],
-    "PreCommit": [
-      {
-        "type": "command",
-        "command": "npm run build"
-      }
-    ]
-  },
   "permissions": {
     "allow": [
       "Bash(npm run build:*)",
@@ -55,7 +36,19 @@
       "Bash(curl:*)",
       "Bash(node:*)",
       "Bash(deno:*)",
-      "Bash(vercel:*)"
+      "Bash(vercel:*)",
+      "Bash(MSYS_NO_PATHCONV=1 docker cp \"C:/Users/OWENLA~1/AppData/Local/Temp/claude/c--Users-OwenLaurie-wellth-ai-wellth-ai/47ac8691-9805-4120-b776-cfaba17113c1/scratchpad/d6_test.sql\" supabase_db_fzmdfhdfvayaalhogskm:/tmp/d6_test.sql)",
+      "Bash(cd c:/Users/OwenLaurie/wellth-ai/wellth-ai && sed -n '/\\\\*\\\\*E5/,/\\\\*\\\\*E6/p' .claude/plans/bank-sync-implementation-plan.md)",
+      "Bash(MSYS_NO_PATHCONV=1 docker cp supabase/migrations/20260818120000_void_record.sql supabase_db_fzmdfhdfvayaalhogskm:/tmp/e5.sql)",
+      "Bash(MSYS_NO_PATHCONV=1 rtk docker exec supabase_db_fzmdfhdfvayaalhogskm psql -U postgres -d postgres -q -v ON_ERROR_STOP=1 -f /tmp/e5.sql)",
+      "Bash(MSYS_NO_PATHCONV=1 docker cp e5_test.sql supabase_db_fzmdfhdfvayaalhogskm:/tmp/e5_test.sql)",
+      "Bash(MSYS_NO_PATHCONV=1 rtk docker exec supabase_db_fzmdfhdfvayaalhogskm psql -U postgres -d postgres -f /tmp/e5_test.sql)",
+      "Bash(perl -ne 'print unless /^Connecting to db|^A new version of Supabase CLI|^We recommend updating/')",
+      "Bash(MSYS_NO_PATHCONV=1 rtk docker exec supabase_db_fzmdfhdfvayaalhogskm psql -U postgres -d postgres -c \"SELECT column_name, data_type, column_default FROM information_schema.columns WHERE table_name='profiles' AND column_name LIKE '%reimburse%' OR table_name='profiles' AND column_name LIKE '%strategy%';\")",
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\(JSON.stringify\\(p.scripts,null,1\\)\\); console.log\\('vitest:', !!\\(p.devDependencies&&p.devDependencies.vitest\\), 'jest:', !!\\(p.devDependencies&&p.devDependencies.jest\\)\\);\")",
+      "Bash(MSYS_NO_PATHCONV=1 docker cp e6_test.sql supabase_db_fzmdfhdfvayaalhogskm:/tmp/e6_test.sql)",
+      "Bash(MSYS_NO_PATHCONV=1 rtk docker exec supabase_db_fzmdfhdfvayaalhogskm psql -U postgres -d postgres -f /tmp/e6_test.sql)",
+      "WebFetch(domain:www.irs.gov)"
     ],
     "deny": [
       "Bash(rm -rf /)",
@@ -63,9 +56,37 @@
       "Bash(*--force*)",
       "Bash(*secret*)",
       "Bash(*password*)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\OwenLaurie\\wellth-ai\\wellth-ai\\.claude\\plans"
     ]
   },
   "model": "opus",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/on-file-change.mjs\"",
+            "timeout": 60
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/done-checks.mjs\"",
+            "timeout": 240
+          }
+        ]
+      }
+    ]
+  },
   "planMode": {
     "enableByDefault": false,
     "requireForComplexTasks": true

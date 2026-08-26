@@ -1,5 +1,4 @@
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Lightbulb } from "lucide-react";
 import { WellbieChat } from "@/components/WellbieChat";
 

@@ -6,6 +6,8 @@ const resend = new Resend.Resend(Deno.env.get("RESEND_API_KEY"));
 
 // ── CORS ─────────────────────────────────────────────────────────────────────
 const allowedOrigins = [
+  "https://reclaim.health",
+  "https://www.reclaim.health",
   "https://wellth-ai.app",
   "https://www.wellth-ai.app",
   Deno.env.get("ALLOWED_ORIGIN"),
@@ -128,7 +130,7 @@ const handler = async (req: Request): Promise<Response> => {
             <li>Response Deadline: ${dispute.response_deadline ? new Date(dispute.response_deadline).toLocaleDateString() : "Not set"}</li>
           </ul>
           <p>We'll notify you when there are updates or when the deadline approaches.</p>
-          <p>Best regards,<br>The Wellth Team</p>
+          <p>Best regards,<br>The Reclaim Team</p>
         `;
         break;
 
@@ -146,7 +148,7 @@ const handler = async (req: Request): Promise<Response> => {
           <p>This is a reminder that your dispute with <strong>${dispute.provider_name}</strong> has a response deadline in <strong>${daysUntilDeadline} days</strong>.</p>
           <p><strong>Deadline:</strong> ${dispute.response_deadline ? new Date(dispute.response_deadline).toLocaleDateString() : "Not set"}</p>
           <p>If you haven't received a response, consider following up with the provider.</p>
-          <p>Best regards,<br>The Wellth Team</p>
+          <p>Best regards,<br>The Reclaim Team</p>
         `;
         break;
 
@@ -157,7 +159,7 @@ const handler = async (req: Request): Promise<Response> => {
           <p>Hi ${userName},</p>
           <p>A settlement offer has been recorded for your dispute with <strong>${dispute.provider_name}</strong>.</p>
           <p>Log in to your account to review the offer and decide on your next steps.</p>
-          <p>Best regards,<br>The Wellth Team</p>
+          <p>Best regards,<br>The Reclaim Team</p>
         `;
         break;
 
@@ -169,7 +171,7 @@ const handler = async (req: Request): Promise<Response> => {
           <p>There's been an update to your dispute with <strong>${dispute.provider_name}</strong>.</p>
           <p><strong>Current Status:</strong> ${dispute.dispute_status.replace(/_/g, " ").toUpperCase()}</p>
           <p>Log in to your account to view the full details.</p>
-          <p>Best regards,<br>The Wellth Team</p>
+          <p>Best regards,<br>The Reclaim Team</p>
         `;
         break;
 
@@ -190,14 +192,14 @@ const handler = async (req: Request): Promise<Response> => {
             <li>Final Amount: $${dispute.resolved_amount?.toLocaleString() || dispute.disputed_amount?.toLocaleString()}</li>
             ${savings > 0 ? `<li>Total Savings: $${savings.toLocaleString()}</li>` : ""}
           </ul>
-          <p>Thank you for using Wellth to manage your medical bills!</p>
-          <p>Best regards,<br>The Wellth Team</p>
+          <p>Thank you for using Reclaim to manage your medical bills!</p>
+          <p>Best regards,<br>The Reclaim Team</p>
         `;
         break;
     }
 
     const emailResponse = await resend.emails.send({
-      from: "Wellth <onboarding@resend.dev>",
+      from: "Reclaim <onboarding@resend.dev>",
       to: [userEmail],
       subject: subject,
       html: html,

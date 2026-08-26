@@ -63,7 +63,7 @@ export const AnalyticsEmptyState = () => {
         <CardContent className="space-y-6">
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Button
-              onClick={() => navigate("/bills/new")}
+              onClick={() => navigate("/expenses/new")}
               size="lg"
               className="gap-2"
             >
@@ -71,7 +71,7 @@ export const AnalyticsEmptyState = () => {
               Upload Your First Bill
             </Button>
             <Button
-              onClick={() => navigate("/transactions")}
+              onClick={() => navigate("/expenses?tab=review")}
               variant="outline"
               size="lg"
               className="gap-2"

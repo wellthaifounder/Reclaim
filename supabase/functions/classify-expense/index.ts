@@ -18,6 +18,8 @@ import {
 } from "../_shared/expenseClassifier.ts";
 
 const allowedOrigins = [
+  "https://reclaim.health",
+  "https://www.reclaim.health",
   "https://wellth-ai.app",
   "https://www.wellth-ai.app",
   Deno.env.get("ALLOWED_ORIGIN"),

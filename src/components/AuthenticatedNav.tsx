@@ -2,23 +2,20 @@ import { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { WellthLogo } from "@/components/WellthLogo";
+import { ReclaimLogo } from "@/components/ReclaimLogo";
+import { ThemeToggle, ThemeToggleGroup } from "@/components/ThemeToggle";
 import {
   LogOut,
-  Calculator,
   Receipt,
   FileText,
   Menu,
   Settings,
-  Wallet,
-  TrendingUp,
-  FolderHeart,
-  ClipboardList,
   LayoutDashboard,
   Building2,
   HelpCircle,
   Camera,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { WellbieAvatar } from "@/components/WellbieAvatar";
 import { toast } from "sonner";
 import {
@@ -35,6 +32,16 @@ import { FF } from "@/lib/featureFlags";
 interface AuthenticatedNavProps {
   unreviewedTransactions?: number;
   pendingReviews?: number;
+}
+
+// Shared so every nav list has the optional badge in its type. Without it,
+// TypeScript infers the badge away from any list that happens not to use one,
+// and the shared render code stops compiling.
+interface NavItem {
+  icon: LucideIcon;
+  label: string;
+  path: string;
+  badge?: number;
 }
 
 export const AuthenticatedNav = ({
@@ -61,46 +68,39 @@ export const AuthenticatedNav = ({
   // Reclaim Phase 5 W1 — primary nav. Top-bar uses the BottomTabNavigation's
   // short labels (Groups / Records) so all 4 fit at lg breakpoints without
   // truncating. The sidebar + mobile hamburger keep the longer names.
-  const mainNavItems = [
+  //
+  // Both counts land on Expenses now that it is one page: transactions waiting
+  // to be categorised are its Review tab, expenses waiting on eligibility are
+  // its To-claim tab. Two badges on one destination would just ask the user to
+  // do arithmetic, so they are summed -- the number means "things on this page
+  // that want you".
+  const expensesBadge = unreviewedTransactions + pendingReviews;
+
+  const mainNavItems: NavItem[] = [
     { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
     {
       icon: Receipt,
       label: "Expenses",
       path: "/expenses",
-      badge: pendingReviews,
+      badge: expensesBadge,
     },
-    { icon: FolderHeart, label: "Groups", path: "/expense-groups" },
     { icon: FileText, label: "Records", path: "/substantiation" },
   ];
 
   // Mobile hamburger sheet — has drawer space for full names.
-  const coreItems = [
+  const coreItems: NavItem[] = [
     { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
     {
       icon: Receipt,
       label: "Expenses",
       path: "/expenses",
-      badge: pendingReviews,
+      badge: expensesBadge,
     },
-    { icon: FolderHeart, label: "Expense Groups", path: "/expense-groups" },
     { icon: FileText, label: "Substantiation", path: "/substantiation" },
   ];
 
-  const moreItems = [
-    {
-      icon: Wallet,
-      label: "Transactions",
-      path: "/transactions",
-      badge: unreviewedTransactions,
-    },
+  const moreItems: NavItem[] = [
     { icon: Building2, label: "Bank Accounts", path: "/bank-accounts" },
-    {
-      icon: ClipboardList,
-      label: "HSA Claims",
-      path: "/reimbursement-requests",
-    },
-    { icon: Calculator, label: "HSA Calculator", path: "/savings-calculator" },
-    { icon: TrendingUp, label: "Reports", path: "/reports" },
     { icon: FileText, label: "Documents", path: "/documents" },
     { icon: HelpCircle, label: "HSA Guide", path: "/guide" },
   ];
@@ -124,8 +124,12 @@ export const AuthenticatedNav = ({
                 className="flex-shrink-0 hover:opacity-80 transition-opacity"
                 aria-label="Go to dashboard"
               >
-                <WellthLogo size="sm" showTagline className="hidden sm:block" />
-                <WellthLogo variant="icon" size="sm" className="sm:hidden" />
+                <ReclaimLogo
+                  size="sm"
+                  showTagline
+                  className="hidden sm:block"
+                />
+                <ReclaimLogo variant="icon" size="sm" className="sm:hidden" />
               </button>
 
               {/* Desktop Navigation Links - hidden on mobile */}
@@ -162,6 +166,8 @@ export const AuthenticatedNav = ({
             </div>
 
             <div className="flex items-center gap-2" role="group">
+              <ThemeToggle className="hidden sm:inline-flex" />
+
               {/* Reclaim Phase 5 polish — primary CTA aligned with the
                   dashboard's "Snap a receipt" verb. Routes to the OCR wizard;
                   the wizard itself has a "log it manually" escape hatch for
@@ -169,7 +175,7 @@ export const AuthenticatedNav = ({
               <Button
                 variant="default"
                 size="sm"
-                onClick={() => navigate("/bills/new")}
+                onClick={() => navigate("/expenses/new")}
                 className="flex items-center gap-2 bg-accent text-accent-foreground hover:bg-accent/90"
                 aria-label="Snap a receipt to log an expense"
               >
@@ -179,26 +185,28 @@ export const AuthenticatedNav = ({
                 </span>
               </Button>
 
-              {/* Wellbie Button */}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() =>
-                  window.dispatchEvent(new Event("openWellbieChat"))
-                }
-                className="flex items-center gap-2"
-                aria-label="Open Wellbie AI assistant"
-              >
-                <div className="h-6 w-6">
-                  <WellbieAvatar
-                    size="sm"
-                    className="h-full w-full hover:scale-100"
-                  />
-                </div>
-                <span className="hidden sm:inline text-sm font-medium">
-                  Wellbie
-                </span>
-              </Button>
+              {/* Wellbie Button — hidden for soft launch (v1.1) via FF. */}
+              {FF.WELLBIE_ENABLED && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() =>
+                    window.dispatchEvent(new Event("openWellbieChat"))
+                  }
+                  className="flex items-center gap-2"
+                  aria-label="Open Wellbie AI assistant"
+                >
+                  <div className="h-6 w-6">
+                    <WellbieAvatar
+                      size="sm"
+                      className="h-full w-full hover:scale-100"
+                    />
+                  </div>
+                  <span className="hidden sm:inline text-sm font-medium">
+                    Wellbie
+                  </span>
+                </Button>
+              )}
 
               {/* Mobile Menu - only visible on mobile/tablet */}
               <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
@@ -247,7 +255,7 @@ export const AuthenticatedNav = ({
                             <span className="flex-1 text-left">
                               {item.label}
                             </span>
-                            {"badge" in item && item.badge > 0 && (
+                            {"badge" in item && (item.badge ?? 0) > 0 && (
                               <span className="bg-yellow-500 text-white text-xs px-1.5 py-0.5 rounded-full min-w-[20px] text-center">
                                 {item.badge}
                               </span>
@@ -256,6 +264,15 @@ export const AuthenticatedNav = ({
                         ))}
                       </div>
                     ))}
+
+                    <div className="border-t pt-4 space-y-2">
+                      <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide px-2">
+                        Appearance
+                      </h3>
+                      <div className="px-2 pb-2">
+                        <ThemeToggleGroup />
+                      </div>
+                    </div>
 
                     <div className="border-t pt-4 space-y-2">
                       <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide px-2">

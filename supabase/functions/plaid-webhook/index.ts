@@ -1,32 +1,50 @@
 // Reclaim — Plaid webhook receiver.
 //
-// Receives Plaid TRANSACTIONS webhooks (INITIAL_UPDATE / HISTORICAL_UPDATE /
-// DEFAULT_UPDATE / SYNC_UPDATES_AVAILABLE), fetches the new transactions, and
-// stores them in `transactions`. Medical transactions are additionally
-// "captured" — a stub invoice with `lifecycle_status='captured'` is created
-// per the Reclaim state machine (see PRODUCT_BRIEF.md §6) and the transaction
-// is back-linked to it. Existing invoice matching from plaid-sync-transactions
-// runs first; only unmatched medical transactions seed new CAPTURED invoices.
+// Receives Plaid TRANSACTIONS webhooks and ingests via the shared cursor-based
+// pipeline in ../_shared/plaidSync.ts.
+//
+// Rewritten 2026-08-12 for the bank-sync rebuild. Previously this handler
+// fetched a hardcoded 30-day window from /transactions/get regardless of
+// webhook_code, which meant HISTORICAL_UPDATE — the event that exists
+// specifically to announce that back-history is ready — never pulled more than
+// 30 days. It also had its own copy of the auto-capture logic, which had
+// already drifted from the manual-sync copy. Both problems are gone: the
+// cursor decides what to fetch, and capture is shared.
 //
 // Security model:
-//   - This is a SERVER-TO-SERVER endpoint. Plaid is the caller; no end-user
-//     JWT is present. The canonical edge-function checklist's user-auth step
-//     is replaced with Plaid's own JWT-signed webhook verification (see
-//     ../_shared/plaidWebhookVerification.ts).
-//   - The handler uses SERVICE_ROLE_KEY because it must write across many
-//     users' rows on Plaid's behalf. All writes are scoped by the resolved
-//     plaid_connections.user_id — we never trust the webhook body's user.
-//   - Replies 200 even on body-level errors after verification, so Plaid does
-//     not retry indefinitely on a logic bug. Verification failure returns 401.
+//   - SERVER-TO-SERVER endpoint. Plaid is the caller; no end-user JWT exists.
+//     The canonical edge-function checklist's user-auth step is replaced by
+//     Plaid's JWT-signed webhook verification (../_shared/plaidWebhookVerification.ts).
+//
+//     SECURITY-EXEMPTION(user-jwt): verifyPlaidWebhook
+//     SECURITY-EXEMPTION(cors): server-to-server
+//
+//     These are read by .claude/hooks/done-checks.mjs, which requires the named
+//     control to actually be called in this file — a comment on its own cannot
+//     exempt anything. No CORS headers are sent deliberately: a browser never
+//     calls this, so there is no origin to whitelist and adding one would only
+//     widen what can reach it.
+//   - Uses SERVICE_ROLE_KEY because it writes across many users' rows on
+//     Plaid's behalf. Every write is scoped by the resolved
+//     plaid_connections.user_id — the webhook body's contents are never
+//     trusted to identify a user.
+//   - Replies 200 on body-level errors after verification so Plaid does not
+//     retry indefinitely on a logic bug. Verification failure returns 401.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { decryptPlaidToken } from "../_shared/encryption.ts";
 import {
-  classifyTransaction,
-  type PlaidTxnLike,
-} from "../_shared/medicalClassifier.ts";
-import { findReimbursementMatches } from "../_shared/depositMatcher.ts";
+  autoCaptureExpenses,
+  detectDuplicates,
+  detectTransfers,
+  matchDeposits,
+} from "../_shared/autoCapture.ts";
+import {
+  syncAccounts,
+  syncTransactions,
+  type PlaidCreds,
+} from "../_shared/plaidSync.ts";
 import { verifyPlaidWebhook } from "../_shared/plaidWebhookVerification.ts";
 
 const PLAID_ENV =
@@ -39,16 +57,6 @@ function plaidBaseUrl(): string {
     development: "https://development.plaid.com",
     production: "https://production.plaid.com",
   }[PLAID_ENV];
-}
-
-interface PlaidTransaction {
-  transaction_id: string;
-  name: string;
-  merchant_name?: string | null;
-  amount: number;
-  date: string;
-  category?: string[] | null;
-  mcc?: string | null;
 }
 
 interface PlaidWebhookBody {
@@ -114,10 +122,15 @@ serve(async (req) => {
   }
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+  const creds: PlaidCreds = {
+    clientId: plaidClientId,
+    secret: plaidSecret,
+    baseUrl: plaidBaseUrl(),
+  };
+
   try {
-    // Only TRANSACTIONS webhooks trigger ingestion. Other types (ITEM,
-    // AUTH, etc.) are accepted with a 200 so Plaid doesn't retry, and
-    // logged for later wiring.
+    // Only TRANSACTIONS webhooks trigger ingestion. Others (ITEM, AUTH, …) are
+    // acked with a 200 so Plaid doesn't retry, and logged for later wiring.
     if (payload.webhook_type !== "TRANSACTIONS") {
       console.log(
         "[plaid-webhook] Ignoring non-TRANSACTIONS webhook:",
@@ -130,20 +143,21 @@ serve(async (req) => {
       });
     }
 
-    const newTransactionsHint = payload.new_transactions ?? 0;
     console.log(
       "[plaid-webhook] TRANSACTIONS",
       payload.webhook_code,
       "item_id=",
       payload.item_id,
       "new=",
-      newTransactionsHint,
+      payload.new_transactions ?? 0,
     );
 
     // ── 3. Resolve the connection (and therefore the user) from item_id ─
     const { data: connection, error: connErr } = await supabase
       .from("plaid_connections")
-      .select("id, user_id, encrypted_access_token, institution_name")
+      .select(
+        "id, user_id, encrypted_access_token, institution_name, transactions_cursor",
+      )
       .eq("item_id", payload.item_id)
       .maybeSingle();
     if (connErr || !connection) {
@@ -160,212 +174,78 @@ serve(async (req) => {
       connection.encrypted_access_token,
     );
 
-    // ── 4. Fetch the relevant window of transactions ────────────────────
-    // INITIAL_UPDATE / HISTORICAL_UPDATE arrive after item creation and
-    // imply Plaid has just finished pulling history. DEFAULT_UPDATE means
-    // new transactions are available since the last sync. For Phase 2 we
-    // use a generous 30-day default window; the historical activation
-    // event (workstream 3) will expand this.
-    const today = new Date();
-    const start = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
-    const txnsResp = await fetch(`${plaidBaseUrl()}/transactions/get`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        client_id: plaidClientId,
-        secret: plaidSecret,
-        access_token: accessToken,
-        start_date: start.toISOString().split("T")[0],
-        end_date: today.toISOString().split("T")[0],
-      }),
+    // ── 4. Refresh accounts, then ingest from the cursor ────────────────
+    // No date window and no per-webhook_code branching: /transactions/sync
+    // returns exactly what has changed since our last successful sync,
+    // whichever event woke us up.
+    const accountMap = await syncAccounts(supabase, {
+      connectionId: connection.id,
+      userId: connection.user_id,
+      accessToken,
+      creds,
     });
-    const txnsBody = await txnsResp.json();
-    if (!txnsResp.ok) {
-      console.error("[plaid-webhook] /transactions/get failed:", txnsBody);
-      // Ack so Plaid does not retry on credential errors that need manual fix.
-      return new Response(JSON.stringify({ received: true }), { status: 200 });
-    }
-    const transactions: PlaidTransaction[] = txnsBody.transactions ?? [];
 
-    // ── 5. Classify + persist ────────────────────────────────────────────
-    const { data: userPrefs } = await supabase
-      .from("user_vendor_preferences")
-      .select("vendor_pattern, is_medical")
+    // Workstream C3: categorization_rules replaces user_vendor_preferences.
+    const { data: rules } = await supabase
+      .from("categorization_rules")
+      .select("id, match_type, match_value, is_medical, display_label")
       .eq("user_id", connection.user_id);
 
-    let captured = 0;
-    let stored = 0;
-    for (const txn of transactions) {
-      const txnLike: PlaidTxnLike = {
-        name: txn.name,
-        merchant_name: txn.merchant_name,
-        category: txn.category ?? null,
-        mcc: txn.mcc ?? null,
-      };
-      const classification = await classifyTransaction(
-        supabase,
-        txnLike,
-        userPrefs ?? [],
-      );
-      const vendor = txn.merchant_name || txn.name;
+    const { counts, ingested } = await syncTransactions(supabase, {
+      connectionId: connection.id,
+      userId: connection.user_id,
+      accessToken,
+      creds,
+      cursor: connection.transactions_cursor,
+      accountMap,
+      rules: rules ?? [],
+    });
 
-      // Upsert the raw transaction. Plaid IDs are stable so this is safe to
-      // run on every webhook delivery — Plaid will fan-out delivers.
-      const { data: txnRow, error: txnErr } = await supabase
-        .from("transactions")
-        .upsert(
-          {
-            user_id: connection.user_id,
-            plaid_transaction_id: txn.transaction_id,
-            transaction_date: txn.date,
-            vendor,
-            description: txn.name,
-            amount: Math.abs(txn.amount),
-            category: classification.isMedical
-              ? "medical"
-              : txn.category?.[0] || "Other",
-            is_medical: classification.isMedical,
-            is_hsa_eligible:
-              classification.isMedical && !classification.needsReview,
-            needs_review: classification.needsReview,
-            // The DB check constraint allows only unlinked | linked_to_invoice
-            // | ignored. We start as 'unlinked' and the auto-capture block
-            // below upgrades to 'linked_to_invoice' once an invoice exists.
-            reconciliation_status: "unlinked",
-            source: "plaid",
-          },
-          { onConflict: "plaid_transaction_id", ignoreDuplicates: false },
-        )
-        .select("id, invoice_id")
-        .single();
-      if (txnErr) {
-        console.warn(
-          "[plaid-webhook] transactions upsert failed:",
-          txnErr.message,
-        );
-        continue;
-      }
-      stored++;
+    // ── 4b. Transfer detection (Workstream C5), before capture so a card
+    // payment never becomes a phantom expense.
+    const transferPairs = await detectTransfers(supabase, {
+      userId: connection.user_id,
+      // HISTORICAL_UPDATE is how the 18-month backfill actually arrives — the
+      // first sync returns only the last ~90 days and Plaid announces the rest
+      // later. The 45-day default would leave every card payment in that
+      // backfill counted as spending, so this event gets the same wide sweep
+      // the initial sync uses.
+      lookbackDays:
+        payload.webhook_code === "HISTORICAL_UPDATE" ? 550 : undefined,
+    });
 
-      // Reclaim Phase 4 W3: credit detection. If this txn is a deposit
-      // (Plaid convention: amount < 0), check for open Substantiation
-      // Records the user has whose total matches. Surfaced candidates
-      // appear on /substantiation for the user to confirm or dismiss.
-      if (txn.amount < 0) {
-        await findReimbursementMatches({
-          supabase,
-          userId: connection.user_id,
-          transactionRowId: txnRow.id,
-          rawTxnAmount: txn.amount,
-        });
-      }
+    // ── 5. Capture + deposit matching (shared with plaid-sync-transactions)
+    const captured = await autoCaptureExpenses(supabase, {
+      userId: connection.user_id,
+      ingested,
+    });
+    const depositCandidates = await matchDeposits(supabase, {
+      userId: connection.user_id,
+    });
 
-      // Phase 2: medical transactions that aren't already linked to an
-      // invoice seed a new CAPTURED invoice and back-link.
-      if (
-        classification.isMedical &&
-        !txnRow.invoice_id &&
-        // High-confidence (MCC or user_preference) routes to CAPTURED.
-        // Low-confidence (keyword/category) still creates a stub so the
-        // user sees it in their queue — but it's flagged needs_review.
-        true
-      ) {
-        // Reclaim Phase 2 W3: source_plaid_transaction_id participates in a
-        // partial UNIQUE index so this webhook and the initial historical
-        // sync can't race-create duplicate invoices for the same Plaid txn.
-        const { data: invoice, error: invErr } = await supabase
-          .from("invoices")
-          .insert({
-            user_id: connection.user_id,
-            vendor,
-            amount: Math.abs(txn.amount),
-            date: txn.date,
-            category:
-              classification.irsCategory ||
-              (classification.isMedical ? "Medical" : "Other"),
-            is_hsa_eligible: !classification.needsReview,
-            // Reclaim Phase 3: same MCC-default classification as the
-            // manual-sync path (see plaid-sync-transactions). High-confidence
-            // MCC → PENDING_REVIEW with Pub 502 basis set; otherwise stay
-            // in CAPTURED until classified.
-            lifecycle_status: classification.pub502RuleId
-              ? "pending_review"
-              : "captured",
-            eligibility_basis_rule_id: classification.pub502RuleId ?? null,
-            classification_confidence: classification.pub502RuleId
-              ? 0.95
-              : null,
-            classification_reasoning: classification.pub502RuleId
-              ? `Auto-classified from MCC ${classification.mccCode} (${classification.irsCategory ?? "medical"}). Confirm during review.`
-              : null,
-            classified_at: classification.pub502RuleId
-              ? new Date().toISOString()
-              : null,
-            source_plaid_transaction_id: txn.transaction_id,
-            notes: `Auto-captured from Plaid (${classification.reason}${
-              classification.mccCode ? ` MCC ${classification.mccCode}` : ""
-            }).`,
-          })
-          .select("id")
-          .single();
-        if (invErr) {
-          // 23505 = unique_violation. Manual sync got there first; link
-          // the transaction row to the existing invoice and move on.
-          if (invErr.code === "23505") {
-            const { data: existing } = await supabase
-              .from("invoices")
-              .select("id")
-              .eq("source_plaid_transaction_id", txn.transaction_id)
-              .maybeSingle();
-            if (existing) {
-              await supabase
-                .from("transactions")
-                .update({
-                  invoice_id: existing.id,
-                  reconciliation_status: "linked_to_invoice",
-                })
-                .eq("id", txnRow.id);
-            }
-            continue;
-          }
-          console.warn(
-            "[plaid-webhook] invoice insert failed:",
-            invErr.message,
-          );
-          continue;
-        }
-        await supabase
-          .from("transactions")
-          .update({
-            invoice_id: invoice.id,
-            reconciliation_status: "linked_to_invoice",
-          })
-          .eq("id", txnRow.id);
-        captured++;
-      }
-    }
-
-    await supabase
-      .from("plaid_connections")
-      .update({ last_synced_at: new Date().toISOString() })
-      .eq("id", connection.id);
+    // ── 5b. Duplicate detection (Workstream C6), after capture — the expense
+    // just created is one half of every pair worth finding.
+    const duplicates = await detectDuplicates(supabase, {
+      userId: connection.user_id,
+    });
 
     console.log(
-      "[plaid-webhook] processed",
-      stored,
-      "transactions, captured",
-      captured,
-      "new invoices",
+      `[plaid-webhook] +${counts.added} ~${counts.modified} -${counts.removed} across ${counts.pages} page(s); transfers ${transferPairs}, captured ${captured}, deposit candidates ${depositCandidates}, duplicate candidates ${duplicates}`,
     );
 
-    return new Response(JSON.stringify({ received: true, stored, captured }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({
+        received: true,
+        added: counts.added,
+        modified: counts.modified,
+        removed: counts.removed,
+        captured,
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
   } catch (error) {
-    // Always ack 200 after verification has succeeded: Plaid retries on 5xx
-    // for up to 24h, and a logic bug should be surfaced through logs, not a
-    // retry storm. Errors are caught here to be safe.
+    // Always ack 200 after verification has succeeded: Plaid retries on 5xx for
+    // up to 24h, and a logic bug should surface through logs, not a retry storm.
     console.error(
       "[plaid-webhook] Error:",
       error instanceof Error ? error.message : error,

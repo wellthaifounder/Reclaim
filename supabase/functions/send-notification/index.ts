@@ -5,6 +5,8 @@ import { z } from "https://esm.sh/zod@3.22.4";
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
 const allowedOrigins = [
+  "https://reclaim.health",
+  "https://www.reclaim.health",
   "https://wellth-ai.app",
   "https://www.wellth-ai.app",
   Deno.env.get("ALLOWED_ORIGIN"),
@@ -57,8 +59,8 @@ function buildReimbursementUpdateEmail(
     <p>Your HSA reimbursement request for <strong>$${totalAmount.toFixed(2)}</strong> has been updated to <strong>${label}</strong>.</p>
     ${hsaProvider ? `<p>HSA Provider: ${hsaProvider}</p>` : ""}
     ${status === "paid" ? "<p><strong>Your reimbursement has been paid. Check your HSA account balance.</strong></p>" : ""}
-    <p>Log in to your Wellth account to view full details.</p>
-    <p>Best regards,<br>The Wellth Team</p>
+    <p>Log in to your Reclaim account to view full details.</p>
+    <p>Best regards,<br>The Reclaim Team</p>
   `;
   return { subject, html };
 }
@@ -137,7 +139,7 @@ serve(async (req) => {
     }
 
     await resend.emails.send({
-      from: "Wellth <notifications@wellth-ai.app>",
+      from: "Reclaim <notifications@wellth-ai.app>",
       to: [userEmail],
       subject,
       html,

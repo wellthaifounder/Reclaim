@@ -23,7 +23,6 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "./ui/sheet";
-import { Badge } from "./ui/badge";
 import { logError } from "@/utils/errorHandler";
 
 type Message = { role: "user" | "assistant"; content: string };
@@ -58,9 +57,8 @@ interface WellbieChatPanelProps {
 const quickActionsByPage: Record<string, string[]> = {
   "/dashboard": ["What should I do next?", "Explain my savings potential"],
   "/expenses/new": ["What documents do I need?", "Is this HSA eligible?"],
-  "/reports": ["How can I optimize my strategy?", "Explain these charts"],
-  "/hsa-reimbursement": ["When should I reimburse?", "What's the tax impact?"],
-  "/payment-methods": ["Which card should I use?", "How do rewards work?"],
+  "/substantiation": ["When should I reimburse?", "What's the tax impact?"],
+  "/expenses": ["Is this medical?", "Why was this categorized this way?"],
 };
 
 export const WellbieChatPanel = ({
@@ -93,7 +91,7 @@ export const WellbieChatPanel = ({
   const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
   const quickActions = quickActionsByPage[location.pathname] || [
-    "How does Wellth.ai work?",
+    "How does Reclaim work?",
     "What are HSA tax benefits?",
   ];
 

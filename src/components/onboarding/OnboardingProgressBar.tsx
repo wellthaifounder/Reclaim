@@ -1,75 +1,43 @@
+// The nudge bar for someone who skipped part of setup.
+//
+// Its two steps used to be "Upload Bill" then "Connect Accounts", in that
+// order, which taught every new user the opposite of what Reclaim is: bank
+// sync is the spine, and a bank connection is what makes the rest work. The
+// order is now the spec's — connect, then the one fact that gates every claim.
+//
+// It also counted an HSA date OR a bank as one satisfied step, so connecting a
+// bank silently marked the establishment date as handled. Those are separate
+// questions and a missing date blocks reimbursement on its own.
+
 import { useEffect, useRef } from "react";
 import { Progress } from "@/components/ui/progress";
-import { CheckCircle2, Upload, Link2 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { CheckCircle2, CalendarClock, Link2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
-import { useHSA } from "@/contexts/HSAContext";
 import { analytics } from "@/lib/analytics";
-import { useAuthUser } from "@/hooks/useAuthUser";
+import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 
 interface OnboardingProgressBarProps {
   compact?: boolean;
 }
 
 const STEP_ROUTES: Record<string, string> = {
-  bill: "/bills/new",
-  setup: "/settings",
+  bank: "/bank-accounts",
+  hsaDate: "/settings",
 };
 
 export function OnboardingProgressBar({
   compact = false,
 }: OnboardingProgressBarProps) {
-  const { hasHSA } = useHSA();
   const navigate = useNavigate();
-  const { user } = useAuthUser();
-  const userId = user?.id;
-
-  // Check if user has uploaded any bills
-  const { data: billsData } = useQuery({
-    queryKey: ["onboarding-bills", userId],
-    enabled: !!userId,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("invoices")
-        .select("id, created_at")
-        .eq("user_id", userId!)
-        .order("created_at", { ascending: true })
-        .limit(1);
-
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  // Check if user has connected bank accounts
-  const { data: bankData } = useQuery({
-    queryKey: ["onboarding-banks", userId],
-    enabled: !!userId,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("plaid_connections")
-        .select("id")
-        .eq("user_id", userId!)
-        .limit(1);
-
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  // Calculate progress
-  const hasBill = (billsData && billsData.length > 0) || false;
-  const hasBank = (bankData && bankData.length > 0) || false;
-  const hasSetup = hasHSA || hasBank;
+  const { isComplete, hasBank, hasHsaDate, isLoading } = useOnboardingStatus();
 
   const steps = [
-    { key: "bill", label: "Upload Bill", icon: Upload, complete: hasBill },
+    { key: "bank", label: "Connect a bank", icon: Link2, complete: hasBank },
     {
-      key: "setup",
-      label: "Connect Accounts",
-      icon: Link2,
-      complete: hasSetup,
+      key: "hsaDate",
+      label: "HSA opened date",
+      icon: CalendarClock,
+      complete: hasHsaDate,
     },
   ];
 
@@ -96,8 +64,10 @@ export function OnboardingProgressBar({
     }
   }, [completedSteps, steps.length]);
 
-  // Don't show if onboarding is complete
-  if (completedSteps === steps.length) {
+  // Nothing to nudge about until we know the answers, and nothing to nudge
+  // about for someone still inside /welcome — they are being asked these very
+  // questions on the screen in front of them.
+  if (isLoading || isComplete !== true || completedSteps === steps.length) {
     return null;
   }
 

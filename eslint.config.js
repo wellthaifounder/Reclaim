@@ -27,7 +27,11 @@ export default tseslint.config(
         "warn",
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
       ],
-      "no-console": ["warn", { allow: [] }],
+      // Not ["warn", { allow: [] }] — ESLint 9 rejects an empty `allow` list
+      // outright, which made the whole config invalid and meant `npm run lint`
+      // has been erroring instead of linting. Bare "warn" is how you say
+      // "allow nothing", which was the intent.
+      "no-console": "warn",
     },
   },
 );

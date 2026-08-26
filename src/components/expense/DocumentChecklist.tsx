@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface Receipt {
-  document_type: string;
+  document_type: string | null;
 }
 
 interface DocumentChecklistProps {

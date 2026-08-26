@@ -19,6 +19,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { useReimbursementStrategy } from "@/hooks/useReimbursementStrategy";
+import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -47,7 +49,6 @@ interface DashboardData {
   eligible: BucketCounts;
   submitted: BucketCounts;
   reclaimedYtd: number;
-  isShoebox: boolean;
 }
 
 const ZERO: BucketCounts = { count: 0, total: 0 };
@@ -57,7 +58,6 @@ const EMPTY_DATA: DashboardData = {
   eligible: ZERO,
   submitted: ZERO,
   reclaimedYtd: 0,
-  isShoebox: false,
 };
 
 const CURRENT_YEAR = new Date().getFullYear();
@@ -72,8 +72,24 @@ function fmtMoney(n: number): string {
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { isShoebox } = useReimbursementStrategy();
+  const { isComplete: onboardingComplete } = useOnboardingStatus();
   const [data, setData] = useState<DashboardData>(EMPTY_DATA);
   const [loading, setLoading] = useState(true);
+
+  // Step 0. Auth sends every sign-in to /dashboard, which makes this the one
+  // place a new user reliably passes through -- so the setup gate lives here
+  // rather than in ProtectedRoute, where it would have to special-case its own
+  // destination on every authenticated route in the app.
+  //
+  // `null` means we do not know yet and must not act: reading it as "not
+  // complete" would bounce an existing user into the welcome flow for the
+  // moment before their profile row loads.
+  useEffect(() => {
+    if (onboardingComplete === false) {
+      navigate("/welcome", { replace: true });
+    }
+  }, [onboardingComplete, navigate]);
 
   useEffect(() => {
     let cancelled = false;
@@ -93,23 +109,15 @@ export default function Dashboard() {
           return;
         }
 
-        const [{ data: invoiceRows }, { data: profileRow }] = await Promise.all(
-          [
-            supabase
-              .from("invoices")
-              .select("lifecycle_status, amount, date, reimbursed_at")
-              .eq("user_id", user.id),
-            supabase
-              .from("profiles")
-              .select("reimbursement_strategy_preference")
-              .eq("id", user.id)
-              .maybeSingle(),
-          ],
-        );
+        // Workstream E6: the strategy is no longer fetched here. It lives in
+        // useReimbursementStrategy, so this page, the attention banner and the
+        // claim screen cannot disagree about which one the user chose.
+        const { data: invoiceRows } = await supabase
+          .from("invoices")
+          .select("lifecycle_status, amount, date, reimbursed_at")
+          .eq("user_id", user.id);
 
         const fresh: DashboardData = { ...EMPTY_DATA };
-        fresh.isShoebox =
-          profileRow?.reimbursement_strategy_preference === "shoebox";
 
         for (const row of invoiceRows ?? []) {
           const amount = Number(row.amount) || 0;
@@ -186,7 +194,7 @@ export default function Dashboard() {
         <Card className="border-primary/30">
           <CardContent className="p-5 sm:p-6">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-1.5">
-              {data.isShoebox
+              {isShoebox
                 ? "Shoebox balance + receipts pending"
                 : "Available to reclaim"}
             </p>
@@ -211,7 +219,7 @@ export default function Dashboard() {
         <div className="grid grid-cols-2 gap-2">
           <Button
             variant="outline"
-            onClick={() => navigate("/bills/new")}
+            onClick={() => navigate("/expenses/new")}
             className="justify-center"
           >
             <Camera className="h-4 w-4 mr-2" />
@@ -277,19 +285,19 @@ export default function Dashboard() {
 
             {/* READY TO SUBMIT  /  Shoebox Balance */}
             <BucketCard
-              icon={data.isShoebox ? PiggyBank : CheckCircle2}
+              icon={isShoebox ? PiggyBank : CheckCircle2}
               tone="emerald"
-              label={data.isShoebox ? "Shoebox balance" : "Ready to submit"}
+              label={isShoebox ? "Shoebox balance" : "Ready to submit"}
               count={data.eligible.count}
               total={data.eligible.total}
               copy={
-                data.isShoebox
+                isShoebox
                   ? "Saved for future reimbursement"
                   : "Generate your Substantiation Record"
               }
-              ctaLabel={data.isShoebox ? "" : "Submit"}
+              ctaLabel={isShoebox ? "" : "Submit"}
               onClick={
-                data.isShoebox ? undefined : () => navigate("/substantiation")
+                isShoebox ? undefined : () => navigate("/substantiation")
               }
             />
 

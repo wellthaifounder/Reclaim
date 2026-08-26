@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="Reclaim — Return Orbit concept">
+  <!-- Concept B: The Return Orbit
+       A coin travels a near-complete path with one open gap and arrows BACK toward
+       center = money coming back to you. Deliberate inward motion so it does not
+       read as a generic refresh/sync glyph. -->
+  <title>Reclaim — Return Orbit</title>
+
+  <!-- palette: teal=#0e9b94  gold=#e0b03f  navy=#1a2238 -->
+  <!-- open orbit: arc with a gap at upper-right -->
+  <path d="M180 70 A70 70 0 1 0 196 140"
+        fill="none" stroke="#0e9b94" stroke-width="18" stroke-linecap="round" />
+
+  <!-- inward-pointing arrowhead at the orbit opening (motion returning to center) -->
+  <path d="M196 140 l-26 -2 l16 22 Z" fill="#0e9b94" stroke="none" />
+
+  <!-- the reclaimed coin, returned to the center -->
+  <circle cx="128" cy="128" r="30" fill="#e0b03f" />
+  <circle cx="128" cy="128" r="30" fill="none" stroke="#1a2238" stroke-width="6" opacity="0.25" />
+</svg>

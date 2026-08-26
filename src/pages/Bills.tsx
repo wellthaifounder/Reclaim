@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -14,30 +15,15 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Plus, Loader2, FileText, Search } from "lucide-react";
-import { toast } from "sonner";
-import {
-  calculateHSAEligibility,
-  getPaymentStatusBadge,
-  type PaymentTransaction,
-} from "@/lib/hsaCalculations";
-import { Link } from "react-router-dom";
+import { Plus, Loader2, FileText, Search, ClipboardCheck } from "lucide-react";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
-import { logError } from "@/utils/errorHandler";
 import { withQueryTimeout } from "@/lib/queryHelpers";
-import { FF } from "@/lib/featureFlags";
-import { analytics } from "@/lib/analytics";
-import Ledger from "@/pages/Ledger";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BillsHeroMetrics } from "@/components/bills/BillsHeroMetrics";
-import { useOnboarding } from "@/contexts/OnboardingContext";
+import { SubstantiateDialog } from "@/components/expense/SubstantiateDialog";
+import { formatDateOnly } from "@/lib/dates";
 // Bill review feature archived
 // import { BillReviewCard } from "@/components/bills/BillReviewCard";
 // import { DisputeAnalyticsDashboard } from "@/components/bills/DisputeAnalyticsDashboard";
-
-interface BillPaymentTransaction extends PaymentTransaction {
-  auto_linked?: boolean;
-}
 
 interface Bill {
   id: string;
@@ -46,53 +32,54 @@ interface Bill {
   date: string;
   amount: number;
   total_amount?: number;
-  is_hsa_eligible: boolean;
-  payment_transactions: BillPaymentTransaction[];
+  // Was is_hsa_eligible, a derived column being retired. The query selects *,
+  // so this arrives without a query change; 'eligible' is exactly what the old
+  // boolean meant.
+  eligibility_state:
+    Database["public"]["Enums"]["expense_eligibility_state"] | null;
+  // The money model from the workflow spec. The query selects *, so these
+  // arrive without a query change; they are what the summary above the list
+  // and the claim screen both count.
+  amount_paid?: number | null;
+  reimbursable_amount?: number | null;
+  reimbursed_amount?: number | null;
+  claim_state: Database["public"]["Enums"]["expense_claim_state"] | null;
 }
 
-type BillsView = "list" | "ledger";
+interface BillsProps {
+  /**
+   * Render as a panel inside another page rather than as a page of its own.
+   *
+   * The expense list is now a tab on /expenses, which already supplies the
+   * layout chrome and its own heading. Embedding skips both, so there is one
+   * sidebar and one <h1> on the page rather than two of each.
+   */
+  embedded?: boolean;
+}
 
-const isBillsView = (v: string | null): v is BillsView =>
-  v === "list" || v === "ledger";
+const Bills = ({ embedded = false }: BillsProps) => {
+  // Every return path in this component goes through Shell, so embedding is
+  // decided once here rather than at each of the loading / error / loaded
+  // branches.
+  const Shell = ({ children }: { children: React.ReactNode }) =>
+    embedded ? (
+      <>{children}</>
+    ) : (
+      <AuthenticatedLayout>{children}</AuthenticatedLayout>
+    );
 
-const Bills = () => {
   const navigate = useNavigate();
-  const { hasSeenLedgerWorkflow } = useOnboarding();
-  const [searchParams, setSearchParams] = useSearchParams();
 
-  // Wave 4 IA-collapse experiment: when FF.BILLS_LEDGER_IA_COLLAPSE is on, the
-  // /ledger route redirects here as /bills?view=ledger and we render <Ledger
-  // embedded /> inline. With the flag off, currentView is forced to "list" and
-  // the ?view param is ignored — /ledger keeps its own standalone route.
-  const requestedView = searchParams.get("view");
-  const currentView: BillsView =
-    FF.BILLS_LEDGER_IA_COLLAPSE && isBillsView(requestedView)
-      ? requestedView
-      : "list";
-
-  // Track whichever view actually rendered (post-flag, post-fallback). Re-fire
-  // whenever the user toggles the tab so we get per-view dwell signal.
-  useEffect(() => {
-    if (!FF.BILLS_LEDGER_IA_COLLAPSE) return;
-    analytics.track({
-      type: "bills_view_selected",
-      action: currentView,
-      metadata: { view: currentView },
-    });
-  }, [currentView]);
-
-  const handleViewChange = (next: string) => {
-    if (!isBillsView(next) || next === currentView) return;
-    const sp = new URLSearchParams(searchParams);
-    if (next === "list") sp.delete("view");
-    else sp.set("view", next);
-    setSearchParams(sp, { replace: true });
-  };
+  // Which expense the substantiate dialog is open for, or null for closed.
+  const [substantiateId, setSubstantiateId] = useState<string | null>(null);
 
   // Filter states
   const [searchTerm, setSearchTerm] = useState("");
-  const [hideFullyReimbursed, setHideFullyReimbursed] = useState(true);
-  const [hideFullyPaid, setHideFullyPaid] = useState(true);
+  // Defaults to off. The two filters this replaces both defaulted to ON, so
+  // the list opened with expenses already hidden and no indication that it
+  // had done so -- a user who could not find something they had just added
+  // had no way to know a checkbox was the reason.
+  const [hideClaimed, setHideClaimed] = useState(false);
   const [showOnlyHSAEligible, setShowOnlyHSAEligible] = useState(false);
 
   // Fetch bills data
@@ -113,20 +100,7 @@ const Bills = () => {
 
         const { data, error } = await supabase
           .from("invoices")
-          .select(
-            `
-            *,
-            payment_transactions (
-              id,
-              payment_date,
-              amount,
-              payment_source,
-              is_reimbursed,
-              reimbursed_date,
-              auto_linked
-            )
-          `,
-          )
+          .select("*")
           .eq("user_id", user.id)
           .order("date", { ascending: false })
           .limit(500) // Limit to most recent 500 bills for performance
@@ -142,30 +116,6 @@ const Bills = () => {
 
   // Bill review feature archived - removed review and dispute queries
 
-  const toggleHSAEligibility = async (
-    billId: string,
-    currentStatus: boolean,
-    e: React.MouseEvent,
-  ) => {
-    e.stopPropagation();
-
-    try {
-      const { error } = await supabase
-        .from("invoices")
-        .update({ is_hsa_eligible: !currentStatus })
-        .eq("id", billId);
-
-      if (error) throw error;
-      refetchBills();
-      toast.success(
-        `HSA eligibility ${!currentStatus ? "enabled" : "disabled"}`,
-      );
-    } catch (error) {
-      logError("Error toggling HSA eligibility", error);
-      toast.error("Failed to update HSA eligibility");
-    }
-  };
-
   const filteredBills = useMemo(() => {
     if (!bills) return [];
     return bills.filter((bill) => {
@@ -176,111 +126,41 @@ const Bills = () => {
         return false;
       }
 
-      const breakdown = calculateHSAEligibility(
-        bill,
-        bill.payment_transactions || [],
-      );
-
-      if (
-        hideFullyReimbursed &&
-        breakdown.paidViaHSA === breakdown.totalInvoiced &&
-        breakdown.totalInvoiced > 0
-      ) {
+      // "Hide fully reimbursed" and "Hide fully paid" went with the payments
+      // table (2026-08-21). Both asked how much of a bill had been settled,
+      // which is not a question about an expense the bank already shows as
+      // paid. "Hide what I've already claimed" is the useful version and it
+      // reads claim_state, which is the column that actually knows.
+      if (hideClaimed && (bill.claim_state ?? "unclaimed") !== "unclaimed") {
         return false;
       }
 
-      if (
-        hideFullyPaid &&
-        breakdown.unpaidBalance === 0 &&
-        breakdown.totalInvoiced > 0
-      ) {
-        return false;
-      }
-
-      if (showOnlyHSAEligible && !bill.is_hsa_eligible) {
+      if (showOnlyHSAEligible && bill.eligibility_state !== "eligible") {
         return false;
       }
 
       return true;
     });
-  }, [
-    bills,
-    searchTerm,
-    hideFullyReimbursed,
-    hideFullyPaid,
-    showOnlyHSAEligible,
-  ]);
+  }, [bills, searchTerm, hideClaimed, showOnlyHSAEligible]);
 
   // Bill review feature archived - removed review/dispute aggregations
 
-  const aggregateStats = useMemo(() => {
-    let totalInvoiced = 0;
-    let totalPaidHSA = 0;
-    let totalPaidOther = 0;
-    let totalUnpaid = 0;
-    let totalHSAEligible = 0;
-
-    filteredBills.forEach((bill) => {
-      const breakdown = calculateHSAEligibility(
-        bill,
-        bill.payment_transactions || [],
-      );
-      totalInvoiced += breakdown.totalInvoiced;
-      totalPaidHSA += breakdown.paidViaHSA;
-      totalPaidOther += breakdown.paidViaOther;
-      totalUnpaid += breakdown.unpaidBalance;
-      totalHSAEligible += breakdown.hsaReimbursementEligible;
-    });
-
-    return {
-      totalInvoiced,
-      totalPaidHSA,
-      totalPaidOther,
-      totalUnpaid,
-      totalHSAEligible,
-    };
-  }, [filteredBills]);
-
-  // The view switcher is only rendered when the IA-collapse flag is on. With
-  // the flag off, Bills only ever shows the list, so showing tabs would be
-  // misleading.
-  const viewSwitcher = FF.BILLS_LEDGER_IA_COLLAPSE ? (
-    <Tabs value={currentView} onValueChange={handleViewChange} className="mb-2">
-      <TabsList>
-        <TabsTrigger value="list">List</TabsTrigger>
-        <TabsTrigger value="ledger">Ledger</TabsTrigger>
-      </TabsList>
-    </Tabs>
-  ) : null;
-
-  // Short-circuit: when the user lands on /bills?view=ledger, render the
-  // Ledger page inline (no double AuthenticatedLayout via `embedded`). The
-  // existing Bills query has already been kicked off but the result is
-  // cached by React Query for when they switch back to the list.
-  if (currentView === "ledger") {
-    return (
-      <AuthenticatedLayout>
-        <div className="container mx-auto px-4 pt-6 max-w-7xl">
-          {viewSwitcher}
-        </div>
-        <Ledger embedded />
-      </AuthenticatedLayout>
-    );
-  }
+  // The summary counts what is on screen, so it responds to the filters
+  // above it rather than quietly reporting a different population.
 
   if (billsLoading) {
     return (
-      <AuthenticatedLayout>
+      <Shell>
         <div
           className="flex items-center justify-center min-h-[400px]"
           role="status"
           aria-live="polite"
           aria-busy="true"
         >
-          <span className="sr-only">Loading your bills…</span>
+          <span className="sr-only">Loading your expenses…</span>
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
-      </AuthenticatedLayout>
+      </Shell>
     );
   }
 
@@ -289,13 +169,13 @@ const Bills = () => {
   // a Retry button so the user has a clear next step.
   if (billsError) {
     return (
-      <AuthenticatedLayout>
+      <Shell>
         <div className="container mx-auto px-4 py-8 max-w-6xl">
           <Card>
             <CardContent className="text-center py-12 space-y-3">
               <FileText className="h-12 w-12 mx-auto text-muted-foreground" />
               <p className="text-muted-foreground">
-                We had trouble loading your bills.
+                We had trouble loading your expenses.
               </p>
               <Button variant="outline" onClick={() => refetchBills()}>
                 Try again
@@ -303,51 +183,38 @@ const Bills = () => {
             </CardContent>
           </Card>
         </div>
-      </AuthenticatedLayout>
+      </Shell>
     );
   }
 
   return (
-    <AuthenticatedLayout>
-      <div className="container mx-auto px-4 py-8 max-w-6xl space-y-6">
-        {viewSwitcher}
-        {/* Header */}
-        <div className="flex items-center justify-between sticky top-0 z-10 bg-background py-2 -mt-2">
-          <div>
-            <h1 className="text-3xl font-bold mb-1">Expenses</h1>
-            <p className="text-muted-foreground text-sm">
-              Track and manage your medical expenses
-            </p>
+    <Shell>
+      <div
+        className={
+          embedded
+            ? "space-y-6"
+            : "container mx-auto px-4 py-8 max-w-6xl space-y-6"
+        }
+      >
+        {/* Header. Suppressed when embedded -- the host page already carries
+            the "Expenses" heading and the add button. */}
+        {!embedded && (
+          <div className="flex items-center justify-between sticky top-0 z-10 bg-background py-2 -mt-2">
+            <div>
+              <h1 className="text-3xl font-bold mb-1">Expenses</h1>
+              <p className="text-muted-foreground text-sm">
+                Everything you have spent on care, and how close each is to money back
+              </p>
+            </div>
+            <Button onClick={() => navigate("/expenses/new")}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add expense
+            </Button>
           </div>
-          <Button onClick={() => navigate("/bills/new")}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add expense
-          </Button>
-        </div>
-
-        {/* Ledger nudge for new users */}
-        {!hasSeenLedgerWorkflow && (
-          <p className="text-sm text-muted-foreground">
-            After uploading, head to the{" "}
-            <Link
-              to={
-                FF.BILLS_LEDGER_IA_COLLAPSE ? "/bills?view=ledger" : "/ledger"
-              }
-              className="text-primary underline underline-offset-4 hover:text-primary/80"
-            >
-              Ledger
-            </Link>{" "}
-            to classify and organize your bills.
-          </p>
         )}
 
         {/* Hero Metrics */}
-        <BillsHeroMetrics
-          totalBilled={aggregateStats.totalInvoiced}
-          paidViaHSA={aggregateStats.totalPaidHSA}
-          paidOther={aggregateStats.totalPaidOther}
-          unpaidBalance={aggregateStats.totalUnpaid}
-        />
+        <BillsHeroMetrics rows={filteredBills} />
 
         {/* Bills List */}
         <div className="space-y-4">
@@ -356,7 +223,7 @@ const Bills = () => {
             <CardHeader>
               <CardTitle>Filters</CardTitle>
               <CardDescription>
-                Customize which bills to display
+                Customize which expenses to display
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -369,29 +236,17 @@ const Bills = () => {
                   className="pl-9"
                 />
               </div>
-              <div className="grid gap-4 md:grid-cols-3">
+              <div className="grid gap-4 md:grid-cols-2">
                 <div className="flex items-center space-x-2">
                   <Checkbox
-                    id="hideReimbursed"
-                    checked={hideFullyReimbursed}
+                    id="hideClaimed"
+                    checked={hideClaimed}
                     onCheckedChange={(checked) =>
-                      setHideFullyReimbursed(checked as boolean)
+                      setHideClaimed(checked as boolean)
                     }
                   />
-                  <Label htmlFor="hideReimbursed" className="cursor-pointer">
-                    Hide Fully Reimbursed
-                  </Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="hidePaid"
-                    checked={hideFullyPaid}
-                    onCheckedChange={(checked) =>
-                      setHideFullyPaid(checked as boolean)
-                    }
-                  />
-                  <Label htmlFor="hidePaid" className="cursor-pointer">
-                    Hide Fully Paid
+                  <Label htmlFor="hideClaimed" className="cursor-pointer">
+                    Hide what I've already claimed
                   </Label>
                 </div>
                 <div className="flex items-center space-x-2">
@@ -403,7 +258,7 @@ const Bills = () => {
                     }
                   />
                   <Label htmlFor="hsaOnly" className="cursor-pointer">
-                    HSA Eligible Only
+                    Only show what's eligible
                   </Label>
                 </div>
               </div>
@@ -414,7 +269,7 @@ const Bills = () => {
             <CardHeader>
               <div className="flex justify-between items-center">
                 <CardTitle>All Expenses</CardTitle>
-                <Button onClick={() => navigate("/bills/new")}>
+                <Button onClick={() => navigate("/expenses/new")}>
                   <Plus className="h-4 w-4 mr-2" />
                   Add expense
                 </Button>
@@ -425,11 +280,11 @@ const Bills = () => {
                 <div className="text-center py-12">
                   <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                   <p className="text-muted-foreground mb-1">
-                    No bills match your current filters
+                    No expenses match your current filters
                   </p>
                   <p className="text-sm text-muted-foreground mb-4">
                     {showOnlyHSAEligible
-                      ? "Try turning off the HSA-eligible filter to see all bills."
+                      ? "Turn off the eligibility filter to see everything."
                       : searchTerm
                         ? `No results for "${searchTerm}". Try a different search term.`
                         : "Try adjusting your filter settings."}
@@ -440,8 +295,7 @@ const Bills = () => {
                     onClick={() => {
                       setSearchTerm("");
                       setShowOnlyHSAEligible(false);
-                      setHideFullyReimbursed(false);
-                      setHideFullyPaid(false);
+                      setHideClaimed(false);
                     }}
                   >
                     Clear all filters
@@ -459,46 +313,66 @@ const Bills = () => {
                         <div>
                           <h4 className="font-medium">{bill.vendor}</h4>
                           <p className="text-sm text-muted-foreground">
-                            {bill.category} •{" "}
-                            {new Date(bill.date).toLocaleDateString()}
+                            {bill.category} • {formatDateOnly(bill.date)}
                           </p>
+                          {/* Substantiating is the common errand on this list,
+                              so it gets its own control rather than sitting one
+                              page-load away. stopPropagation because the row
+                              itself still opens the full detail page. */}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="mt-2"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSubstantiateId(bill.id);
+                            }}
+                          >
+                            <ClipboardCheck className="h-3.5 w-3.5 mr-1.5" />
+                            Substantiate
+                          </Button>
                         </div>
                         <div className="text-right">
                           <p className="font-semibold">
                             ${Number(bill.amount).toFixed(2)}
                           </p>
+                          {/* The "Fully Paid / Partially Paid / Unpaid" badge
+                              and the "Auto-matched" badge both came off the
+                              payments table and went with it (2026-08-21).
+                              The first would have marked every expense
+                              "Unpaid" in red once that table was empty, which
+                              is the opposite of the truth — the money is gone,
+                              that is why the expense exists. What the row
+                              needs to say is how close this is to being money
+                              back, so it says that instead. */}
                           <div className="flex items-center gap-1 justify-end mt-1">
-                            {(() => {
-                              const breakdown = calculateHSAEligibility(
-                                bill,
-                                bill.payment_transactions || [],
-                              );
-                              const badge = getPaymentStatusBadge(
-                                breakdown.totalInvoiced,
-                                breakdown.paidViaHSA,
-                                breakdown.paidViaOther,
-                              );
-                              return (
-                                <Badge
-                                  variant="outline"
-                                  className={badge.color}
-                                >
-                                  {badge.status}
-                                </Badge>
-                              );
-                            })()}
-                            {bill.payment_transactions?.some(
-                              (pt) => pt.auto_linked,
-                            ) && (
+                            {(bill.claim_state ?? "unclaimed") !==
+                            "unclaimed" ? (
                               <Badge
                                 variant="outline"
-                                className="bg-blue-500/10 text-blue-600 border-blue-500/20"
+                                className="bg-muted text-muted-foreground"
                               >
-                                Auto-matched
+                                {bill.claim_state === "reimbursed" ||
+                                bill.claim_state === "reimbursed_externally"
+                                  ? "Reimbursed"
+                                  : bill.claim_state === "not_reimbursable"
+                                    ? "HSA card"
+                                    : "In a claim"}
                               </Badge>
-                            )}
-                            {bill.is_hsa_eligible && (
-                              <Badge variant="secondary">HSA Eligible</Badge>
+                            ) : bill.eligibility_state === "eligible" ? (
+                              <Badge
+                                variant="outline"
+                                className="bg-primary/10 text-primary border-primary/20"
+                              >
+                                Ready to claim
+                              </Badge>
+                            ) : (
+                              <Badge
+                                variant="outline"
+                                className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                              >
+                                Needs work
+                              </Badge>
                             )}
                           </div>
                         </div>
@@ -510,8 +384,20 @@ const Bills = () => {
             </CardContent>
           </Card>
         </div>
+
+        <SubstantiateDialog
+          expenseId={substantiateId}
+          open={substantiateId !== null}
+          onOpenChange={(next) => {
+            if (!next) setSubstantiateId(null);
+            // Amounts, eligibility and documentation may all have moved while
+            // the dialog was open, so the list behind it is refetched on close
+            // rather than left showing stale badges.
+            if (!next) void refetchBills();
+          }}
+        />
       </div>
-    </AuthenticatedLayout>
+    </Shell>
   );
 };
 

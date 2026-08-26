@@ -39,7 +39,7 @@ interface HSAUpgradePromptProps {
 
 export function HSAUpgradePrompt({
   expenseAmount,
-  context,
+  context: _context,
   onConnect,
   title,
   variant = "default",
@@ -99,7 +99,7 @@ export function HSAUpgradePrompt({
                   <Button
                     size="sm"
                     variant="ghost"
-                    onClick={() => navigate("/hsa-eligibility")}
+                    onClick={() => navigate("/guide")}
                     className="h-8 text-xs"
                   >
                     Learn More
@@ -197,10 +197,7 @@ export function HSAUpgradePrompt({
             <Button onClick={handleConnect} className="flex-1">
               🔗 Connect HSA Account
             </Button>
-            <Button
-              variant="outline"
-              onClick={() => navigate("/hsa-eligibility")}
-            >
+            <Button variant="outline" onClick={() => navigate("/guide")}>
               Learn More
             </Button>
           </div>

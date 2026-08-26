@@ -92,7 +92,7 @@ export function HSAAccountManager() {
         account_name: account.account_name,
         opened_date: account.opened_date,
         closed_date: account.closed_date || "",
-        is_active: account.is_active,
+        is_active: account.is_active ?? true,
         eligibility_start_date: account.eligibility_start_date || "",
         qle_type: account.qle_type || "",
         notes: account.notes || "",
@@ -125,48 +125,24 @@ export function HSAAccountManager() {
     }
 
     try {
-      const baseFields = {
+      // eligibility_start_date, qle_type and notes are all present as of
+      // 20260330_add_hsa_account_edge_case_fields.sql, so the previous
+      // "retry without the extended columns" fallback was unreachable —
+      // it only fired on a missing-column error that can no longer happen.
+      const fields = {
         account_name: formData.account_name,
         opened_date: formData.opened_date,
         closed_date: formData.closed_date || null,
         is_active: formData.is_active,
+        eligibility_start_date: formData.eligibility_start_date || null,
+        qle_type: formData.qle_type || null,
+        notes: formData.notes.trim() || null,
       };
 
-      const extendedFields = {
-        ...baseFields,
-        ...(formData.eligibility_start_date
-          ? { eligibility_start_date: formData.eligibility_start_date }
-          : {}),
-        ...(formData.qle_type ? { qle_type: formData.qle_type } : {}),
-        ...(formData.notes.trim() ? { notes: formData.notes.trim() } : {}),
-      };
-
-      const save = async (fields: typeof extendedFields) => {
-        if (editingAccount) {
-          await updateAccount({ id: editingAccount.id, updates: fields });
-        } else {
-          await createAccount(fields);
-        }
-      };
-
-      try {
-        await save(extendedFields);
-      } catch (extendedError) {
-        // If the extended columns don't exist yet (migration pending), fall back to base fields
-        const msg =
-          extendedError instanceof Error
-            ? extendedError.message
-            : String(extendedError);
-        if (
-          msg.includes("column") &&
-          (msg.includes("eligibility_start_date") ||
-            msg.includes("qle_type") ||
-            msg.includes("notes"))
-        ) {
-          await save(baseFields);
-        } else {
-          throw extendedError;
-        }
+      if (editingAccount) {
+        await updateAccount({ id: editingAccount.id, updates: fields });
+      } else {
+        await createAccount(fields);
       }
 
       handleCloseDialog();

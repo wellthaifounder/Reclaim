@@ -143,7 +143,7 @@ Please provide insights in a numbered list format, focusing on:
 
             <div className="pt-4 border-t">
               <p className="text-xs text-muted-foreground text-center">
-                ✨ Powered by Wellbie AI • Insights refresh with your latest
+                ✨ Powered by Reclaim AI • Insights refresh with your latest
                 data
               </p>
             </div>

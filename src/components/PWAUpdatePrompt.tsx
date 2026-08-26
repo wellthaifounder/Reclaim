@@ -12,7 +12,6 @@ import { useRegisterSW } from "virtual:pwa-register/react";
 
 export const PWAUpdatePrompt = () => {
   const {
-    offlineReady: [offlineReady, setOfflineReady],
     needRefresh: [needRefresh, setNeedRefresh],
     updateServiceWorker,
   } = useRegisterSW({
@@ -66,7 +65,7 @@ export const PWAUpdatePrompt = () => {
             <div>
               <CardTitle className="text-lg">Update Available</CardTitle>
               <CardDescription className="text-xs">
-                A new version of Wellth is ready
+                A new version of Reclaim is ready
               </CardDescription>
             </div>
           </div>

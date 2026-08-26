@@ -149,11 +149,12 @@ Progress ring on each card: `(paid + reimbursed) / total_billed`
 - Navigation: Ledger (primary), Exceptions (badge count), HSA (reimbursement). Three items total.
 
 **Auto-matching tiers**:
-| Tier | Criteria | Action | Confidence |
-|------|----------|--------|------------|
-| 1 — Auto-link | Exact vendor + exact amount + date ≤3 days | Auto-linked, no user action | >0.9 |
-| 2 — Suggest | Close vendor + amount ±5% + date ≤14 days | One-click confirm | 0.7–0.9 |
-| 3 — Exception | Multiple matches, amount >5% off, or no match | Manual resolution | <0.7 |
+
+| Tier          | Criteria                                      | Action                      | Confidence |
+| ------------- | --------------------------------------------- | --------------------------- | ---------- |
+| 1 — Auto-link | Exact vendor + exact amount + date ≤3 days    | Auto-linked, no user action | >0.9       |
+| 2 — Suggest   | Close vendor + amount ±5% + date ≤14 days     | One-click confirm           | 0.7–0.9    |
+| 3 — Exception | Multiple matches, amount >5% off, or no match | Manual resolution           | <0.7       |
 
 **Linking UX**:
 

@@ -17,10 +17,13 @@ import {
   RotateCcw,
   ListRestart,
   Split,
+  Receipt,
+  HelpCircle,
+  ArrowLeftRight,
 } from "lucide-react";
 import { format } from "date-fns";
 
-interface TransactionCardProps {
+export interface TransactionCardProps {
   id: string;
   date: string;
   vendor: string;
@@ -34,6 +37,16 @@ interface TransactionCardProps {
   invoiceId?: string | null;
   splitParentId?: string | null;
   splitCount?: number;
+  /**
+   * Workstream C3 — the "why" chip. Spec: "Every auto-decision shows why.
+   * Audit-anxious users need the reasoning visible, and it makes disagreement
+   * actionable rather than mysterious."
+   */
+  classificationExplanation?: string | null;
+  /** Workstream C5 — money moved between the user's own accounts. */
+  isTransfer?: boolean;
+  transferKind?: string | null;
+  onUnlinkTransfer?: () => void;
   onViewDetails: () => void;
   onMarkMedical?: () => void;
   onLinkToInvoice?: () => void;
@@ -42,6 +55,7 @@ interface TransactionCardProps {
   onUnignore?: () => void;
   onAddToReviewQueue?: () => void;
   onSplitTransaction?: () => void;
+  onSplitIntoExpenses?: () => void;
 }
 
 export function TransactionCard({
@@ -57,6 +71,10 @@ export function TransactionCard({
   invoiceId,
   splitParentId,
   splitCount,
+  classificationExplanation,
+  isTransfer = false,
+  transferKind,
+  onUnlinkTransfer,
   onViewDetails,
   onMarkMedical,
   onLinkToInvoice,
@@ -65,6 +83,7 @@ export function TransactionCard({
   onUnignore,
   onAddToReviewQueue,
   onSplitTransaction,
+  onSplitIntoExpenses,
 }: TransactionCardProps) {
   const getStatusBadge = () => {
     switch (reconciliationStatus) {
@@ -158,7 +177,29 @@ export function TransactionCard({
                 Part of split
               </Badge>
             )}
+            {isTransfer && (
+              <Badge variant="outline" className="gap-1 text-xs">
+                <ArrowLeftRight className="h-3 w-3" />
+                {transferKind === "card_payment"
+                  ? "Card payment"
+                  : transferKind === "hsa_distribution"
+                    ? "HSA withdrawal"
+                    : transferKind === "hsa_contribution"
+                      ? "HSA contribution"
+                      : "Transfer"}
+              </Badge>
+            )}
           </div>
+
+          {classificationExplanation && (
+            <p className="mb-2 flex items-start gap-1.5 text-xs text-muted-foreground">
+              <HelpCircle
+                className="mt-0.5 h-3 w-3 shrink-0"
+                aria-hidden="true"
+              />
+              <span>{classificationExplanation}</span>
+            </p>
+          )}
 
           {vendor && vendor !== description && (
             <p className="text-sm text-muted-foreground truncate">
@@ -192,6 +233,13 @@ export function TransactionCard({
                 View Details
               </DropdownMenuItem>
 
+              {isTransfer && onUnlinkTransfer && (
+                <DropdownMenuItem onClick={onUnlinkTransfer}>
+                  <ArrowLeftRight className="h-4 w-4 mr-2" />
+                  Not a transfer
+                </DropdownMenuItem>
+              )}
+
               {onMarkMedical && !isMedical && (
                 <DropdownMenuItem onClick={onMarkMedical}>
                   <Tag className="h-4 w-4 mr-2" />
@@ -212,7 +260,20 @@ export function TransactionCard({
                 !invoiceId && (
                   <DropdownMenuItem onClick={onSplitTransaction}>
                     <Split className="h-4 w-4 mr-2" />
-                    Split Transaction
+                    Split across HSA accounts
+                  </DropdownMenuItem>
+                )}
+
+              {/* Workstream B3: splitting one payment into several expenses —
+                  a mixed basket, or a bundled charge covering several visits.
+                  Distinct from the HSA-account allocation split above. */}
+              {onSplitIntoExpenses &&
+                !isSplit &&
+                !splitParentId &&
+                !invoiceId && (
+                  <DropdownMenuItem onClick={onSplitIntoExpenses}>
+                    <Receipt className="h-4 w-4 mr-2" />
+                    Split into expenses
                   </DropdownMenuItem>
                 )}
 

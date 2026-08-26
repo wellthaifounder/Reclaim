@@ -2,6 +2,31 @@
 
 > This file is institutional memory for Claude Code and all AI coding agents. It serves as the **operationalized information security policy** for this codebase. Every agent working on this project must follow these rules before committing any code.
 
+## How to Talk to the Project Owner
+
+**The person you are working with is not an engineer.** They are the founder and the product decision-maker. Write every message to them in plain English.
+
+This applies to all conversation, summaries, explanations, and questions. It does **not** apply to code, code comments, or commit messages — those are written for engineers and should stay precise and technical.
+
+**Do this:**
+
+- Lead with what changed for the user or the business, not what changed in the code.
+- Spell out a term the first time you use it, or pick a plainer word instead.
+- When you need a decision, state the choice, the trade-off, and your recommendation in a few sentences. No decision should require reading code to understand.
+- Say what broke and what it meant in practice — "the app was only importing the first 100 transactions, so anyone with more than that was silently missing history" — not just the mechanism.
+- Keep file and function names when they're genuinely the subject. Naming `plaidSync.ts` is fine; explaining a change only in terms of type variance is not.
+
+**Avoid:**
+
+- Jargon where a normal word works: prefer "check" over "assertion", "database column" over "generated column" (unless the distinction is the point), "runs before saving" over "BEFORE trigger".
+- Acronyms without expansion. MCC, PFC, RLS, RPC, FK — expand on first use in a message.
+- Explaining a fix purely in terms of the type system, schema internals, or framework mechanics. Translate it into what a user would have experienced.
+- Long code excerpts in a message when a sentence would do.
+
+**When precision genuinely matters** — an IRS rule, a security boundary, a money calculation — be exact, and then add a plain-language sentence saying what it means. Simplicity must never come at the cost of being accurate about regulated behavior, PHI handling, or anything involving someone's money.
+
+---
+
 ## External Security Documentation
 
 For third-party security questionnaires (e.g., Plaid, Stripe partner reviews), use the formal policy document at `docs/ACCESS_CONTROL_POLICY.md`. That document is written for external audiences and safe to upload. **Do not upload this CLAUDE.md file** — it contains internal implementation details and code.
@@ -40,13 +65,28 @@ Wellth.ai handles Protected Health Information (PHI) and Protected Financial Inf
 
 **Every new edge function MUST satisfy all of the following before being committed:**
 
-- [ ] **JWT validation** — call `supabase.auth.getUser()` and return 401 if the user is not authenticated. The only exceptions are explicitly documented public endpoints.
+- [ ] **JWT validation** — call `supabase.auth.getUser()` and return 401 if the user is not authenticated. The only exceptions are explicitly documented endpoints that declare a compensating control — see below.
 - [ ] **Dynamic CORS** — use `getCorsHeaders(req.headers.get('origin'))` with a whitelist array. Never use `'Access-Control-Allow-Origin': '*'`.
 - [ ] **Input validation** — validate the request body with Zod before using any values.
 - [ ] **URL validation** — if fetching an external URL from user input, validate scheme (`https:` only) and domain against an explicit allowlist.
 - [ ] **Generic error responses** — the catch block returns a generic message to the client and logs details server-side only. Auth errors (401) and input errors (400) may be specific since they are user-actionable.
 - [ ] **Least-privilege key** — use `SUPABASE_ANON_KEY` unless a privileged operation (e.g., admin DB write) requires `SUPABASE_SERVICE_ROLE_KEY`.
 - [ ] **User ownership check** — when accessing user-owned resources, verify `user_id = auth.uid()` in the query or in code.
+
+### Server-to-server endpoints, and how to declare one
+
+A webhook receiver has no end-user JWT — the caller is another company's server — and no browser origin to whitelist. Forcing `auth.getUser()` and CORS onto one is not achievable, and adding CORS headers to a webhook only widens what can reach it.
+
+Such an endpoint declares its exemption in a header comment, naming the control that stands in:
+
+```typescript
+// SECURITY-EXEMPTION(user-jwt): verifyPlaidWebhook
+// SECURITY-EXEMPTION(cors): server-to-server
+```
+
+**A comment on its own exempts nothing.** `.claude/hooks/done-checks.mjs` requires the named control to appear as an actual call in the same file, so the marker can only point at a real control, never wave a rule away. For `cors` the single accepted value is `server-to-server`. Wildcard CORS (`Access-Control-Allow-Origin: *`) is never exemptible on any endpoint.
+
+Anything exempted must still: verify the caller's signature before doing any work, return 401 when verification fails, and scope every write by a user id it resolved itself — never one taken from the request body. `supabase/functions/plaid-webhook/index.ts` is the worked example.
 
 ### Canonical Edge Function Template
 
@@ -156,7 +196,23 @@ serve(async (req) => {
 - [ ] **PHI-safe logging** — use `safeLog()` from `src/utils/errorHandler.ts` instead of `console.log/error` for any data that might contain user or health information.
 - [ ] **Error boundaries** — all new pages must be wrapped in `<ErrorBoundary>`.
 - [ ] **Protected routes** — all authenticated pages must be wrapped in `<ProtectedRoute>`.
-- [ ] **Authenticated layout** — all authenticated pages must use `<AuthenticatedLayout>` (not standalone `<AuthenticatedNav>`) to ensure sidebar and bottom nav appear on all devices.
+- [ ] **Authenticated layout** — all authenticated pages must use `<AuthenticatedLayout>` (not standalone `<AuthenticatedNav>`) to ensure sidebar and bottom nav appear on all devices. **One exception: setup.** See below.
+
+### The one exception to `<AuthenticatedLayout>`: first-run setup
+
+`<FocusedLayout>` (`src/components/FocusedLayout.tsx`) exists for Step 0 and is used by exactly two pages: `/welcome`, and `/onboarding/import` **when reached mid-setup**. It renders the logo, the flow, a theme toggle, and one visible way out — no sidebar, no bottom tabs, no top nav.
+
+**Why the general rule inverts here.** A brand-new account has no expenses, no records, and nothing to substantiate, so the full chrome offers six doors into empty rooms at the moment we are asking for the user's trust and their bank credentials. Worse, the top bar's "Snap a receipt" button is a competing call to action pointing at manual entry, sitting on the one screen whose entire job is to argue for connecting a bank instead.
+
+**Do not "fix" these two pages back onto `<AuthenticatedLayout>`.** It is a deliberate choice, not an oversight.
+
+**Rules for using `<FocusedLayout>`:**
+
+- **Setup only.** Any other authenticated page uses `<AuthenticatedLayout>`. If a second flow ever seems to need it, that is a conversation, not a copy-paste.
+- **Always give the user a way out.** Pass `onExit` unless the page body already renders an obvious, always-visible way onward (the import page during its sync is the only current case — there is nothing to escape to yet and it resolves within a minute). Chrome-free must never mean trapped.
+- **Exiting completes setup.** Skipping stamps `profiles.onboarding_completed_at` so the flow does not ambush the user again on the next sign-in. Every skipped question is asked again later where it actually blocks something.
+- **Security controls are not chrome.** `useSessionTimeout` stays; do not drop it in the name of a bare layout.
+- **`/onboarding/import` keeps the full layout for returning users** — someone connecting a second bank from Settings is in an app they already live in. `ImportFrame` in that file picks the frame; leave it conditional.
 
 ---
 
@@ -172,17 +228,20 @@ serve(async (req) => {
 
 ## Secrets & Key Management
 
-| Secret                          | Where it lives                 | Notes                                                                                  |
-| ------------------------------- | ------------------------------ | -------------------------------------------------------------------------------------- |
-| `VITE_SUPABASE_URL`             | Vercel env vars                | Public — safe to expose                                                                |
-| `VITE_SUPABASE_PUBLISHABLE_KEY` | Vercel env vars                | Anon key — safe to expose                                                              |
-| `VITE_STRIPE_PUBLISHABLE_KEY`   | Vercel env vars                | Publishable key — safe to expose                                                       |
-| `STRIPE_SECRET_KEY`             | Supabase Edge Function Secrets | Never in frontend or Vercel                                                            |
-| `PLAID_CLIENT_ID`               | Supabase Edge Function Secrets | Never in frontend                                                                      |
-| `PLAID_SECRET`                  | Supabase Edge Function Secrets | Never in frontend                                                                      |
-| `PLAID_ENCRYPTION_KEY`          | Supabase Edge Function Secrets | Base64-encoded 32-byte key; rotate on compromise                                       |
-| `GEMINI_API_KEY`                | Supabase Edge Function Secrets | Google AI Studio key for OCR. Phase 6: migrate to Vertex AI service-account auth (BAA) |
-| `SUPABASE_SERVICE_ROLE_KEY`     | Auto-injected by Supabase      | Never commit; never expose to frontend                                                 |
+| Secret                          | Where it lives                 | Notes                                                                                       |
+| ------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------- |
+| `VITE_SUPABASE_URL`             | Vercel env vars                | Public — safe to expose                                                                     |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | Vercel env vars                | Anon key — safe to expose                                                                   |
+| `VITE_STRIPE_PUBLISHABLE_KEY`   | Vercel env vars                | Publishable key — safe to expose                                                            |
+| `STRIPE_SECRET_KEY`             | Supabase Edge Function Secrets | Never in frontend or Vercel                                                                 |
+| `PLAID_CLIENT_ID`               | Supabase Edge Function Secrets | Never in frontend                                                                           |
+| `PLAID_SECRET`                  | Supabase Edge Function Secrets | Never in frontend                                                                           |
+| `PLAID_ENCRYPTION_KEY`          | Supabase Edge Function Secrets | Base64-encoded 32-byte key; rotate on compromise                                            |
+| `GOOGLE_SA_CLIENT_EMAIL`        | Supabase Edge Function Secrets | Vertex AI service-account email (OCR + classifier). BAA-covered                             |
+| `GOOGLE_SA_PRIVATE_KEY`         | Supabase Edge Function Secrets | Vertex AI service-account private key (PEM/PKCS#8). Never in frontend; rotate on compromise |
+| `GCP_PROJECT`                   | Supabase Edge Function Secrets | GCP project id hosting Vertex AI                                                            |
+| `VERTEX_REGION`                 | Supabase Edge Function Secrets | Vertex AI region, e.g. `us-central1`                                                        |
+| `SUPABASE_SERVICE_ROLE_KEY`     | Auto-injected by Supabase      | Never commit; never expose to frontend                                                      |
 
 **Rotation schedule:** Rotate all API keys every 90 days. Rotate immediately on suspected compromise.
 
@@ -263,8 +322,10 @@ When the IRS publishes new limits (typically November/December):
 
 1. Update `src/lib/regulatoryLimits.ts` — add a new year constant object and update the `_CURRENT` aliases
 2. Update `CURRENT_TAX_YEAR` in the same file
-3. Review `supabase/functions/wellbie-chat/index.ts` system prompt for stale limit references
-4. Run `npm run build` to confirm no TypeScript errors
+3. **Add the new medical mileage period to `MEDICAL_MILEAGE_RATES`** in the same file, and set `confirmed: true` on the prior year's provisional entry once verified against the IRS notice. Mileage entry shows a "provisional rate" warning for any unconfirmed period, and refuses to price a date with no period at all — so a missed January leaves users unable to log driving.
+4. Watch for **mid-year** rate changes (2022 had one). `MEDICAL_MILEAGE_RATES` is a list of date ranges precisely so a mid-year notice can be added as a new period rather than overwriting the year.
+5. Review `supabase/functions/wellbie-chat/index.ts` system prompt for stale limit references
+6. Run `npm run build` to confirm no TypeScript errors
 
 ---
 
@@ -342,6 +403,27 @@ Before committing any changes:
 6. For Plaid changes: use sandbox environment (`PLAID_ENV=sandbox`)
 7. For new edge functions: verify OPTIONS → 200, unauthenticated POST → 401, valid POST → expected response
 
+### The done-checks hook (automated — steps 1, 2 and part of the security policy)
+
+`.claude/hooks/done-checks.mjs` runs as a Claude Code **Stop** hook: at the end of any turn that wrote a file, it checks **only the files that turn touched** and refuses to let the turn end if they fail. `.claude/hooks/on-file-change.mjs` (PostToolUse) formats each written file with prettier and records its path for the Stop hook to read.
+
+| Check                                                                                                   | Applies to                                                 | Blocking?                        |
+| ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- | -------------------------------- |
+| `tsc --noEmit -p tsconfig.app.json`                                                                     | any changed `src/**/*.{ts,tsx}`                            | yes                              |
+| `eslint` on the changed files only                                                                      | any changed `src/**/*.{ts,tsx}`                            | yes, on errors                   |
+| Credential scan (private keys, Stripe/Supabase/Plaid tokens, pasted JWTs, secret assigned to a literal) | every changed file, plus `.claude/settings.json` every run | yes                              |
+| `CREATE TABLE` without `ENABLE ROW LEVEL SECURITY`; `SECURITY DEFINER` without `SET search_path`        | changed `supabase/migrations/*.sql`                        | yes                              |
+| `SELECT *`; migration filename format; "run a db reset" reminder                                        | changed `supabase/migrations/*.sql`                        | advisory                         |
+| Wildcard CORS, missing `getCorsHeaders`, missing `auth.getUser()`                                       | changed `supabase/functions/*/index.ts`                    | yes                              |
+| `import.meta.env.X` where X is neither `VITE_*` nor a Vite builtin                                      | changed `src/**`                                           | yes                              |
+| `MEDICAL_MILEAGE_RATES` gaps, overlaps, unconfirmed periods, no coverage for the current year           | changed `regulatoryLimits.ts`                              | gaps/overlaps yes, rest advisory |
+
+**Scoped to changed files on purpose.** The repo carries ~140 pre-existing lint problems; a whole-repo gate would fail on every turn and get switched off within a day.
+
+**It does not run `vite build` or `supabase db reset`** — the first adds a minute to prove what `tsc` already proved, the second means 89 migrations against Docker. When migrations change, the hook says to run `npx supabase db reset --no-seed` and leaves that call to a human.
+
+**It cannot trap a session.** The same failing batch blocks at most twice, then reports and lets the turn end — with an explicit instruction that the failures still have to be surfaced to the user rather than passed over. To silence it: `RECLAIM_SKIP_DONE_CHECKS=1`, or create `.claude/.done-checks-off` (gitignored).
+
 ---
 
 ## Subscription Tiers
@@ -356,13 +438,13 @@ Check subscription with `useSubscription()` hook from `src/contexts/Subscription
 
 ---
 
-## AI Integration (Gemini via Google AI direct)
+## AI Integration (Gemini via Vertex AI — BAA-covered)
 
-- Model: `gemini-2.5-flash` (via `generativelanguage.googleapis.com`)
-- Used for: Receipt OCR (`process-receipt-ocr`), Wellbie chat (deferred to v1.1 per brief)
+- Model: `gemini-2.5-flash` via **Vertex AI** (`{region}-aiplatform.googleapis.com`)
+- Used for: Receipt OCR (`process-receipt-ocr`) and the Pub 502 expense classifier (`classify-expense` / `_shared/expenseClassifier.ts`). Wellbie chat is deferred to v1.1 (and hidden behind `FF.WELLBIE_ENABLED`) — its own Vertex migration is deferred with it.
 - Always redact PHI before sending to AI — use `sanitizePHI()` from `src/utils/errorHandler.ts`
-- AI key (`GEMINI_API_KEY`) lives in Supabase Edge Function Secrets only
-- **BAA path:** the direct Google AI Studio endpoint is _not_ BAA-eligible. Phase 6 production cutover migrates this to **Vertex AI** (Google Cloud BAA-covered). Same prompts, same response shape — only the endpoint and auth header change.
+- **Auth:** service-account OAuth2 token minted in `_shared/vertexAuth.ts` from `GOOGLE_SA_CLIENT_EMAIL` / `GOOGLE_SA_PRIVATE_KEY` (+ `GCP_PROJECT` / `VERTEX_REGION`). No API key — the direct AI Studio endpoint is _not_ BAA-eligible, so receipt images and medical expense context must never hit `generativelanguage.googleapis.com`.
+- **Setup (out-of-repo):** sign the Google Cloud BAA, enable the Vertex AI API, create a service account with `roles/aiplatform.user`, and load the four secrets above into Supabase Edge Function Secrets.
 
 ---
 

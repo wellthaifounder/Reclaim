@@ -18,7 +18,7 @@ const stripePromise = loadStripe(stripeKey || "");
 
 export const EmbeddedCheckout = ({
   clientSecret,
-  onComplete,
+  onComplete: _onComplete,
 }: EmbeddedCheckoutProps) => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

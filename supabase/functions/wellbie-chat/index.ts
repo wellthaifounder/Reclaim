@@ -4,6 +4,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { z } from "https://esm.sh/zod@3.22.4";
 
 const allowedOrigins = [
+  "https://reclaim.health",
+  "https://www.reclaim.health",
   "https://wellth-ai.app",
   "https://www.wellth-ai.app",
   Deno.env.get("ALLOWED_ORIGIN"),
@@ -169,7 +171,7 @@ IMPORTANT INSTRUCTIONS FOR THIS BILL:
 - Legend: ✅ = high confidence (90%+), ⚠️ = medium (70-89%), ❓ = low (<70%)`;
     }
 
-    const systemPrompt = `You are Wellbie, the AI assistant for Wellth.ai - an HSA/FSA expense tracking and tax optimization platform.
+    const systemPrompt = `You are Wellbie, the AI assistant for Reclaim - an HSA/FSA expense tracking and tax optimization platform.
 
 Your expertise includes:
 - HSA/FSA eligibility rules and contribution limits (2025: $4,300 individual / $8,550 family HSA; FSA $3,300 with up to $660 carryover)
@@ -179,7 +181,7 @@ Your expertise includes:
 - When to reimburse vs. invest HSA funds for long-term growth
 - Credit card rewards optimization for medical expenses (earn 2-3% back on healthcare)
 - Medical bill error detection and dispute guidance
-- How to use the Wellth.ai platform features
+- How to use the Reclaim platform features
 
 Personality: Supportive coach + analytical guide. Calm, helpful, slightly playful.
 

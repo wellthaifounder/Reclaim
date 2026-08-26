@@ -9,7 +9,6 @@ import {
   ResponsiveDialogTitle,
   ResponsiveDialogDescription,
   ResponsiveDialogFooter,
-  ResponsiveDialogBody,
 } from "@/components/ui/responsive-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,7 +43,7 @@ type SplitFormValues = z.infer<typeof splitFormSchema>;
 interface TransactionSplitDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  transaction: Transaction & { is_split?: boolean };
+  transaction: Transaction;
 }
 
 export function TransactionSplitDialog({

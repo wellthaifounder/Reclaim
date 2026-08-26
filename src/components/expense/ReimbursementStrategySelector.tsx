@@ -16,10 +16,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  getDefaultReimbursementDate,
-  getReimbursementStrategyLabel,
-} from "@/lib/vaultCalculations";
+import { getDefaultReimbursementDate } from "@/lib/vaultCalculations";
 
 interface ReimbursementStrategySelectorProps {
   enabled: boolean;

@@ -2,6 +2,8 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const allowedOrigins = [
+  "https://reclaim.health",
+  "https://www.reclaim.health",
   "https://wellth-ai.app",
   "https://www.wellth-ai.app",
   Deno.env.get("ALLOWED_ORIGIN"),
@@ -77,8 +79,24 @@ serve(async (req) => {
     // `<ref>.functions.supabase.co/<name>` hostname rather than the legacy
     // `<ref>.supabase.co/functions/v1/<name>` pattern — the latter does not
     // resolve as a public hostname for this project (verified 2026-05-24).
+    //
+    // Against a local stack SUPABASE_URL is `http://kong:8000`, so the ref came
+    // out as "kong:8000" and Plaid rejected the whole request with "webhook
+    // must be a valid URL string". That made this function — and therefore the
+    // entire connect-a-bank flow — impossible to exercise locally, which is
+    // why the sync rewrite went unverified for so long. A ref only looks like
+    // a real project when it is bare alphanumerics; anything else means we are
+    // not running against hosted Supabase and there is no public URL for Plaid
+    // to call back to, so we omit the webhook rather than sending a broken one.
     const projectRef = supabaseUrl.replace(/^https?:\/\//, "").split(".")[0];
-    const webhookUrl = `https://${projectRef}.functions.supabase.co/plaid-webhook`;
+    const webhookUrl = /^[a-z0-9]+$/i.test(projectRef)
+      ? `https://${projectRef}.functions.supabase.co/plaid-webhook`
+      : null;
+    if (!webhookUrl) {
+      console.log(
+        `[${requestId}] No public webhook URL for host "${projectRef}" — creating link token without one. Expected on a local stack; in production this means SUPABASE_URL is wrong.`,
+      );
+    }
 
     // Create Plaid link token
     const response = await fetch(`${plaidBaseUrl}/link/token/create`, {
@@ -92,11 +110,13 @@ serve(async (req) => {
         user: {
           client_user_id: user.id,
         },
-        client_name: "Wellth",
+        client_name: "Reclaim",
         products: ["transactions"],
         country_codes: ["US"],
         language: "en",
-        webhook: webhookUrl,
+        // Omitted entirely when there is no public URL — Plaid rejects a
+        // malformed one, and `webhook: null` is itself malformed.
+        ...(webhookUrl ? { webhook: webhookUrl } : {}),
       }),
     });
 

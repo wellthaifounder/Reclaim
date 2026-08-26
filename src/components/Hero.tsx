@@ -22,9 +22,15 @@ export const Hero = () => {
     rootMargin: "50px",
   });
 
+  // The four-step savings quiz this used to open was retired on 2026-08-20.
+  // Its job was to get a visitor to an estimate and then to sign-up; the app
+  // now does that with the visitor's own bank data on the historical-import
+  // screen, which is a real number instead of a guessed one. Kept as its own
+  // handler (rather than folded into handleAuthClick) so the two hero buttons
+  // stay separable in the funnel data.
   const handleCalculatorClick = () => {
     analytics.ctaClick("calculator", "hero");
-    navigate("/calculator");
+    navigate("/auth?signup=1");
   };
 
   const handleAuthClick = () => {
@@ -92,10 +98,11 @@ export const Hero = () => {
                 aria-hidden="true"
               />
               <h3 className="font-semibold text-white mb-2 text-sm sm:text-base">
-                Group by Care Event
+                Sorted Automatically
               </h3>
               <p className="text-xs sm:text-sm text-white/80">
-                Group related expenses by episode of care or treatment
+                Bank transactions sorted into medical and not, so you only
+                review what matters
               </p>
             </div>
             <div className="rounded-lg bg-white/10 p-4 sm:p-6 backdrop-blur-sm border border-white/20 transition-all hover:bg-white/15">
@@ -131,7 +138,7 @@ export const Hero = () => {
               size="lg"
               className="w-full sm:w-auto group bg-accent text-accent-foreground hover:bg-accent/90 shadow-lg hover:shadow-xl transition-all text-sm sm:text-base"
               onClick={handleCalculatorClick}
-              aria-label="See how much you could save with Wellth"
+              aria-label="See how much you could save with Reclaim"
             >
               See How Much You Could Save
               <ArrowRight
@@ -144,7 +151,7 @@ export const Hero = () => {
               variant="outline"
               className="w-full sm:w-auto border-white/20 bg-white/10 text-white backdrop-blur-sm hover:bg-white/20 text-sm sm:text-base"
               onClick={handleAuthClick}
-              aria-label="Start using Wellth for free"
+              aria-label="Start using Reclaim for free"
             >
               Start Free
             </Button>
@@ -209,7 +216,7 @@ export const Hero = () => {
                 Built for HSA & FSA Holders
               </h3>
               <p className="text-sm sm:text-base text-white/80">
-                Wellth is designed to help you get the most from your
+                Reclaim is designed to help you get the most from your
                 tax-advantaged healthcare accounts.
               </p>
             </div>

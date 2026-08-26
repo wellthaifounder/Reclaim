@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="Reclaim — Upward Recovery Stroke concept">
+  <!-- Concept D: Upward Recovery Stroke
+       A single continuous stroke drops then sweeps up, doubling as a checkmark
+       (eligible / verified). Most minimal + favicon-friendly; easy to animate
+       (line draws itself on load). -->
+  <title>Reclaim — Upward Recovery Stroke</title>
+
+  <!-- palette: teal=#0e9b94  gold=#e0b03f -->
+  <!-- recovery / checkmark stroke with a gradient from teal (start) to gold (recovered) -->
+  <defs>
+    <linearGradient id="recover" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#0e9b94" />
+      <stop offset="1" stop-color="#e0b03f" />
+    </linearGradient>
+  </defs>
+  <path d="M56 120 L112 184 L208 64"
+        fill="none" stroke="url(#recover)" stroke-width="26" stroke-linecap="round" stroke-linejoin="round" />
+</svg>

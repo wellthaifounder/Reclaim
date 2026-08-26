@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="Reclaim — Capture Brackets concept">
+  <!-- Concept A: Capture Brackets + Return
+       Corner brackets = receipt-scanner reticle (the product's "Capture" step).
+       Inner stroke dips then sweeps upward = value reclaimed. -->
+  <title>Reclaim — Capture Brackets + Return</title>
+
+  <!-- palette: teal=#0e9b94  gold=#e0b03f  navy=#1a2238 -->
+  <g id="brackets" fill="none" stroke="#0e9b94" stroke-width="16" stroke-linecap="round" stroke-linejoin="round">
+    <!-- top-left -->
+    <path d="M56 92 V56 H92" />
+    <!-- top-right -->
+    <path d="M164 56 H200 V92" />
+    <!-- bottom-left -->
+    <path d="M56 164 V200 H92" />
+    <!-- bottom-right -->
+    <path d="M164 200 H200 V164" />
+  </g>
+
+  <!-- return stroke: drops then sweeps up; gold tip = the reclaimed value -->
+  <g id="return">
+    <path d="M88 150 C104 150 108 116 128 116 C148 116 152 150 168 116"
+          fill="none" stroke="#1a2238" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" />
+    <!-- arrowhead on the upswing -->
+    <path d="M168 116 l-2 22 l20 -10 Z" fill="#e0b03f" stroke="none" />
+  </g>
+</svg>

@@ -25,10 +25,6 @@ const pricingTiers = [
       { text: "Basic receipt storage (50 MB)", included: true },
       { text: "Smart expense categorization", included: true },
       { text: "Simple reimbursement PDFs", included: true },
-      {
-        text: "Basic Wellbie AI assistant (10 messages/month)",
-        included: true,
-      },
       { text: "Receipt OCR automation", included: false },
       { text: "Bank account connections", included: false },
       { text: "Advanced analytics", included: false },
@@ -47,7 +43,6 @@ const pricingTiers = [
       { text: "All Starter features", included: true },
       { text: "Unlimited bills/month", included: true },
       { text: "Receipt OCR automation", included: true },
-      { text: "Unlimited Wellbie AI assistant", included: true },
       { text: "Bank/card integration via Plaid", included: true },
       { text: "Pre-Purchase Decision Tool", included: true },
       { text: "Link transactions to bills", included: true },
@@ -87,7 +82,7 @@ const pricingTiers = [
 ];
 
 export const Pricing = () => {
-  const { createCheckoutSession, tier } = useSubscription();
+  const { createCheckoutSession } = useSubscription();
   const navigate = useNavigate();
   const { ref: headerRef, isVisible: headerVisible } = useScrollAnimation({
     threshold: 0.3,
@@ -222,10 +217,10 @@ export const Pricing = () => {
           <div className="space-y-6">
             <div>
               <h4 className="mb-2 font-semibold">
-                Do I need an HSA to use Wellth?
+                Do I need an HSA to use Reclaim?
               </h4>
               <p className="text-muted-foreground">
-                <strong>No!</strong> Wellth helps anyone save on healthcare
+                <strong>No!</strong> Reclaim helps anyone save on healthcare
                 costs through smarter payment strategies, receipt organization,
                 and tax-deductible expense tracking. If you <em>do</em> have an
                 HSA, you'll unlock bonus features like investment tracking and

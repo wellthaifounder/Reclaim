@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronDown, ChevronUp, Edit } from "lucide-react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -11,7 +11,9 @@ import type { Database } from "@/integrations/supabase/types";
 type Transaction = Database["public"]["Tables"]["transactions"]["Row"];
 
 interface SplitTransactionCardProps {
-  transaction: Transaction & { is_split?: boolean };
+  // is_split is already on the row type; the old `& { is_split?: boolean }`
+  // intersection predated that and conflicted with the row's nullability.
+  transaction: Transaction;
 }
 
 export function SplitTransactionCard({
