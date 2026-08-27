@@ -14,11 +14,12 @@ verify_jwt = true
 [functions.classify-expense]
 verify_jwt = true
 
-[functions.create-tripwire-checkout]
-verify_jwt = false
-
-[functions.get-checkout-session]
-verify_jwt = false
+# Removed 2026-08-26: create-tripwire-checkout, get-checkout-session,
+# sync-provider-data and run-migration. All four had no caller left in the
+# app and all four answered unauthenticated requests in production. The first
+# two were pinned open by `verify_jwt = false` right here, which is how a
+# stranger could mint Stripe checkout sessions and read back any session's
+# metadata by id. Do not re-add an entry for a function that no longer exists.
 
 [functions.wellbie-chat]
 verify_jwt = true

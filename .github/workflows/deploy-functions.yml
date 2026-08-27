@@ -172,3 +172,34 @@ jobs:
             echo "::error::Reachable without authentication:$bad"
             exit 1
           fi
+
+      - name: Report functions live in production with no source here
+        if: always()
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+        run: |
+          set -uo pipefail
+          # Deploying never deletes. A function removed from this repo keeps
+          # running in production forever, serving code nobody can read here.
+          # On 2026-08-26 that was four dead endpoints answering anonymous
+          # requests -- one of them a service-role SQL runner with wildcard
+          # CORS -- plus two whose source had been deleted months earlier.
+          #
+          # Reported, never acted on: a bad diff must not be able to delete
+          # production infrastructure unattended. Removal stays a human running
+          # `supabase functions delete <name> --project-ref <id>`.
+          [ -n "${SUPABASE_ACCESS_TOKEN:-}" ] && [ -n "${PROJECT_ID:-}" ] || exit 0
+          live=$(supabase functions list --project-ref "$PROJECT_ID" 2>/dev/null \
+                 | awk -F'|' 'NF>3 {gsub(/ /,"",$3); if ($3 ~ /^[a-z0-9][a-z0-9-]*$/) print $3}' \
+                 | sort)
+          [ -n "$live" ] || { echo "Could not list deployed functions; skipping."; exit 0; }
+          here=$(find supabase/functions -mindepth 1 -maxdepth 1 -type d \
+                   ! -name '_*' -printf '%f\n' | sort)
+          orphans=$(comm -23 <(echo "$live") <(echo "$here"))
+          if [ -n "$orphans" ]; then
+            echo "::warning::Deployed with no source in this repo — review and delete if dead:"
+            echo "$orphans" | sed 's/^/  /'
+          else
+            echo "Every deployed function has source in this repo."
+          fi

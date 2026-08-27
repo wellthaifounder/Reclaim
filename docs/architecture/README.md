@@ -229,9 +229,7 @@ See [Authentication Flow](#authentication-flow) below.
 
 - `check-subscription` - Verify subscription status
 - `create-checkout` - Create Stripe checkout session
-- `create-tripwire-checkout` - Tripwire offer checkout
 - `customer-portal` - Stripe customer portal access
-- `get-checkout-session` - Retrieve checkout session
 
 **Banking (Plaid):**
 
@@ -254,7 +252,6 @@ See [Authentication Flow](#authentication-flow) below.
 **Provider Data:**
 
 - `sync-npi-data` - Sync NPI provider database
-- `sync-provider-data` - General provider sync
 
 **AI:**
 

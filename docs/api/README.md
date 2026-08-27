@@ -20,9 +20,7 @@ Wellth.ai uses **17 serverless edge functions** deployed on Supabase (Deno runti
 | [analyze-medical-bill](#analyze-medical-bill)           | POST   | AI bill error detection    | Yes           |
 | [check-subscription](#check-subscription)               | POST   | Verify subscription status | Yes           |
 | [create-checkout](#create-checkout)                     | POST   | Create Stripe checkout     | Yes           |
-| [create-tripwire-checkout](#create-tripwire-checkout)   | POST   | Tripwire offer checkout    | Yes           |
 | [customer-portal](#customer-portal)                     | POST   | Stripe customer portal     | Yes           |
-| [get-checkout-session](#get-checkout-session)           | POST   | Retrieve checkout session  | Yes           |
 | [plaid-create-link-token](#plaid-create-link-token)     | POST   | Generate Plaid Link token  | Yes           |
 | [plaid-exchange-token](#plaid-exchange-token)           | POST   | Exchange Plaid token       | Yes           |
 | [plaid-sync-transactions](#plaid-sync-transactions)     | POST   | Sync bank transactions     | Yes           |
@@ -31,8 +29,15 @@ Wellth.ai uses **17 serverless edge functions** deployed on Supabase (Deno runti
 | [send-dispute-notification](#send-dispute-notification) | POST   | Send dispute emails        | Yes           |
 | [send-nurture-email](#send-nurture-email)               | POST   | Send marketing email       | Yes           |
 | [sync-npi-data](#sync-npi-data)                         | POST   | Sync NPI provider data     | Admin         |
-| [sync-provider-data](#sync-provider-data)               | POST   | Sync provider database     | Admin         |
 | [wellbie-chat](#wellbie-chat)                           | POST   | AI chat assistant          | Yes           |
+
+> **This table is stale and the "Auth Required" column is not evidence.** It
+> still lists functions that no longer exist, and until 2026-08-26 it claimed
+> `create-tripwire-checkout` and `get-checkout-session` required auth while
+> `supabase/config.toml` pinned both open to anonymous callers. The
+> authoritative answers are the function's own source and `config.toml`; the
+> deploy workflow re-derives the gateway flag from the source and probes every
+> non-exempt function unauthenticated after deploying.
 
 ## Functions by Category
 
@@ -103,21 +108,6 @@ Wellth.ai uses **17 serverless edge functions** deployed on Supabase (Deno runti
 
 ---
 
-#### create-tripwire-checkout
-
-**Purpose:** Create checkout for tripwire offer
-
-**Description:** Generates a special discounted checkout session for first-time subscribers.
-
-**Use Cases:**
-
-- Promotional offers
-- First-time subscriber discounts
-
-**[View detailed documentation →](edge-functions/create-tripwire-checkout.md)** _(coming soon)_
-
----
-
 #### customer-portal
 
 **Purpose:** Generate Stripe customer portal link
@@ -131,21 +121,6 @@ Wellth.ai uses **17 serverless edge functions** deployed on Supabase (Deno runti
 - Billing history access
 
 **[View detailed documentation →](edge-functions/customer-portal.md)** _(coming soon)_
-
----
-
-#### get-checkout-session
-
-**Purpose:** Retrieve Stripe checkout session details
-
-**Description:** Fetches checkout session information to verify payment success and update user subscription.
-
-**Use Cases:**
-
-- Post-payment verification
-- Subscription activation
-
-**[View detailed documentation →](edge-functions/get-checkout-session.md)** _(coming soon)_
 
 ---
 
@@ -270,21 +245,6 @@ Wellth.ai uses **17 serverless edge functions** deployed on Supabase (Deno runti
 - Periodic provider data updates
 
 **[View detailed documentation →](edge-functions/sync-npi-data.md)** _(coming soon)_
-
----
-
-#### sync-provider-data
-
-**Purpose:** General provider data synchronization
-
-**Description:** Admin function for syncing provider information from various sources into the provider directory.
-
-**Use Cases:**
-
-- Provider database maintenance
-- Data quality improvements
-
-**[View detailed documentation →](edge-functions/sync-provider-data.md)** _(coming soon)_
 
 ---
 
