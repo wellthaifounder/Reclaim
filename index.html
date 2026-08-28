@@ -5,20 +5,22 @@
     <link rel="icon" type="image/png" href="/reclaim-icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    <!-- Security Headers (Tier 4 Enhancement) -->
+    <!-- Content Security Policy.
+         Delivered as a <meta> tag because it is the only one of these that a
+         meta tag can actually enforce. The others -- X-Frame-Options,
+         X-Content-Type-Options, Referrer-Policy, Permissions-Policy -- were
+         also duplicated here and every one of them is IGNORED when delivered
+         this way; browsers only honour them as real response headers. They
+         are set as headers in vercel.json, which is what is actually
+         protecting the site (verified against the live response). The copies
+         here did nothing but log two errors to every visitor's console on
+         every page load.
+
+         `frame-ancestors` is removed for the same reason -- a meta CSP cannot
+         express it. Framing is denied by the X-Frame-Options header instead. -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://cdn.plaid.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https: blob:; font-src 'self' https://fonts.gstatic.com data:; connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:* https://*.supabase.co https://sandbox.plaid.com https://production.plaid.com https://api.stripe.com; frame-src 'self' http://localhost:* http://127.0.0.1:* https://js.stripe.com https://cdn.plaid.com https://*.supabase.co; frame-ancestors 'none'; base-uri 'self'; form-action 'self';"
-    />
-    <meta http-equiv="X-Content-Type-Options" content="nosniff" />
-    <meta http-equiv="X-Frame-Options" content="DENY" />
-    <meta
-      http-equiv="Referrer-Policy"
-      content="strict-origin-when-cross-origin"
-    />
-    <meta
-      http-equiv="Permissions-Policy"
-      content="geolocation=(), microphone=(), camera=()"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://cdn.plaid.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https: blob:; font-src 'self' https://fonts.gstatic.com data:; connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:* https://*.supabase.co https://sandbox.plaid.com https://production.plaid.com https://api.stripe.com; frame-src 'self' http://localhost:* http://127.0.0.1:* https://js.stripe.com https://cdn.plaid.com https://*.supabase.co; base-uri 'self'; form-action 'self';"
     />
 
     <!--
