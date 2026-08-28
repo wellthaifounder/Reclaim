@@ -32,12 +32,8 @@ import { PlaidLink } from "@/components/PlaidLink";
 import { FamilyRosterCard } from "@/components/family/FamilyRosterCard";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Calendar } from "@/components/ui/calendar";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { DateField } from "@/components/ui/date-field";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -414,32 +410,23 @@ function HsaDateStep({
           </div>
 
           {mode === "exact" ? (
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className={cn(
-                    "w-full justify-start text-left font-normal",
-                    !date && "text-muted-foreground",
-                  )}
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {date ? format(date, "PPP") : "Pick a date"}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={date}
-                  onSelect={setDate}
-                  initialFocus
-                  className="pointer-events-auto"
-                  disabled={(d) =>
-                    d > new Date() || d < new Date(FIRST_HSA_YEAR, 0, 1)
-                  }
-                />
-              </PopoverContent>
-            </Popover>
+            <div className="space-y-1.5">
+              <Label htmlFor="hsa-opened-date" className="text-xs">
+                Date your HSA was opened
+              </Label>
+              <DateField
+                id="hsa-opened-date"
+                aria-label="Date your HSA was opened"
+                value={date}
+                onChange={setDate}
+                fromDate={new Date(FIRST_HSA_YEAR, 0, 1)}
+                toDate={new Date()}
+                outOfRangeMessage={`HSAs didn't exist before ${FIRST_HSA_YEAR}, and the date can't be in the future.`}
+              />
+              <p className="text-xs text-muted-foreground">
+                Type it, or use the calendar.
+              </p>
+            </div>
           ) : (
             <div className="space-y-3">
               <Select value={year} onValueChange={setYear}>

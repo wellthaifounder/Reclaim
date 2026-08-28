@@ -455,8 +455,14 @@ export default function Transactions() {
   const stats = {
     total: spending.length,
     medical: spending.filter((t) => t.is_medical).length,
-    unlinked: spending.filter((t) => t.reconciliation_status === "unlinked")
-      .length,
+    // The one true review count. Do not reach for `reconciliation_status ===
+    // "unlinked"` here: plaidSync.ts stamps that on every row at ingest, so it
+    // always equals `total` and means "no expense attached yet", not "a human
+    // still has to decide". Both the "Needs Review" card and the sidebar badge
+    // read it by mistake, which is how a fully-sorted account reported "48
+    // need review" directly above "Nothing to review". The unlinked-medical
+    // figure that IS worth showing already reaches the dashboard through
+    // useAttentionItems, correctly filtered by is_medical.
     needsReview: spending.filter((t) => t.needs_review).length,
     totalAmount: spending.reduce((sum, t) => sum + Number(t.amount), 0),
     medicalAmount: spending
@@ -482,7 +488,7 @@ export default function Transactions() {
         fetchTransactions();
       }}
     >
-      <AuthenticatedLayout unreviewedTransactions={stats.unlinked}>
+      <AuthenticatedLayout unreviewedTransactions={stats.needsReview}>
         <div className="container mx-auto px-4 py-8 max-w-6xl">
           {!hsaOpenedDate && <MissingHSADateBanner onDateSet={fetchHSADate} />}
 
@@ -541,7 +547,7 @@ export default function Transactions() {
             <Card className="p-4">
               <p className="text-sm text-muted-foreground">Needs Review</p>
               <p className="text-2xl font-bold text-yellow-600">
-                {stats.unlinked}
+                {stats.needsReview}
               </p>
             </Card>
             <Card className="p-4">
