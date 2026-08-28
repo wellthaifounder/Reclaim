@@ -17,12 +17,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ReclaimLogo } from "@/components/ReclaimLogo";
 import { toast } from "sonner";
 import { z } from "zod";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import { ChevronDown } from "lucide-react";
 
 const PRIVACY_POLICY_VERSION = "2026-04-24";
 
@@ -46,6 +40,19 @@ const GoogleIcon = ({ className }: { className?: string }) => (
       fill="#EA4335"
     />
   </svg>
+);
+
+const OrDivider = () => (
+  <div className="relative py-1">
+    <div className="absolute inset-0 flex items-center">
+      <span className="w-full border-t" />
+    </div>
+    <div className="relative flex justify-center">
+      <span className="bg-card px-2 text-xs uppercase tracking-wide text-muted-foreground">
+        or
+      </span>
+    </div>
+  </div>
 );
 
 const signUpSchema = z.object({
@@ -79,11 +86,17 @@ const Auth = () => {
   const [loading, setLoading] = useState(false);
   const [showReset, setShowReset] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
-  // Hybrid auth (Wave 5, 2026-05-06): Google sign-in is the primary CTA;
-  // email/password sits behind a collapsed "More options" toggle. URL param
-  // `?email=1` opens it directly so a forgot-password link can deep-link to
-  // the form.
-  const [emailOpen, setEmailOpen] = useState(searchParams.get("email") === "1");
+  // Both auth paths are shown at once (2026-08-27), email/password first.
+  //
+  // Google used to be the only visible option, with email/password collapsed
+  // behind a "More options" toggle. That is the wrong default for this
+  // product specifically: the people most likely to hesitate before attaching
+  // their Google identity to an app that reads their bank transactions and
+  // their medical spending are exactly the people this is built for. Hiding
+  // the alternative spent that hesitation at the moment of highest intent.
+  //
+  // `?email=1` is still accepted so older links (a forgot-password mail, for
+  // instance) keep working; it just has nothing left to expand.
 
   // Sign up form
   const [signUpData, setSignUpData] = useState({
@@ -193,11 +206,20 @@ const Auth = () => {
 
       if (error) throw error;
 
+      // `session` is null exactly when the project requires email confirmation.
+      // That single fact decides everything below, so read it once.
+      const needsConfirmation = !signUpResult.session;
+
       // Default user_intent='both' so HSA features are visible without forcing
       // an intent picker upfront (Wave 5, 2026-05-06). The migration also sets
       // 'both' as the column default; this explicit write covers the case
       // where the trigger inserts the row before the user is fully provisioned.
-      if (signUpResult.user) {
+      //
+      // Only attempted with a session: with confirmation on there is no auth
+      // yet, so row-level security rejects this write. The two consent values
+      // are not lost -- they were passed as user metadata on signUp above and
+      // are recorded against the auth user either way.
+      if (signUpResult.user && !needsConfirmation) {
         await supabase
           .from("profiles")
           .update({
@@ -215,7 +237,18 @@ const Auth = () => {
         supabase.functions.invoke("send-welcome-email").catch(() => {});
       }
 
-      toast.success("Account created! You can now sign in.");
+      // Tell the truth about what has to happen next. This previously said
+      // "Account created! You can now sign in." unconditionally -- and with
+      // confirmation required, signing in immediately fails with "Email not
+      // confirmed", which reads as the account not having been created at all.
+      if (needsConfirmation) {
+        toast.success(
+          `Check ${validated.email} for a confirmation link. You'll be able to sign in once you've opened it.`,
+          { duration: 10000 },
+        );
+      } else {
+        toast.success("Account created! You can now sign in.");
+      }
       setSignUpData({ fullName: "", email: "", password: "" });
       setTermsAccepted(false);
     } catch (error) {
@@ -248,7 +281,17 @@ const Auth = () => {
       if (error instanceof z.ZodError) {
         toast.error(error.errors[0].message);
       } else if (error instanceof Error) {
-        toast.error(error.message);
+        // Supabase returns the bare string "Email not confirmed" here, which
+        // tells someone what is wrong but not what to do, and gives no hint
+        // that the link is sitting in their inbox (or their spam folder).
+        if (/email not confirmed/i.test(error.message)) {
+          toast.error(
+            "Confirm your email first — we sent a link when you signed up. Check your spam folder if it isn't there.",
+            { duration: 10000 },
+          );
+        } else {
+          toast.error(error.message);
+        }
       }
     } finally {
       setLoading(false);
@@ -385,6 +428,55 @@ const Auth = () => {
             </TabsList>
 
             <TabsContent value="signin" className="space-y-4">
+              <form onSubmit={handleSignIn} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="signin-email">Email</Label>
+                  <Input
+                    id="signin-email"
+                    type="email"
+                    autoComplete="email"
+                    placeholder="name@example.com"
+                    value={signInData.email}
+                    onChange={(e) =>
+                      setSignInData({
+                        ...signInData,
+                        email: e.target.value,
+                      })
+                    }
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="signin-password">Password</Label>
+                  <Input
+                    id="signin-password"
+                    type="password"
+                    autoComplete="current-password"
+                    value={signInData.password}
+                    onChange={(e) =>
+                      setSignInData({
+                        ...signInData,
+                        password: e.target.value,
+                      })
+                    }
+                    required
+                  />
+                </div>
+                <Button type="submit" className="w-full" disabled={loading}>
+                  {loading ? "Signing in..." : "Sign In"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="link"
+                  className="w-full"
+                  onClick={() => setShowReset(true)}
+                >
+                  Forgot password?
+                </Button>
+              </form>
+
+              <OrDivider />
+
               <Button
                 type="button"
                 variant="outline"
@@ -396,67 +488,136 @@ const Auth = () => {
                 <GoogleIcon className="mr-2 h-4 w-4" />
                 Continue with Google
               </Button>
-
-              <Collapsible open={emailOpen} onOpenChange={setEmailOpen}>
-                <CollapsibleTrigger className="flex w-full items-center justify-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors py-2">
-                  <ChevronDown
-                    className={`h-4 w-4 transition-transform ${emailOpen ? "rotate-180" : ""}`}
-                  />
-                  <span>
-                    {emailOpen ? "Hide email sign-in" : "More options"}
-                  </span>
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <form onSubmit={handleSignIn} className="space-y-4 pt-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="signin-email">Email</Label>
-                      <Input
-                        id="signin-email"
-                        type="email"
-                        placeholder="name@example.com"
-                        value={signInData.email}
-                        onChange={(e) =>
-                          setSignInData({
-                            ...signInData,
-                            email: e.target.value,
-                          })
-                        }
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="signin-password">Password</Label>
-                      <Input
-                        id="signin-password"
-                        type="password"
-                        value={signInData.password}
-                        onChange={(e) =>
-                          setSignInData({
-                            ...signInData,
-                            password: e.target.value,
-                          })
-                        }
-                        required
-                      />
-                    </div>
-                    <Button type="submit" className="w-full" disabled={loading}>
-                      {loading ? "Signing in..." : "Sign In"}
-                    </Button>
-
-                    <Button
-                      type="button"
-                      variant="link"
-                      className="w-full"
-                      onClick={() => setShowReset(true)}
-                    >
-                      Forgot password?
-                    </Button>
-                  </form>
-                </CollapsibleContent>
-              </Collapsible>
             </TabsContent>
 
             <TabsContent value="signup" className="space-y-4">
+              <form onSubmit={handleSignUp} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="signup-name">Full Name</Label>
+                  <Input
+                    id="signup-name"
+                    type="text"
+                    placeholder="John Doe"
+                    value={signUpData.fullName}
+                    onChange={(e) =>
+                      setSignUpData({
+                        ...signUpData,
+                        fullName: e.target.value,
+                      })
+                    }
+                    onBlur={(e) =>
+                      validateSignUpField("fullName", e.target.value)
+                    }
+                    required
+                  />
+                  {fieldErrors.fullName && (
+                    <p className="text-sm text-destructive">
+                      {fieldErrors.fullName}
+                    </p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="signup-email">Email</Label>
+                  <Input
+                    id="signup-email"
+                    type="email"
+                    placeholder="name@example.com"
+                    value={signUpData.email}
+                    onChange={(e) =>
+                      setSignUpData({
+                        ...signUpData,
+                        email: e.target.value,
+                      })
+                    }
+                    onBlur={(e) => validateSignUpField("email", e.target.value)}
+                    required
+                  />
+                  {fieldErrors.email && (
+                    <p className="text-sm text-destructive">
+                      {fieldErrors.email}
+                    </p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="signup-password">Password</Label>
+                  <Input
+                    id="signup-password"
+                    type="password"
+                    placeholder="Min. 8 characters"
+                    value={signUpData.password}
+                    onChange={(e) =>
+                      setSignUpData({
+                        ...signUpData,
+                        password: e.target.value,
+                      })
+                    }
+                    onBlur={(e) =>
+                      validateSignUpField("password", e.target.value)
+                    }
+                    required
+                  />
+                  {fieldErrors.password && (
+                    <p className="text-sm text-destructive">
+                      {fieldErrors.password}
+                    </p>
+                  )}
+                  {!fieldErrors.password &&
+                    signUpData.password.length > 0 &&
+                    signUpData.password.length >= 8 && (
+                      <p className="text-sm text-green-600">
+                        Password strength: OK
+                      </p>
+                    )}
+                </div>
+                {/* Terms gate BOTH paths, so this sits above the two buttons
+                    rather than inside either one. */}
+                <div className="flex items-start space-x-2 pt-1">
+                  <Checkbox
+                    id="terms-accepted"
+                    checked={termsAccepted}
+                    onCheckedChange={(checked) =>
+                      setTermsAccepted(checked === true)
+                    }
+                    className="mt-0.5"
+                  />
+                  <Label
+                    htmlFor="terms-accepted"
+                    className="text-xs font-normal leading-relaxed text-muted-foreground"
+                  >
+                    I agree to Reclaim's{" "}
+                    <a
+                      href="/terms"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary underline"
+                    >
+                      Terms of Service
+                    </a>{" "}
+                    and{" "}
+                    <a
+                      href="/privacy"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary underline"
+                    >
+                      Privacy Policy
+                    </a>{" "}
+                    and consent to the collection, processing, and storage of my
+                    data as described therein.
+                  </Label>
+                </div>
+
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={loading || !termsAccepted}
+                >
+                  {loading ? "Creating account..." : "Create Account"}
+                </Button>
+              </form>
+
+              <OrDivider />
+
               <Button
                 type="button"
                 variant="outline"
@@ -468,145 +629,11 @@ const Auth = () => {
                 <GoogleIcon className="mr-2 h-4 w-4" />
                 Continue with Google
               </Button>
-
-              {/* Terms must be accepted before either auth path. Lives outside
-                  the email collapsible so it gates Google signup too. */}
-              <div className="flex items-start space-x-2 pt-1">
-                <Checkbox
-                  id="terms-accepted"
-                  checked={termsAccepted}
-                  onCheckedChange={(checked) =>
-                    setTermsAccepted(checked === true)
-                  }
-                  className="mt-0.5"
-                />
-                <Label
-                  htmlFor="terms-accepted"
-                  className="text-xs font-normal leading-relaxed text-muted-foreground"
-                >
-                  I agree to Reclaim's{" "}
-                  <a
-                    href="/terms"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary underline"
-                  >
-                    Terms of Service
-                  </a>{" "}
-                  and{" "}
-                  <a
-                    href="/privacy"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary underline"
-                  >
-                    Privacy Policy
-                  </a>{" "}
-                  and consent to the collection, processing, and storage of my
-                  data as described therein.
-                </Label>
-              </div>
-
-              <Collapsible open={emailOpen} onOpenChange={setEmailOpen}>
-                <CollapsibleTrigger className="flex w-full items-center justify-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors py-2">
-                  <ChevronDown
-                    className={`h-4 w-4 transition-transform ${emailOpen ? "rotate-180" : ""}`}
-                  />
-                  <span>
-                    {emailOpen ? "Hide email sign-up" : "More options"}
-                  </span>
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <form onSubmit={handleSignUp} className="space-y-4 pt-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="signup-name">Full Name</Label>
-                      <Input
-                        id="signup-name"
-                        type="text"
-                        placeholder="John Doe"
-                        value={signUpData.fullName}
-                        onChange={(e) =>
-                          setSignUpData({
-                            ...signUpData,
-                            fullName: e.target.value,
-                          })
-                        }
-                        onBlur={(e) =>
-                          validateSignUpField("fullName", e.target.value)
-                        }
-                        required
-                      />
-                      {fieldErrors.fullName && (
-                        <p className="text-sm text-destructive">
-                          {fieldErrors.fullName}
-                        </p>
-                      )}
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="signup-email">Email</Label>
-                      <Input
-                        id="signup-email"
-                        type="email"
-                        placeholder="name@example.com"
-                        value={signUpData.email}
-                        onChange={(e) =>
-                          setSignUpData({
-                            ...signUpData,
-                            email: e.target.value,
-                          })
-                        }
-                        onBlur={(e) =>
-                          validateSignUpField("email", e.target.value)
-                        }
-                        required
-                      />
-                      {fieldErrors.email && (
-                        <p className="text-sm text-destructive">
-                          {fieldErrors.email}
-                        </p>
-                      )}
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="signup-password">Password</Label>
-                      <Input
-                        id="signup-password"
-                        type="password"
-                        placeholder="Min. 8 characters"
-                        value={signUpData.password}
-                        onChange={(e) =>
-                          setSignUpData({
-                            ...signUpData,
-                            password: e.target.value,
-                          })
-                        }
-                        onBlur={(e) =>
-                          validateSignUpField("password", e.target.value)
-                        }
-                        required
-                      />
-                      {fieldErrors.password && (
-                        <p className="text-sm text-destructive">
-                          {fieldErrors.password}
-                        </p>
-                      )}
-                      {!fieldErrors.password &&
-                        signUpData.password.length > 0 &&
-                        signUpData.password.length >= 8 && (
-                          <p className="text-sm text-green-600">
-                            Password strength: OK
-                          </p>
-                        )}
-                    </div>
-                    <Button
-                      type="submit"
-                      className="w-full"
-                      disabled={loading || !termsAccepted}
-                    >
-                      {loading ? "Creating account..." : "Create Account"}
-                    </Button>
-                  </form>
-                </CollapsibleContent>
-              </Collapsible>
+              {!termsAccepted && (
+                <p className="text-center text-xs text-muted-foreground">
+                  Accept the terms above to continue with either option.
+                </p>
+              )}
             </TabsContent>
           </Tabs>
         </CardContent>
