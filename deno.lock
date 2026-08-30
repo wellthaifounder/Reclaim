@@ -4,6 +4,7 @@
     "https://esm.sh/@selderee/plugin-htmlparser2@^0.11.0?target=denonext": "https://esm.sh/@selderee/plugin-htmlparser2@0.11.0?target=denonext",
     "https://esm.sh/@supabase/phoenix@^0.4.2?target=denonext": "https://esm.sh/@supabase/phoenix@0.4.5?target=denonext",
     "https://esm.sh/@supabase/supabase-js@2": "https://esm.sh/@supabase/supabase-js@2.108.2",
+    "https://esm.sh/@types/react@~19.0.7/index.d.ts": "https://esm.sh/@types/react@19.0.14/index.d.ts",
     "https://esm.sh/condense-newlines@^0.2.1?target=denonext": "https://esm.sh/condense-newlines@0.2.1?target=denonext",
     "https://esm.sh/deepmerge@^4.3.1?target=denonext": "https://esm.sh/deepmerge@4.3.1?target=denonext",
     "https://esm.sh/dom-serializer@^2.0.0?target=denonext": "https://esm.sh/dom-serializer@2.0.0?target=denonext",
