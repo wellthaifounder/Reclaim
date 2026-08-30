@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { decryptPlaidToken } from "../_shared/encryption.ts";
+import { plaidBaseUrl } from "../_shared/plaidEnv.ts";
 
 const allowedOrigins = [
   "https://reclaim.health",
@@ -24,14 +25,27 @@ function getCorsHeaders(requestOrigin: string | null) {
   };
 }
 
-const getPlaidUrl = (): string => {
-  const env = Deno.env.get("PLAID_ENV") || "sandbox";
-  const urls: Record<string, string> = {
-    sandbox: "https://sandbox.plaid.com",
-    development: "https://development.plaid.com",
-    production: "https://production.plaid.com",
-  };
-  return urls[env] || urls["sandbox"];
+// Deliberately the ONE Plaid caller that does not propagate a bad PLAID_ENV.
+//
+// Everywhere else a misconfigured environment must fail loudly rather than
+// silently talk to sandbox (see _shared/plaidEnv.ts). Here the priority
+// inverts: deleting your account is a right, and it must not be blocked
+// because a Plaid setting is wrong. This mirrors the existing per-connection
+// behaviour below, which already logs and continues when revocation fails --
+// the deletion is what matters, and an un-revoked Plaid item is a smaller
+// problem than an account nobody can erase.
+//
+// Returning null means "skip revocation", not "use a default".
+const getPlaidUrlOrNull = (): string | null => {
+  try {
+    return plaidBaseUrl();
+  } catch (err) {
+    console.error(
+      "[delete-user-account] Cannot resolve Plaid environment; skipping item revocation and continuing with deletion:",
+      err instanceof Error ? err.message : err,
+    );
+    return null;
+  }
 };
 
 serve(async (req) => {
@@ -89,17 +103,17 @@ serve(async (req) => {
       .select("id, encrypted_access_token")
       .eq("user_id", user.id);
 
-    if (connections && connections.length > 0) {
+    const plaidApiUrl = getPlaidUrlOrNull();
+    if (connections && connections.length > 0 && plaidApiUrl) {
       const plaidClientId = Deno.env.get("PLAID_CLIENT_ID");
       const plaidSecret = Deno.env.get("PLAID_SECRET");
-      const plaidBaseUrl = getPlaidUrl();
 
       for (const conn of connections) {
         try {
           const accessToken = await decryptPlaidToken(
             conn.encrypted_access_token,
           );
-          const removeResp = await fetch(`${plaidBaseUrl}/item/remove`, {
+          const removeResp = await fetch(`${plaidApiUrl}/item/remove`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({

@@ -46,18 +46,16 @@ import {
   type PlaidCreds,
 } from "../_shared/plaidSync.ts";
 import { verifyPlaidWebhook } from "../_shared/plaidWebhookVerification.ts";
+import {
+  plaidBaseUrl,
+  resolvePlaidEnv,
+  type PlaidEnv,
+} from "../_shared/plaidEnv.ts";
 
-const PLAID_ENV =
-  (Deno.env.get("PLAID_ENV") as "sandbox" | "development" | "production") ||
-  "sandbox";
-
-function plaidBaseUrl(): string {
-  return {
-    sandbox: "https://sandbox.plaid.com",
-    development: "https://development.plaid.com",
-    production: "https://production.plaid.com",
-  }[PLAID_ENV];
-}
+// Resolved per request rather than at module load: throwing at import time
+// would take the whole function down before it could return a response, and
+// Plaid retries 5xx for 24 hours. See _shared/plaidEnv.ts for why there is no
+// sandbox fallback.
 
 interface PlaidWebhookBody {
   webhook_type: string;
@@ -87,10 +85,27 @@ serve(async (req) => {
       headers: { "Content-Type": "application/json" },
     });
   }
+
+  // The environment picks which JWK set verifies the signature, so getting it
+  // wrong would reject every genuine webhook. Resolve before verifying.
+  let plaidEnv: PlaidEnv;
+  try {
+    plaidEnv = resolvePlaidEnv();
+  } catch (err) {
+    console.error(
+      "[plaid-webhook] Bad Plaid environment:",
+      err instanceof Error ? err.message : err,
+    );
+    return new Response(JSON.stringify({ error: "Server misconfigured" }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   const verification = await verifyPlaidWebhook(
     req.headers.get("plaid-verification"),
     rawBody,
-    { plaidEnv: PLAID_ENV, plaidClientId, plaidSecret },
+    { plaidEnv, plaidClientId, plaidSecret },
   );
   if (!verification.ok) {
     console.warn("[plaid-webhook] Verification failed:", verification.reason);
