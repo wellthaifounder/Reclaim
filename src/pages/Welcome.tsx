@@ -26,7 +26,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { useQueryClient } from "@tanstack/react-query";
 import { FocusedLayout } from "@/components/FocusedLayout";
 import { PlaidLink } from "@/components/PlaidLink";
 import { FamilyRosterCard } from "@/components/family/FamilyRosterCard";
@@ -45,7 +44,6 @@ import {
   Landmark,
   CalendarIcon,
   Users,
-  PiggyBank,
   Wallet,
   ArrowRight,
   ShieldCheck,
@@ -58,11 +56,27 @@ import { cn } from "@/lib/utils";
 import { logError } from "@/utils/errorHandler";
 import { useRecomputeTiming } from "@/hooks/useHSAEligibility";
 import { useSetOnboardingComplete } from "@/hooks/useOnboardingStatus";
-import type { ReimbursementStrategy } from "@/hooks/useReimbursementStrategy";
 
 // Ordered. `connect` is the only one that runs before the user has seen what
 // Reclaim found; the rest are the "configure second" half.
-const STEPS = ["connect", "household", "hsa", "strategy"] as const;
+//
+// The reimbursement-strategy question was cut from setup on 2026-08-30.
+//
+// It asked "How do you want to use your HSA?" -- reimburse as you go, or let
+// it grow and claim years later -- on the fourth screen, before the user had
+// seen a single dollar of their own money. That is a philosophy question posed
+// in the abstract to someone who has been in the product for ninety seconds,
+// and it read as a permanent identity choice when it is nothing of the kind:
+// the setting only decides whether a documented expense is shown as
+// outstanding work or as finished, nothing is withheld either way, a user can
+// freely mix the two, and it is changeable at any time in Settings.
+//
+// The column and every behaviour that reads it are untouched -- see
+// useReimbursementStrategy.ts. It defaults to 'regular', which is the safe
+// direction: it reminds people about money they have not claimed. Settings
+// remains the place to change it, and the better moment to raise it is once
+// someone is looking at a real claimable total rather than an empty account.
+const STEPS = ["connect", "household", "hsa"] as const;
 type Step = (typeof STEPS)[number];
 
 function isStep(v: string | null): v is Step {
@@ -77,7 +91,6 @@ const FIRST_HSA_YEAR = 2004;
 
 export default function Welcome() {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const setComplete = useSetOnboardingComplete();
   const recomputeTiming = useRecomputeTiming();
@@ -111,7 +124,7 @@ export default function Welcome() {
       onExit={() => finish("/dashboard")}
     >
       <div className="max-w-xl mx-auto px-4 py-4 sm:py-8">
-        {/* Progress. Hidden on the first step: showing someone a four-step
+        {/* Progress. Hidden on the first step: showing someone the full
             progress bar before they have agreed to step one advertises how
             much work is ahead, which is the drop-off the spec is about. */}
         {stepIndex > 0 && (
@@ -138,7 +151,14 @@ export default function Welcome() {
 
         {step === "hsa" && (
           <HsaDateStep
-            onNext={() => goTo("strategy")}
+            // Last step now. Someone who connected a bank has transactions
+            // waiting to be categorised, so the review feed is the useful
+            // landing; someone who skipped connecting has nothing there and is
+            // sent to the dashboard, where the "add an expense" buttons live.
+            onNext={async () => {
+              const hasBank = await userHasBank();
+              await finish(hasBank ? "/expenses" : "/dashboard");
+            }}
             onSaved={async () => {
               // The cliff moves the moment a date lands, in both directions.
               // Without this the user sets their date and the expenses it
@@ -150,22 +170,6 @@ export default function Welcome() {
                 // Logged in the hook. The date itself saved, which is the part
                 // that matters; the recompute runs again on the next edit.
               }
-            }}
-          />
-        )}
-
-        {step === "strategy" && (
-          <StrategyStep
-            onDone={async () => {
-              await queryClient.invalidateQueries({
-                queryKey: ["reimbursement-strategy"],
-              });
-              // Someone who has connected a bank has transactions waiting to be
-              // categorised, so the review feed is the useful landing. Someone
-              // who skipped connecting has nothing there and is sent to the
-              // dashboard instead, where the "add an expense" buttons live.
-              const hasBank = await userHasBank();
-              await finish(hasBank ? "/expenses" : "/dashboard");
             }}
           />
         )}
@@ -467,129 +471,5 @@ function HsaDateStep({
         </Button>
       </div>
     </div>
-  );
-}
-
-// ── Step 4: reimbursement strategy ──────────────────────────────────────────
-
-function StrategyStep({
-  onDone,
-}: {
-  onDone: (strategy: ReimbursementStrategy) => Promise<void>;
-}) {
-  const [choice, setChoice] = useState<ReimbursementStrategy>("regular");
-  const [saving, setSaving] = useState(false);
-
-  const save = async () => {
-    setSaving(true);
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
-
-      const { error } = await supabase
-        .from("profiles")
-        .upsert(
-          { id: user.id, reimbursement_strategy_preference: choice },
-          { onConflict: "id" },
-        );
-      if (error) throw error;
-    } catch (error) {
-      logError("Saving reimbursement strategy failed", error);
-      // Not fatal: 'regular' is the column default and the safe one, and the
-      // setting is a click away in Settings. Blocking the end of onboarding
-      // over a preference would be worse than proceeding with the default.
-      toast.error("We couldn't save that preference — you can set it later.");
-    } finally {
-      setSaving(false);
-    }
-    await onDone(choice);
-  };
-
-  return (
-    <div className="space-y-6">
-      <div className="text-center space-y-3">
-        <div className="inline-flex items-center justify-center h-14 w-14 rounded-full bg-primary/10">
-          <PiggyBank className="h-7 w-7 text-primary" />
-        </div>
-        <h1 className="text-2xl font-bold text-balance">
-          How do you want to use your HSA?
-        </h1>
-        <p className="text-muted-foreground">
-          There's no deadline on HSA reimbursement. Both of these are valid —
-          this only changes whether Reclaim treats a documented expense as
-          something still to do, or as finished.
-        </p>
-      </div>
-
-      <div className="space-y-3">
-        <StrategyOption
-          selected={choice === "regular"}
-          onSelect={() => setChoice("regular")}
-          icon={Wallet}
-          title="Reimburse as I go"
-          body="Claim your money back regularly. Reclaim reminds you when expenses are documented and ready to submit."
-        />
-        {/* The shoebox strategy is a terminal SUCCESS state in the spec, not an
-            incomplete one. A product that tells someone they have 40 unfinished
-            items when they have deliberately finished all 40 is telling them
-            they are doing it wrong. */}
-        <StrategyOption
-          selected={choice === "shoebox"}
-          onSelect={() => setChoice("shoebox")}
-          icon={PiggyBank}
-          title="Let it grow, claim later"
-          body="Pay out of pocket now and let the HSA compound tax-free — you keep the receipts and reimburse yourself years from now. Reclaim will hold your paper trail and won't nag you to submit."
-        />
-      </div>
-
-      <Button size="lg" className="w-full" onClick={save} disabled={saving}>
-        {saving ? "Finishing…" : "Finish setup"}
-        {!saving && <ArrowRight className="ml-2 h-4 w-4" />}
-      </Button>
-    </div>
-  );
-}
-
-function StrategyOption({
-  selected,
-  onSelect,
-  icon: Icon,
-  title,
-  body,
-}: {
-  selected: boolean;
-  onSelect: () => void;
-  icon: React.ComponentType<{ className?: string }>;
-  title: string;
-  body: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      aria-pressed={selected}
-      className={cn(
-        "w-full text-left rounded-lg border p-4 transition-colors",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        selected
-          ? "border-primary bg-primary/5"
-          : "border-border hover:bg-muted/50",
-      )}
-    >
-      <div className="flex gap-3">
-        <Icon
-          className={cn(
-            "h-5 w-5 shrink-0 mt-0.5",
-            selected ? "text-primary" : "text-muted-foreground",
-          )}
-        />
-        <div>
-          <p className="font-medium text-sm">{title}</p>
-          <p className="text-sm text-muted-foreground mt-0.5">{body}</p>
-        </div>
-      </div>
-    </button>
   );
 }
