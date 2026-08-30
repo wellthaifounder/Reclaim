@@ -35,6 +35,7 @@ import {
   syncTransactions,
   type PlaidCreds,
 } from "../_shared/plaidSync.ts";
+import { plaidBaseUrl } from "../_shared/plaidEnv.ts";
 import Resend from "https://esm.sh/resend@2.0.0";
 
 const allowedOrigins = [
@@ -59,15 +60,9 @@ function getCorsHeaders(requestOrigin: string | null) {
   };
 }
 
-const getPlaidUrl = (): string => {
-  const env = Deno.env.get("PLAID_ENV") || "sandbox";
-  const urls: Record<string, string> = {
-    sandbox: "https://sandbox.plaid.com",
-    development: "https://development.plaid.com",
-    production: "https://production.plaid.com",
-  };
-  return urls[env] || urls["sandbox"];
-};
+// Environment resolution lives in _shared/plaidEnv.ts and throws rather than
+// falling back to sandbox. See that file for why.
+const getPlaidUrl = plaidBaseUrl;
 
 serve(async (req) => {
   const corsHeaders = getCorsHeaders(req.headers.get("origin"));
