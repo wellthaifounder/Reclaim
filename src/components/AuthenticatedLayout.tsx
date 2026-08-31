@@ -3,9 +3,7 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { AuthenticatedNav } from "@/components/AuthenticatedNav";
 import { BottomTabNavigation } from "@/components/BottomTabNavigation";
-import { WellbieChat } from "@/components/WellbieChat";
 import { useSessionTimeout } from "@/hooks/useSessionTimeout";
-import { FF } from "@/lib/featureFlags";
 
 interface AuthenticatedLayoutProps {
   children: ReactNode;
@@ -61,10 +59,6 @@ export const AuthenticatedLayout = ({
           {!hideBottomNav && <BottomTabNavigation />}
         </div>
       </div>
-
-      {/* Wellbie Chat - only for authenticated users; hidden for soft launch
-          (v1.1) behind FF.WELLBIE_ENABLED. */}
-      {FF.WELLBIE_ENABLED && <WellbieChat />}
     </SidebarProvider>
   );
 };

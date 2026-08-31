@@ -16,7 +16,6 @@ import {
   Camera,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { WellbieAvatar } from "@/components/WellbieAvatar";
 import { toast } from "sonner";
 import {
   Sheet,
@@ -184,29 +183,6 @@ export const AuthenticatedNav = ({
                   Snap a receipt
                 </span>
               </Button>
-
-              {/* Wellbie Button — hidden for soft launch (v1.1) via FF. */}
-              {FF.WELLBIE_ENABLED && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() =>
-                    window.dispatchEvent(new Event("openWellbieChat"))
-                  }
-                  className="flex items-center gap-2"
-                  aria-label="Open Wellbie AI assistant"
-                >
-                  <div className="h-6 w-6">
-                    <WellbieAvatar
-                      size="sm"
-                      className="h-full w-full hover:scale-100"
-                    />
-                  </div>
-                  <span className="hidden sm:inline text-sm font-medium">
-                    Wellbie
-                  </span>
-                </Button>
-              )}
 
               {/* Mobile Menu - only visible on mobile/tablet */}
               <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
