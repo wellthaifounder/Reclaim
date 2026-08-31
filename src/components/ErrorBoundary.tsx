@@ -139,19 +139,15 @@ export class ErrorBoundary extends Component<Props, State> {
                 )}
               </div>
 
-              {/* Help text */}
+              {/* Help text. This used to offer "contact support via Wellbie",
+                  which dispatched an event that nothing listened for once the
+                  chat was flagged off -- so the one escape hatch on the error
+                  screen silently did nothing. Wellbie is gone; until there is
+                  a real support channel to point at, say something true rather
+                  than offer a dead button. */}
               <div className="text-center">
                 <p className="text-sm text-muted-foreground">
-                  If this problem continues, please{" "}
-                  <button
-                    onClick={() => {
-                      window.dispatchEvent(new CustomEvent("openWellbieChat"));
-                    }}
-                    className="text-primary hover:underline font-medium"
-                  >
-                    contact support via Wellbie
-                  </button>
-                  .
+                  If this keeps happening, reloading the page usually clears it.
                 </p>
               </div>
             </CardContent>

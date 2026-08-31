@@ -75,16 +75,6 @@ export const DashboardSkeleton = () => {
               ))}
             </CardContent>
           </Card>
-
-          {/* Wellbie Tip */}
-          <Card>
-            <CardHeader>
-              <Skeleton className="h-6 w-40" />
-            </CardHeader>
-            <CardContent>
-              <Skeleton className="h-20 w-full" />
-            </CardContent>
-          </Card>
         </div>
       </div>
     </div>

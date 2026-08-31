@@ -45,12 +45,6 @@ export const DASHBOARD_CARDS: DashboardCard[] = [
     category: "overview",
   },
   {
-    id: "wellbie-tip",
-    title: "Wellbie Tips",
-    defaultVisible: true,
-    category: "overview",
-  },
-  {
     id: "pending-reviews",
     title: "Bills Requiring Review",
     defaultVisible: true,

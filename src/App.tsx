@@ -65,7 +65,7 @@ const Install = lazy(() => import("./pages/Install"));
 //     "no partial-payment ledger", so this has no successor by design.
 //   Reports — its charts were cut on 2026-08-19; the tax export it wrapped
 //     now lives on /substantiation next to the claim it belongs to.
-//   WellbieRedirect — chat is deferred to v1.1 and flagged off.
+//   WellbieRedirect — the AI chat assistant, removed entirely on 2026-08-31.
 // Provider Directory removed - V2 feature
 // const ProviderDirectory = lazy(() => import("./pages/ProviderDirectory"));
 // const ProviderDetail = lazy(() => import("./pages/ProviderDetail"));

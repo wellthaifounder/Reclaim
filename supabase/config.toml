@@ -34,8 +34,12 @@ verify_jwt = true
 # stranger could mint Stripe checkout sessions and read back any session's
 # metadata by id. Do not re-add an entry for a function that no longer exists.
 
-[functions.wellbie-chat]
-verify_jwt = true
+# Removed 2026-08-31: wellbie-chat, the AI assistant endpoint. It was gated
+# behind an off feature flag in the UI but still live and callable by any
+# signed-in user, and it forwarded their medical spending context to
+# ai.gateway.lovable.dev -- a third party with no BAA. Deleted from production
+# along with its three tables. Do not re-add an entry for a function that no
+# longer exists.
 
 [functions.plaid-create-link-token]
 verify_jwt = true
