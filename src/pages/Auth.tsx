@@ -98,6 +98,12 @@ const Auth = () => {
   // `?email=1` is still accepted so older links (a forgot-password mail, for
   // instance) keep working; it just has nothing left to expand.
 
+  // Set when a sign-in fails specifically because the address is unconfirmed.
+  // Holds the address so the resend button knows where to send, and so the
+  // offer disappears the moment they change the field or succeed.
+  const [unconfirmedEmail, setUnconfirmedEmail] = useState<string | null>(null);
+  const [resending, setResending] = useState(false);
+
   // Sign up form
   const [signUpData, setSignUpData] = useState({
     fullName: "",
@@ -276,6 +282,15 @@ const Auth = () => {
 
       if (error) throw error;
 
+      setUnconfirmedEmail(null);
+
+      // Welcome email fires here, not at signup. With email confirmation on,
+      // signup returns no session, so the old call site never ran for anyone.
+      // The edge function is idempotent -- it claims a flag on the profile
+      // before sending -- so calling on every sign-in still sends exactly one.
+      // Best-effort: a failure here must never interrupt signing in.
+      supabase.functions.invoke("send-welcome-email").catch(() => {});
+
       toast.success("Welcome back!");
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -285,6 +300,7 @@ const Auth = () => {
         // tells someone what is wrong but not what to do, and gives no hint
         // that the link is sitting in their inbox (or their spam folder).
         if (/email not confirmed/i.test(error.message)) {
+          setUnconfirmedEmail(signInData.email.trim());
           toast.error(
             "Confirm your email first — we sent a link when you signed up. Check your spam folder if it isn't there.",
             { duration: 10000 },
@@ -295,6 +311,36 @@ const Auth = () => {
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Without this, losing the confirmation email is a dead end: the address is
+  // taken so they cannot sign up again, and the link is the only way in. The
+  // only remaining route was emailing us.
+  const handleResendConfirmation = async () => {
+    if (!unconfirmedEmail) return;
+    setResending(true);
+    try {
+      const { error } = await supabase.auth.resend({
+        type: "signup",
+        email: unconfirmedEmail,
+        options: { emailRedirectTo: `${window.location.origin}/dashboard` },
+      });
+      if (error) throw error;
+      toast.success(
+        `Sent again to ${unconfirmedEmail}. Check your spam folder too.`,
+      );
+    } catch (error) {
+      // Rate limiting is the common failure and its message is useful
+      // ("For security purposes, you can only request this after N seconds"),
+      // so it is passed through rather than replaced with something generic.
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "We couldn't resend that. Try again in a minute.",
+      );
+    } finally {
+      setResending(false);
     }
   };
 
@@ -437,12 +483,15 @@ const Auth = () => {
                     autoComplete="email"
                     placeholder="name@example.com"
                     value={signInData.email}
-                    onChange={(e) =>
+                    onChange={(e) => {
                       setSignInData({
                         ...signInData,
                         email: e.target.value,
-                      })
-                    }
+                      });
+                      // The resend offer names a specific address. Once the
+                      // field no longer matches it, the offer is misleading.
+                      if (unconfirmedEmail) setUnconfirmedEmail(null);
+                    }}
                     required
                   />
                 </div>
@@ -465,6 +514,32 @@ const Auth = () => {
                 <Button type="submit" className="w-full" disabled={loading}>
                   {loading ? "Signing in..." : "Sign In"}
                 </Button>
+
+                {/* Shown only after a sign-in fails for an unconfirmed
+                    address. Anything else and this is noise on a screen where
+                    noise costs signups. */}
+                {unconfirmedEmail && (
+                  <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 space-y-2">
+                    <p className="text-xs text-muted-foreground">
+                      <strong className="text-foreground">
+                        This address hasn't been confirmed yet.
+                      </strong>{" "}
+                      The link was emailed to {unconfirmedEmail} when the
+                      account was created — it's often in spam.
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      disabled={resending}
+                      onClick={handleResendConfirmation}
+                    >
+                      {resending ? "Sending…" : "Send the link again"}
+                    </Button>
+                  </div>
+                )}
+
                 <Button
                   type="button"
                   variant="link"

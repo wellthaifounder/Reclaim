@@ -1,5 +1,18 @@
 project_id = "fzmdfhdfvayaalhogskm"
 
+# Match production: require email confirmation before sign-in.
+#
+# The CLI default is false, so local signup handed you a session immediately
+# while production refused it -- meaning the entire confirmation path (the
+# "check your email" message, the unconfirmed sign-in failure, the resend
+# button) could not be exercised locally at all, and the one flow every single
+# user walks through was the one flow nobody could test.
+#
+# Locally the confirmation mail is caught by Inbucket rather than sent; open
+# http://127.0.0.1:54324 to click the link.
+[auth.email]
+enable_confirmations = true
+
 [functions.process-receipt-ocr]
 verify_jwt = true
 
