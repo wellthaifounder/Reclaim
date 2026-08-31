@@ -196,7 +196,19 @@ function checkMigrations(files, dir) {
     const body = read(join(dir, rel));
     if (body === null) continue;
     const name = rel.split("/").pop();
-    if (!/^\d{14}_[a-z0-9_]+\.sql$/.test(name))
+    // Blocking, not advisory, since 2026-08-31: a short version prefix that
+    // collides with a 14-digit one on the same date breaks the CLI's pairing
+    // of local files against remote history, and `db push` then refuses to
+    // apply ANY migration until the history table is repaired by hand. This
+    // was a warning for eighteen files and got ignored every time; the failure
+    // it causes is a total deploy block, so it earns an error.
+    if (!/^\d{14}_/.test(name))
+      errors.push(
+        `${rel}  filename must start with a 14-digit YYYYMMDDHHMMSS version. ` +
+          `A shorter prefix blocks "supabase db push" entirely once a second ` +
+          `migration lands on the same date — see CLAUDE.md, 2026-08-31.`,
+      );
+    else if (!/^\d{14}_[a-z0-9_]+\.sql$/.test(name))
       warnings.push(`${rel}  filename is not YYYYMMDDHHMMSS_snake_case.sql`);
 
     for (const m of body.matchAll(
