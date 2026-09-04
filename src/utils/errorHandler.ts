@@ -9,7 +9,13 @@
  * 4. Generating error IDs for support reference
  */
 
-type ToastFunction = (message: string, options?: any) => void;
+/** The subset of a toast library's options this module actually passes. */
+interface ToastOptions {
+  description?: string;
+  duration?: number;
+}
+
+type ToastFunction = (message: string, options?: ToastOptions) => void;
 
 /**
  * Log error securely (development only)
@@ -17,7 +23,7 @@ type ToastFunction = (message: string, options?: any) => void;
 export const logError = (
   message: string,
   error?: unknown,
-  context?: Record<string, any>,
+  context?: Record<string, unknown>,
 ) => {
   if (import.meta.env.DEV) {
     console.error(`[${new Date().toISOString()}] ${message}`, error, context);
@@ -191,7 +197,10 @@ export const sanitizePHI = (text: string): string => {
 
       // Dates of birth (various formats)
       .replace(
-        /\b(DOB|Date of Birth|Birth Date)[\s:]*\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}\b/gi,
+        // `-` is last in each class, so it stays literal and cannot open a
+        // range. Verified identical to the previously escaped `[\/\-]` form
+        // across the separator, label and near-miss cases.
+        /\b(DOB|Date of Birth|Birth Date)[\s:]*\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b/gi,
         "[DOB-REDACTED]",
       )
 

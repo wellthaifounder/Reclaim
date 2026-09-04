@@ -9,7 +9,6 @@ import {
 import { Download, FileText, FileSpreadsheet } from "lucide-react";
 import { toast } from "sonner";
 import { logError } from "@/utils/errorHandler";
-import { todayLocalISO } from "@/lib/utils";
 import { generateAnalyticsReportPDF } from "@/lib/pdfGenerator";
 
 interface ExportData {
@@ -121,7 +120,7 @@ export const ExportAnalytics = ({
       const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
-      link.download = `analytics-report-${todayLocalISO()}.csv`;
+      link.download = `analytics-report-${new Date().toISOString().split("T")[0]}.csv`;
       link.click();
 
       toast.success("CSV exported successfully");
@@ -152,7 +151,7 @@ export const ExportAnalytics = ({
       });
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
-      link.download = `analytics-report-${todayLocalISO()}.json`;
+      link.download = `analytics-report-${new Date().toISOString().split("T")[0]}.json`;
       link.click();
 
       toast.success("JSON exported successfully");
