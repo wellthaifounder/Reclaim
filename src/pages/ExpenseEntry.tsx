@@ -41,6 +41,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { todayLocalISO } from "@/lib/utils";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
 import { Button } from "@/components/ui/button";
 import {
@@ -172,7 +173,7 @@ export default function ExpenseEntry() {
   } = useForm<ExpenseFormValues>({
     resolver: zodResolver(expenseSchema),
     defaultValues: {
-      date: new Date().toISOString().split("T")[0],
+      date: todayLocalISO(),
       vendor: "",
       amount: decisionAmount as number | undefined,
       category: decisionCategory,

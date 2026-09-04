@@ -1,4 +1,5 @@
 import jsPDF from "jspdf";
+import { todayLocalISO } from "./utils";
 
 // Workstream E1: generateReimbursementPDF lived here and was deleted with the
 // legacy reimbursement path. The canonical document is the Substantiation
@@ -149,5 +150,5 @@ export const generateAnalyticsReportPDF = (data: AnalyticsReport): void => {
     });
   }
 
-  doc.save(`analytics-report-${new Date().toISOString().split("T")[0]}.pdf`);
+  doc.save(`analytics-report-${todayLocalISO()}.pdf`);
 };

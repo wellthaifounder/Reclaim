@@ -1,4 +1,5 @@
 import { calculateInvestmentGrowth } from "./paymentRecommendation";
+import { toLocalISODate } from "./utils";
 
 // Helper to calculate investment growth with year-based inputs
 function calculateYearlyInvestmentGrowth(
@@ -81,9 +82,7 @@ export function calculateVaultSummary(
     .sort((a, b) => a.getTime() - b.getTime());
 
   const nextReminder =
-    upcomingReminders.length > 0
-      ? upcomingReminders[0].toISOString().split("T")[0]
-      : null;
+    upcomingReminders.length > 0 ? toLocalISODate(upcomingReminders[0]) : null;
 
   // Calculate average years invested
   const totalYears = vaultExpenses.reduce((sum, expense) => {
@@ -161,5 +160,5 @@ export function getDefaultReimbursementDate(
       date.setFullYear(date.getFullYear() + 5); // 5 years
       break;
   }
-  return date.toISOString().split("T")[0];
+  return toLocalISODate(date);
 }

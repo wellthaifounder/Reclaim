@@ -27,6 +27,61 @@ export const logError = (
 };
 
 /**
+ * Pull a raw message string off anything throwable, for MATCHING ONLY.
+ *
+ * The result is server text. Never render it -- pass it through
+ * `toUserMessage` and show that instead.
+ */
+const rawMessage = (error: unknown): string =>
+  error instanceof Error
+    ? error.message
+    : typeof error === "object" && error && "message" in error
+      ? String((error as { message: unknown }).message)
+      : "";
+
+/**
+ * Turn a thrown value into something a person can read.
+ *
+ * The trap this exists to close: `err instanceof Error ? err.message : "..."`.
+ * A Supabase `FunctionsHttpError` IS an Error, so that branch always wins and
+ * the friendly fallback beside it is dead code. `/onboarding/import` shipped
+ * exactly that, which is how a user who had just handed over their bank
+ * credentials was shown "Edge Function returned a non-2xx status code" --
+ * meaningless to them, and it names our infrastructure. CLAUDE.md requires
+ * client-facing errors to be generic; this is the helper that keeps that true.
+ *
+ * Pass a `fallback` written for the specific screen. The raw text is only ever
+ * pattern-matched, never returned.
+ */
+export const toUserMessage = (
+  error: unknown,
+  fallback = "Something went wrong. Please try again.",
+): string => {
+  const message = rawMessage(error);
+
+  // Supabase edge-function transport failures. The user did nothing wrong and
+  // there is nothing for them to fix, so say so and let them retry.
+  if (
+    /non-2xx status code|FunctionsHttpError|FunctionsRelayError|FunctionsFetchError/i.test(
+      message,
+    )
+  ) {
+    return "Something went wrong on our end. Your bank connection is fine — please try again.";
+  }
+
+  // Offline or the request never landed.
+  if (/Failed to fetch|NetworkError|ERR_INTERNET_DISCONNECTED/i.test(message)) {
+    return "We couldn't reach Reclaim. Check your connection and try again.";
+  }
+
+  if (/timeout|timed out|AbortError/i.test(message)) {
+    return "That took too long to respond. Please try again.";
+  }
+
+  return fallback;
+};
+
+/**
  * Handle error with user-friendly message
  *
  * @param error - The error object
