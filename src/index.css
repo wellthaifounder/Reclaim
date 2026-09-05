@@ -55,18 +55,31 @@
     --radius-xl: 1.5rem; /* 24px - hero cards, feature cards */
     --radius-full: 9999px; /* pill buttons */
 
-    /* Neutral Canvas - Softer Background */
-    --background: 216 20% 98%;
+    /* Neutral Canvas - Softer Background
+       Darkened one step (98% -> 96%) so a white card actually lifts off the
+       page. At 98% the two were 1.05:1 apart -- close enough to read as one
+       flat surface, which is why cards relied entirely on their border. */
+    --background: 216 20% 96%;
     --foreground: 228 25% 20%;
 
     --card: 0 0% 100%;
     --card-foreground: 228 25% 20%;
 
-    --popover: 0 0% 100%;
+    /* Was byte-identical to --card, so a popover opened over a card had zero
+       separation from it. 100% is already the lightness ceiling, so card
+       keeps it and popover -- the surface meant to float highest -- takes
+       the one point below. Small on paper (1.02:1 from card), but it means
+       the two tokens are no longer the same color, and it stacks with the
+       existing shadow-md + border on PopoverContent for the rest of the
+       lift. */
+    --popover: 216 20% 99%;
     --popover-foreground: 228 25% 20%;
 
-    /* Primary - Slightly Desaturated Teal */
-    --primary: 178 85% 36%;
+    /* Primary - Slightly Desaturated Teal
+       36% measured 2.88:1 for white text -- below the 4.5:1 floor. 28% is
+       the first step down that clears it (4.53:1), computed by walking the
+       lightness down at fixed hue/saturation until the ratio passed. */
+    --primary: 178 85% 28%;
     --primary-foreground: 0 0% 100%;
 
     /* Secondary - Professional Navy */
@@ -154,14 +167,26 @@
     --background: 228 36% 12%;
     --foreground: 0 0% 98%;
 
-    --card: 228 36% 16%;
+    /* Lightened 16% -> 20% (1.10:1 -> 1.22:1 against --background). This was
+       the worse of the two themes for card/page separation -- dark relies on
+       lightness steps even more than light does, since the black shadow the
+       card component used for elevation is invisible on a dark surface. */
+    --card: 228 36% 20%;
     --card-foreground: 0 0% 98%;
 
-    --popover: 228 36% 16%;
+    /* Was byte-identical to --card, same defect as light mode -- and more
+       consequential here, since the box-shadow that's meant to lift a
+       popover off the surface below it is *also* invisible in dark mode.
+       25% gives it real separation from both --card (1.16:1) and
+       --background (1.41:1) through color alone. */
+    --popover: 228 36% 25%;
     --popover-foreground: 0 0% 98%;
 
-    /* Primary - Slightly Desaturated Teal */
-    --primary: 178 85% 36%;
+    /* Primary - Slightly Desaturated Teal
+       30% measured 4.02:1 -- still short of 4.5:1. The floor is a function
+       of this color's own lightness against white text, independent of which
+       theme it appears in, so it lands on the same 28% / 4.53:1 as light. */
+    --primary: 178 85% 28%;
     --primary-foreground: 0 0% 100%;
 
     /* Secondary - Professional Navy (lighter in dark) */

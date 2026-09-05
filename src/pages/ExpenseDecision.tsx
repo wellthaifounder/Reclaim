@@ -34,7 +34,8 @@ const ExpenseDecision = () => {
 
         <div className="grid gap-6 max-w-xl mx-auto">
           <Card
-            className="cursor-pointer hover:border-primary transition-all hover:shadow-lg group"
+            interactive
+            className="hover:border-primary transition-all hover:shadow-lg group"
             onClick={() => navigate("/invoice/new")}
           >
             <CardHeader className="text-center pb-4">

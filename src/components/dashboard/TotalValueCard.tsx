@@ -34,7 +34,8 @@ export function TotalValueCard({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {/* Ready to Claim */}
           <Card
-            className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20 cursor-pointer hover:border-primary/40 transition-colors"
+            interactive
+            className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20 hover:border-primary/40 transition-colors"
             onClick={() => navigate("/substantiation")}
           >
             <CardContent className="pt-5 pb-5">
@@ -140,7 +141,8 @@ export function TotalValueCard({
       </Card>
 
       <Card
-        className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20 cursor-pointer hover:border-primary/40 transition-colors"
+        interactive
+        className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20 hover:border-primary/40 transition-colors"
         onClick={() => navigate("/bills")}
       >
         <CardContent className="pt-5 pb-5">
