@@ -15,12 +15,20 @@
 // "More" group on desktop and the hamburger sheet on mobile.
 
 import { NavLink } from "@/components/NavLink";
-import { LayoutDashboard, Receipt, FileCheck, FileText } from "lucide-react";
+import {
+  LayoutDashboard,
+  Receipt,
+  ClipboardCheck,
+  FileText,
+} from "lucide-react";
 
+// The four tabs are the workflow in order. Documents gave up its slot to
+// Substantiate: it is a library, reachable from the sidebar's "More" group and
+// from every expense, whereas Substantiate is a step with a queue behind it.
 const TABS = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
   { icon: Receipt, label: "Expenses", path: "/expenses" },
-  { icon: FileCheck, label: "Documents", path: "/documents" },
+  { icon: ClipboardCheck, label: "Substantiate", path: "/substantiate" },
   { icon: FileText, label: "Reimburse", path: "/substantiation" },
 ];
 

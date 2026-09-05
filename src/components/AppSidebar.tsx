@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronRight,
   HelpCircle,
+  ClipboardCheck,
   LayoutDashboard,
   Building2,
 } from "lucide-react";
@@ -44,7 +45,7 @@ interface MenuItem {
 }
 
 // Reclaim Phase 5 W1 — primary IA per brief §9.
-//   Dashboard · Expenses · Expense Groups · Reimburse
+//   Dashboard · Expenses · Substantiate · Reimburse
 // Everything Wellth-era (Transactions, HSA Claims, HSA Calculator, Reports,
 // Documents, Bank Accounts, HSA Guide, Ledger) lives behind the "More" group
 // below until Phase 6 dead-code sweep decides what stays.
@@ -67,6 +68,14 @@ const primaryMenuItems: MenuItem[] = [
     label: "Expenses",
     path: "/expenses",
     badgeKey: "unreviewedTransactions",
+  },
+  // Step two of the workflow. Sits between Expenses and Reimburse because
+  // that is the order the work happens: categorise, substantiate, then claim.
+  {
+    icon: ClipboardCheck,
+    label: "Substantiate",
+    path: "/substantiate",
+    badgeKey: null,
   },
   {
     icon: FileText,

@@ -10,6 +10,7 @@ import {
   FileText,
   Menu,
   Settings,
+  ClipboardCheck,
   LayoutDashboard,
   Building2,
   HelpCircle,
@@ -86,6 +87,7 @@ export const AuthenticatedNav = ({
       path: "/expenses",
       badge: expensesBadge,
     },
+    { icon: ClipboardCheck, label: "Substantiate", path: "/substantiate" },
     { icon: FileText, label: "Reimburse", path: "/substantiation" },
   ];
 
@@ -98,6 +100,7 @@ export const AuthenticatedNav = ({
       path: "/expenses",
       badge: expensesBadge,
     },
+    { icon: ClipboardCheck, label: "Substantiate", path: "/substantiate" },
     { icon: FileText, label: "Reimburse", path: "/substantiation" },
   ];
 
@@ -107,9 +110,14 @@ export const AuthenticatedNav = ({
     { icon: HelpCircle, label: "HSA Guide", path: "/guide" },
   ];
 
+  // Segment-boundary match, not a bare prefix: "/substantiation" starts with
+  // "/substantiate", so a plain startsWith() marked both Substantiate and
+  // Reimburse active on the Reimburse page.
   const isActivePath = (path: string) => {
     if (path === "/dashboard") return location.pathname === path;
-    return location.pathname.startsWith(path);
+    return (
+      location.pathname === path || location.pathname.startsWith(path + "/")
+    );
   };
 
   return (

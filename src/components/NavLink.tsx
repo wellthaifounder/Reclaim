@@ -22,9 +22,16 @@ export const NavLink = forwardRef<HTMLAnchorElement, NavLinkProps>(
     const location = useLocation();
     const toPath = typeof to === "string" ? to : to.pathname;
 
+    // A bare startsWith() lights up every item whose path is a string prefix
+    // of the current one -- /substantiate matched /substantiation, so both
+    // Substantiate and Reimburse looked active on the Reimburse page. Compare
+    // whole path segments: the item is active on its own path or a child of
+    // it, never on a sibling that merely shares an opening substring.
+    const base = toPath || "";
     const isActive = end
-      ? location.pathname === toPath
-      : location.pathname.startsWith(toPath || "");
+      ? location.pathname === base
+      : location.pathname === base ||
+        location.pathname.startsWith(base.endsWith("/") ? base : base + "/");
 
     return (
       <Link

@@ -277,7 +277,7 @@ export default function Dashboard() {
               total={data.needsReceipt.total}
               copy="Attach receipts before you forget"
               ctaLabel="Attach"
-              onClick={() => navigate("/review")}
+              onClick={() => navigate("/substantiate")}
             />
 
             {/* PENDING REVIEW */}
@@ -289,7 +289,7 @@ export default function Dashboard() {
               total={data.pendingReview.total}
               copy="Confirm these are HSA-eligible"
               ctaLabel="Review"
-              onClick={() => navigate("/review")}
+              onClick={() => navigate("/substantiate")}
             />
 
             {/* READY TO SUBMIT  /  Shoebox Balance */}
