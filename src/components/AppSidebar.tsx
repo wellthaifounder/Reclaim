@@ -1,10 +1,7 @@
-import { useState } from "react";
 import {
   Receipt,
   FileText,
   Settings,
-  ChevronDown,
-  ChevronRight,
   HelpCircle,
   LayoutDashboard,
   Building2,
@@ -25,11 +22,6 @@ import {
   SidebarMenuButton,
   useSidebar,
 } from "@/components/ui/sidebar";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 
 interface AppSidebarProps {
   unreviewedTransactions?: number;
@@ -43,16 +35,16 @@ interface MenuItem {
   hsaOnly?: boolean;
 }
 
-// Reclaim Phase 5 W1 — primary IA per brief §9.
-//   Dashboard · Expenses · Expense Groups · Reimburse
-// Everything Wellth-era (Transactions, HSA Claims, HSA Calculator, Reports,
-// Documents, Bank Accounts, HSA Guide, Ledger) lives behind the "More" group
-// below until Phase 6 dead-code sweep decides what stays.
+// Primary IA: the app's Categorize -> Substantiate -> Reimburse spine, with
+// Dashboard as the front door. "Reimburse" is the third step (building a
+// reimbursement packet from already-substantiated expenses), which is why it
+// is not called "Substantiation" -- see design review Phase 5, 2026-09-04.
 //
-// Labelled "Reimburse," not "Substantiation" -- this is the third step of the
-// app's Categorize -> Substantiate -> Reimburse model (building a reimbursement
-// packet from already-substantiated expenses), not the second. See design
-// review Phase 5 correction, 2026-09-04.
+// Nothing is collapsed any more (2026-09-05). Every group renders open: the
+// "More" group had held Bank Accounts, Documents and HSA Guide behind a closed
+// disclosure, and because its open/closed state was component state and this
+// sidebar remounts on every route change, expanding it never survived a single
+// navigation. Three destinations were effectively unreachable by browsing.
 const primaryMenuItems: MenuItem[] = [
   {
     icon: LayoutDashboard,
@@ -96,30 +88,13 @@ export function AppSidebar({ unreviewedTransactions = 0 }: AppSidebarProps) {
   const showHSAFeatures =
     userIntent === "hsa" || userIntent === "both" || hasHSA;
 
-  // Reclaim Phase 5 W1: primary nav (4 tabs) open by default; "More" group
-  // collapsed by default so the Wellth-era tools don't compete visually with
-  // the Reclaim flow.
-  const [openSections, setOpenSections] = useState({
-    primary: true,
-    more: false,
-    account: true,
-  });
-
-  const toggleSection = (section: keyof typeof openSections) => {
-    setOpenSections((prev) => ({ ...prev, [section]: !prev[section] }));
-  };
-
   const getBadgeCount = (badgeKey: string | null) => {
     if (!badgeKey) return 0;
     if (badgeKey === "unreviewedTransactions") return unreviewedTransactions;
     return 0;
   };
 
-  const renderMenuSection = (
-    items: MenuItem[],
-    label: string,
-    sectionKey: keyof typeof openSections,
-  ) => {
+  const renderMenuSection = (items: MenuItem[], label: string) => {
     // Filter HSA-only items if user doesn't have HSA features enabled
     const filteredItems = items.filter(
       (item) => !item.hsaOnly || showHSAFeatures,
@@ -127,94 +102,62 @@ export function AppSidebar({ unreviewedTransactions = 0 }: AppSidebarProps) {
 
     if (filteredItems.length === 0) return null;
 
-    const isOpen = openSections[sectionKey];
-
     return (
-      <Collapsible open={isOpen} onOpenChange={() => toggleSection(sectionKey)}>
-        <SidebarGroup>
-          <CollapsibleTrigger className="w-full">
-            <SidebarGroupLabel className="flex items-center justify-between w-full cursor-pointer hover:bg-sidebar-accent/50 rounded-md px-2 py-1.5 transition-colors">
-              <span>{label}</span>
-              {isOpen ? (
-                <ChevronDown className="h-4 w-4 text-muted-foreground" />
-              ) : (
-                <ChevronRight className="h-4 w-4 text-muted-foreground" />
-              )}
-            </SidebarGroupLabel>
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {filteredItems.map((item) => {
-                  const badgeCount = getBadgeCount(item.badgeKey);
-                  return (
-                    <SidebarMenuItem key={item.path}>
-                      <SidebarMenuButton asChild tooltip={item.label}>
-                        <NavLink
-                          to={item.path}
-                          end={item.path === "/dashboard"}
-                          className="relative"
-                        >
-                          <item.icon className="h-4 w-4" />
-                          {open && <span>{item.label}</span>}
-                          {badgeCount > 0 && open && (
-                            <span className="ml-auto bg-accent text-accent-foreground text-xs px-2 py-0.5 rounded-full">
-                              {badgeCount}
-                            </span>
-                          )}
-                        </NavLink>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  );
-                })}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </CollapsibleContent>
-        </SidebarGroup>
-      </Collapsible>
+      <SidebarGroup>
+        <SidebarGroupLabel>{label}</SidebarGroupLabel>
+        <SidebarGroupContent>
+          <SidebarMenu>
+            {filteredItems.map((item) => {
+              const badgeCount = getBadgeCount(item.badgeKey);
+              return (
+                <SidebarMenuItem key={item.path}>
+                  <SidebarMenuButton asChild tooltip={item.label}>
+                    <NavLink
+                      to={item.path}
+                      end={item.path === "/dashboard"}
+                      className="relative"
+                    >
+                      <item.icon className="h-4 w-4" />
+                      {open && <span>{item.label}</span>}
+                      {badgeCount > 0 && open && (
+                        <span className="ml-auto bg-accent text-accent-foreground text-xs px-2 py-0.5 rounded-full">
+                          {badgeCount}
+                        </span>
+                      )}
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              );
+            })}
+          </SidebarMenu>
+        </SidebarGroupContent>
+      </SidebarGroup>
     );
   };
 
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
       <SidebarContent className="overflow-y-auto">
-        {renderMenuSection(primaryMenuItems, "Reclaim", "primary")}
-        {renderMenuSection(moreMenuItems, "More", "more")}
+        {renderMenuSection(primaryMenuItems, "Reclaim")}
+        {renderMenuSection(moreMenuItems, "More")}
 
-        <Collapsible
-          open={openSections.account}
-          onOpenChange={() => toggleSection("account")}
-          className="mt-auto"
-        >
-          <SidebarGroup>
-            <CollapsibleTrigger className="w-full">
-              <SidebarGroupLabel className="flex items-center justify-between w-full cursor-pointer hover:bg-sidebar-accent/50 rounded-md px-2 py-1.5 transition-colors">
-                <span>Account</span>
-                {openSections.account ? (
-                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                ) : (
-                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                )}
-              </SidebarGroupLabel>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {/* "Manage Reviews" (admin) and "Share Feedback" removed
-                      2026-08-19 with the provider-reviews pages. */}
-                  <SidebarMenuItem>
-                    <SidebarMenuButton asChild tooltip="Settings">
-                      <NavLink to="/settings">
-                        <Settings className="h-4 w-4" />
-                        {open && <span>Settings</span>}
-                      </NavLink>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </CollapsibleContent>
-          </SidebarGroup>
-        </Collapsible>
+        <SidebarGroup className="mt-auto">
+          <SidebarGroupLabel>Account</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {/* "Manage Reviews" (admin) and "Share Feedback" removed
+                  2026-08-19 with the provider-reviews pages. */}
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild tooltip="Settings">
+                  <NavLink to="/settings">
+                    <Settings className="h-4 w-4" />
+                    {open && <span>Settings</span>}
+                  </NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
       </SidebarContent>
 
       {tier === "free" && open && (
