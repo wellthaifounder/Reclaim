@@ -1,7 +1,6 @@
 import { useEffect } from "react";
 import { Navigation } from "@/components/Navigation";
 import { Hero } from "@/components/Hero";
-import { Features } from "@/components/Features";
 import { HowItWorks } from "@/components/HowItWorks";
 // Testimonials removed 2026-08-20 with the reviews tables. It read featured
 // user reviews and returned null when there were none -- which was always,
@@ -25,7 +24,6 @@ const Index = () => {
       <Navigation />
       <main id="main-content">
         <Hero />
-        <Features />
         <HowItWorks />
 
         <Pricing />

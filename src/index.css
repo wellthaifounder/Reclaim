@@ -103,10 +103,13 @@
     --chart-5: 357 79% 59%; /* Alert red */
 
     /* Wellth.ai Enhanced Gradients */
+    /* Hero stops are darkened from the original 36%/42%/40% lightness so
+       white hero text clears the 4.5:1 WCAG floor at every point along the
+       gradient (measured: 5.6:1 minimum, up from 2.4:1 at the worst point). */
     --gradient-hero: linear-gradient(
       135deg,
-      hsl(178 85% 36%) 0%,
-      hsl(178 75% 42%) 50%,
+      hsl(178 85% 20%) 0%,
+      hsl(178 75% 26%) 50%,
       hsl(228 36% 40%) 100%
     );
     --gradient-card: linear-gradient(
@@ -195,10 +198,12 @@
     --chart-5: 357 75% 65%; /* Lighter alert red */
 
     /* Wellth.ai Dark Mode Enhanced Gradients */
+    /* Same contrast fix as the light-mode stops above -- the previous mid
+       stop (178 75% 36%) put white text at 3.19:1. */
     --gradient-hero: linear-gradient(
       135deg,
-      hsl(178 85% 30%) 0%,
-      hsl(178 75% 36%) 50%,
+      hsl(178 85% 20%) 0%,
+      hsl(178 75% 26%) 50%,
       hsl(228 36% 25%) 100%
     );
     --gradient-card: linear-gradient(
@@ -213,7 +218,7 @@
     );
     --gradient-soft: linear-gradient(
       180deg,
-      hsl(178 85% 15%) 0%,
+      hsl(178 85% 10%) 0%,
       hsl(228 36% 12%) 100%
     );
     --gradient-primary-subtle: linear-gradient(
