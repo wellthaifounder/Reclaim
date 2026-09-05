@@ -13,6 +13,8 @@
  * Mirrors the DB trigger in 20260814140000_expense_split_constraint.sql.
  */
 
+import { formatCurrency } from "@/lib/utils";
+
 export interface ExpenseSplitDraft {
   /** What was paid for this portion. */
   amount: number;
@@ -94,9 +96,15 @@ export function splitEvenly(total: number, parts: number): number[] {
   return amounts;
 }
 
-export function formatUsd(n: number): string {
-  return n.toLocaleString("en-US", { style: "currency", currency: "USD" });
-}
+/**
+ * @deprecated Use `formatCurrency` from `@/lib/utils`, or `<Money>` when the
+ * amount is being rendered. Kept as an alias so the existing call sites in this
+ * module and its consumers keep reading naturally.
+ *
+ * The previous implementation called `toLocaleString` directly on the argument,
+ * which throws on a null amount.
+ */
+export const formatUsd = formatCurrency;
 
 /** A transaction can only be split into expenses if nothing already claims it. */
 export function canSplitIntoExpenses(txn: {

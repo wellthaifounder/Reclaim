@@ -11,6 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Money } from "@/components/ui/money";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -203,7 +204,8 @@ const Bills = ({ embedded = false }: BillsProps) => {
             <div>
               <h1 className="text-3xl font-bold mb-1">Expenses</h1>
               <p className="text-muted-foreground text-sm">
-                Everything you have spent on care, and how close each is to money back
+                Everything you have spent on care, and how close each is to
+                money back
               </p>
             </div>
             <Button onClick={() => navigate("/expenses/new")}>
@@ -333,9 +335,10 @@ const Bills = ({ embedded = false }: BillsProps) => {
                           </Button>
                         </div>
                         <div className="text-right">
-                          <p className="font-semibold">
-                            ${Number(bill.amount).toFixed(2)}
-                          </p>
+                          <Money
+                            value={Number(bill.amount)}
+                            className="block font-semibold"
+                          />
                           {/* The "Fully Paid / Partially Paid / Unpaid" badge
                               and the "Auto-matched" badge both came off the
                               payments table and went with it (2026-08-21).

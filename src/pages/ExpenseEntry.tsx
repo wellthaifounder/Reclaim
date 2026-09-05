@@ -41,7 +41,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { todayLocalISO } from "@/lib/utils";
+import { todayLocalISO, formatCurrency } from "@/lib/utils";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
 import { Button } from "@/components/ui/button";
 import {
@@ -632,7 +632,7 @@ export default function ExpenseEntry() {
                             <span className="text-muted-foreground">
                               Amount:{" "}
                             </span>
-                            ${suggestion.amount.toFixed(2)}
+                            {formatCurrency(suggestion.amount)}
                           </li>
                         )}
                         {(suggestion.serviceDate ?? suggestion.date) && (

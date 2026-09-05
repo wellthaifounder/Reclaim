@@ -17,6 +17,8 @@ import {
   Legend,
 } from "recharts";
 import { HSA_LIMITS_2025 } from "@/lib/regulatoryLimits";
+import { Money } from "@/components/ui/money";
+import { formatCurrency, formatCurrencyWhole } from "@/lib/utils";
 
 interface HSAInvestmentTrackerProps {
   unreimbursedTotal: number;
@@ -84,9 +86,10 @@ export const HSAInvestmentTracker = ({
                 <DollarSign className="h-4 w-4" />
                 Unreimbursed Balance
               </div>
-              <div className="text-2xl font-bold">
-                ${unreimbursedTotal.toFixed(2)}
-              </div>
+              <Money
+                value={unreimbursedTotal}
+                className="block text-2xl font-bold"
+              />
               <p className="text-xs text-muted-foreground">
                 Available for future reimbursement
               </p>
@@ -97,9 +100,10 @@ export const HSAInvestmentTracker = ({
                 <TrendingUp className="h-4 w-4" />
                 10-Year Projected Value
               </div>
-              <div className="text-2xl font-bold text-primary">
-                ${tenYearGrowth.toFixed(2)}
-              </div>
+              <Money
+                value={tenYearGrowth}
+                className="block text-2xl font-bold text-primary"
+              />
               <p className="text-xs text-muted-foreground">
                 At {investmentReturnRate}% annual growth
               </p>
@@ -111,7 +115,7 @@ export const HSAInvestmentTracker = ({
                 Additional Benefit
               </div>
               <div className="text-2xl font-bold text-green-600">
-                +${totalBenefit.toFixed(2)}
+                +<Money value={totalBenefit} />
               </div>
               <p className="text-xs text-muted-foreground">
                 From investment growth
@@ -191,21 +195,21 @@ export const HSAInvestmentTracker = ({
             <div className="p-4 border rounded-lg">
               <h4 className="font-semibold mb-2 text-sm">Example Scenario</h4>
               <p className="text-sm text-muted-foreground mb-3">
-                You have ${unreimbursedTotal.toFixed(0)} in unreimbursed HSA
-                expenses today.
+                You have {formatCurrencyWhole(unreimbursedTotal)} in
+                unreimbursed HSA expenses today.
               </p>
               <ul className="text-sm space-y-2">
                 <li className="flex items-start gap-2">
                   <span className="text-primary font-bold">→</span>
                   <span>
-                    Reimburse now: Get ${unreimbursedTotal.toFixed(2)}
+                    Reimburse now: Get {formatCurrency(unreimbursedTotal)}
                   </span>
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="text-green-600 font-bold">→</span>
                   <span>
-                    Wait 10 years: Get ${tenYearGrowth.toFixed(2)} ($
-                    {totalBenefit.toFixed(2)} extra!)
+                    Wait 10 years: Get {formatCurrency(tenYearGrowth)} (
+                    {formatCurrency(totalBenefit)} extra!)
                   </span>
                 </li>
               </ul>

@@ -6,6 +6,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Money } from "@/components/ui/money";
+import { formatCurrency } from "@/lib/utils";
 import { TrendingUp, TrendingDown, Calendar, DollarSign } from "lucide-react";
 
 interface ReimbursementTimingOptimizerProps {
@@ -57,9 +59,10 @@ export const ReimbursementTimingOptimizer = ({
             <p className="text-sm text-muted-foreground">
               Unreimbursed HSA Balance
             </p>
-            <p className="text-3xl font-bold">
-              ${unreimbursedTotal.toFixed(2)}
-            </p>
+            <Money
+              value={unreimbursedTotal}
+              className="block text-3xl font-bold"
+            />
           </div>
 
           {shouldWait ? (
@@ -70,18 +73,16 @@ export const ReimbursementTimingOptimizer = ({
                 <p className="text-sm">
                   Your projected tax bracket is higher. By waiting to reimburse,
                   you could save an additional{" "}
-                  <span className="font-bold">
-                    ${savingsDifferential.toFixed(2)}
-                  </span>{" "}
-                  in taxes.
+                  <Money value={savingsDifferential} className="font-bold" /> in
+                  taxes.
                 </p>
                 <p className="text-sm mt-2">
-                  <span className="font-semibold">Current savings:</span> $
-                  {currentSavings.toFixed(2)}
+                  <span className="font-semibold">Current savings:</span>{" "}
+                  {formatCurrency(currentSavings)}
                 </p>
                 <p className="text-sm">
-                  <span className="font-semibold">Future savings:</span> $
-                  {futureSavings.toFixed(2)}
+                  <span className="font-semibold">Future savings:</span>{" "}
+                  {formatCurrency(futureSavings)}
                 </p>
               </AlertDescription>
             </Alert>
@@ -93,10 +94,7 @@ export const ReimbursementTimingOptimizer = ({
                 <p className="text-sm">
                   Your current tax bracket is higher. Consider reimbursing now
                   to maximize your tax savings of{" "}
-                  <span className="font-bold">
-                    ${currentSavings.toFixed(2)}
-                  </span>
-                  .
+                  <Money value={currentSavings} className="font-bold" />.
                 </p>
               </AlertDescription>
             </Alert>

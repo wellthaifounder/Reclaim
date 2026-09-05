@@ -6,6 +6,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { TrendingUp, Calendar, DollarSign, Percent } from "lucide-react";
+import { Money } from "@/components/ui/money";
+import { formatCurrency } from "@/lib/utils";
 import {
   LineChart,
   Line,
@@ -90,9 +92,10 @@ export const YearOverYearComparison = ({
               <DollarSign className="h-3 w-3" />
               Total Savings ({currentYear.year})
             </p>
-            <p className="text-2xl font-bold">
-              ${(currentYear.taxSavings + currentYear.rewardsEarned).toFixed(2)}
-            </p>
+            <Money
+              value={currentYear.taxSavings + currentYear.rewardsEarned}
+              className="block text-2xl font-bold"
+            />
           </div>
           <div className="space-y-1">
             <p className="text-sm text-muted-foreground flex items-center gap-1">
@@ -169,18 +172,20 @@ export const YearOverYearComparison = ({
                         </p>
                         <div className="space-y-1 text-sm">
                           <p style={{ color: "hsl(var(--primary))" }}>
-                            Total Savings: $
-                            {payload[0].payload.totalSavings.toFixed(2)}
+                            Total Savings:{" "}
+                            {formatCurrency(payload[0].payload.totalSavings)}
                           </p>
                           <p style={{ color: "hsl(var(--chart-2))" }}>
-                            Tax Savings: $
-                            {payload[0].payload.taxSavings.toFixed(2)}
+                            Tax Savings:{" "}
+                            {formatCurrency(payload[0].payload.taxSavings)}
                           </p>
                           <p style={{ color: "hsl(var(--chart-3))" }}>
-                            Rewards: ${payload[0].payload.rewards.toFixed(2)}
+                            Rewards:{" "}
+                            {formatCurrency(payload[0].payload.rewards)}
                           </p>
                           <p className="text-muted-foreground">
-                            Expenses: ${payload[0].payload.expenses.toFixed(2)}
+                            Expenses:{" "}
+                            {formatCurrency(payload[0].payload.expenses)}
                           </p>
                         </div>
                       </div>
@@ -226,14 +231,14 @@ export const YearOverYearComparison = ({
           <ul className="text-sm space-y-1 text-muted-foreground list-disc list-inside">
             {yearlyData.length > 1 && savingsGrowth > 0 && (
               <li>
-                You're saving ${savingsGrowth.toFixed(2)} more this year - great
-                progress! 🎉
+                You're saving {formatCurrency(savingsGrowth)} more this year -
+                great progress! 🎉
               </li>
             )}
             {currentYear.hsaEligible > 0 && (
               <li>
-                ${currentYear.hsaEligible.toFixed(2)} in HSA-eligible expenses
-                tracked this year
+                {formatCurrency(currentYear.hsaEligible)} in HSA-eligible
+                expenses tracked this year
               </li>
             )}
             {yearlyData.length >= 3 && (

@@ -1,4 +1,5 @@
 import { Card, CardContent } from "@/components/ui/card";
+import { formatCurrencyWhole } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
 
@@ -104,7 +105,7 @@ export function ValueSpotlight({
           <SpotlightCard
             icon="🔍"
             title="Potential Savings Found!"
-            description={`${pendingReviews} bill${pendingReviews === 1 ? "" : "s"} with errors found${totalPotentialSavings > 0 ? ` - up to $${totalPotentialSavings.toFixed(0)} in potential savings` : ""}`}
+            description={`${pendingReviews} bill${pendingReviews === 1 ? "" : "s"} with errors found${totalPotentialSavings > 0 ? ` - up to ${formatCurrencyWhole(totalPotentialSavings)} in potential savings` : ""}`}
             cta="Review Now"
             onClick={onReviewClick}
             variant="default"
@@ -115,7 +116,7 @@ export function ValueSpotlight({
           <SpotlightCard
             icon="🎉"
             title="Recent Wins"
-            description={`You saved $${disputeSavings.toFixed(0)} from ${recentDisputeWins} successful dispute${recentDisputeWins === 1 ? "" : "s"} this month!`}
+            description={`You saved ${formatCurrencyWhole(disputeSavings)} from ${recentDisputeWins} successful dispute${recentDisputeWins === 1 ? "" : "s"} this month!`}
             cta="View Disputes"
             onClick={onDisputeClick}
             variant="success"

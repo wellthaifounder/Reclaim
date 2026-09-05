@@ -3,6 +3,7 @@ import { ChevronDown, ChevronUp } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Money } from "@/components/ui/money";
 import { useTransactionSplits } from "@/hooks/useTransactionSplits";
 import { formatSplitSummary } from "@/lib/transactionSplitUtils";
 import { useHSAAccounts } from "@/hooks/useHSAAccounts";
@@ -40,7 +41,7 @@ export function SplitTransactionCard({
               {transaction.description}
             </CardTitle>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <span>${transaction.amount.toFixed(2)}</span>
+              <Money value={transaction.amount} />
               <Badge variant="secondary" className="text-xs">
                 {formatSplitSummary(splits || [])}
               </Badge>
@@ -86,16 +87,17 @@ export function SplitTransactionCard({
                 )}
               </div>
               <div className="text-right">
-                <p className="font-semibold">${split.amount.toFixed(2)}</p>
+                <Money value={split.amount} className="font-semibold block" />
               </div>
             </div>
           ))}
 
           <div className="flex justify-between items-center pt-2 border-t">
             <span className="text-sm font-medium">Total</span>
-            <span className="font-semibold">
-              ${splits.reduce((sum, split) => sum + split.amount, 0).toFixed(2)}
-            </span>
+            <Money
+              value={splits.reduce((sum, split) => sum + split.amount, 0)}
+              className="font-semibold"
+            />
           </div>
         </CardContent>
       )}

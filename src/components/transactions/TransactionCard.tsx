@@ -1,6 +1,7 @@
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Money } from "@/components/ui/money";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -209,9 +210,10 @@ export function TransactionCard({
         </div>
 
         <div className="text-right flex-shrink-0 flex flex-col items-end gap-2">
-          <p className="text-lg font-semibold text-foreground">
-            ${Math.abs(amount).toFixed(2)}
-          </p>
+          <Money
+            value={Math.abs(amount)}
+            className="text-lg font-semibold text-foreground"
+          />
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

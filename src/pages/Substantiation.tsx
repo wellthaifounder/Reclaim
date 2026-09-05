@@ -34,6 +34,8 @@ import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Money } from "@/components/ui/money";
+import { formatCurrency } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -661,7 +663,7 @@ export default function Substantiation() {
 
       toast.success(
         released > 0
-          ? `${record.record_number} withdrawn. ${released} expense${released === 1 ? "" : "s"} ($${(result?.amount_released ?? 0).toFixed(2)}) are ready to claim again.`
+          ? `${record.record_number} withdrawn. ${released} expense${released === 1 ? "" : "s"} (${formatCurrency(result?.amount_released ?? 0)}) are ready to claim again.`
           : `${record.record_number} withdrawn.`,
       );
     } catch (err) {
@@ -1220,9 +1222,7 @@ export default function Substantiation() {
                           {e.rule_name ?? "Unclassified"}
                         </p>
                       </div>
-                      <p className="text-sm tabular-nums">
-                        ${e.amount.toFixed(2)}
-                      </p>
+                      <Money value={e.amount} className="text-sm" />
                     </label>
                   ))}
                 </div>
@@ -1325,8 +1325,8 @@ export default function Substantiation() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium">
-                          Did this ${head.transaction_amount.toFixed(2)} deposit
-                          pay{" "}
+                          Did this {formatCurrency(head.transaction_amount)}{" "}
+                          deposit pay{" "}
                           {batched ? (
                             <>these {group.length} claims?</>
                           ) : (
@@ -1356,7 +1356,7 @@ export default function Substantiation() {
                                   {g.record_number}
                                 </span>
                                 <span className="tabular-nums text-muted-foreground">
-                                  ${g.record_total.toFixed(2)} ·{" "}
+                                  {formatCurrency(g.record_total)} ·{" "}
                                   {g.record_expense_count} expense
                                   {g.record_expense_count === 1 ? "" : "s"}
                                 </span>
@@ -1367,7 +1367,7 @@ export default function Substantiation() {
                           <p className="text-xs text-muted-foreground mt-1">
                             {head.record_expense_count} expense
                             {head.record_expense_count === 1 ? "" : "s"},
-                            claimed at ${head.record_total.toFixed(2)}.
+                            claimed at {formatCurrency(head.record_total)}.
                           </p>
                         )}
 
@@ -1377,8 +1377,8 @@ export default function Substantiation() {
                             which — so they have to be told there is one. */}
                         {head.amount_gap > 0.01 && (
                           <p className="text-xs mt-2 font-medium text-amber-800">
-                            That is ${head.amount_gap.toFixed(2)} less than the
-                            $ {batched ? "total claimed" : "amount claimed"}.
+                            That is {formatCurrency(head.amount_gap)} less than
+                            the {batched ? "total claimed" : "amount claimed"}.
                             Confirm only if you're happy that settles it.
                           </p>
                         )}
@@ -1443,9 +1443,10 @@ export default function Substantiation() {
               <p className="text-sm font-medium uppercase tracking-wide text-muted-foreground mb-1">
                 {isShoebox ? "Substantiated & banked" : "Ready to submit"}
               </p>
-              <p className="text-3xl font-bold tabular-nums">
-                ${eligibleNowTotal.toFixed(2)}
-              </p>
+              <Money
+                value={eligibleNowTotal}
+                className="block text-3xl font-bold"
+              />
               <p className="text-sm text-muted-foreground mt-1">
                 {eligibleNow.length} eligible expense
                 {eligibleNow.length === 1 ? "" : "s"} for {CURRENT_TAX_YEAR}

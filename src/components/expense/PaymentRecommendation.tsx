@@ -1,4 +1,5 @@
 import { Card, CardContent } from "@/components/ui/card";
+import { Money } from "@/components/ui/money";
 import { TrendingUp, CreditCard, Lightbulb } from "lucide-react";
 import { PaymentRecommendation as PaymentRec } from "@/lib/paymentRecommendation";
 
@@ -40,9 +41,10 @@ export const PaymentRecommendation = ({
         {recommendation.savingsAmount > 0 && (
           <div className="space-y-2">
             <div className="bg-background/50 rounded-lg p-3 border border-primary/10">
-              <div className="text-2xl font-bold text-primary">
-                ${recommendation.savingsAmount.toFixed(2)}
-              </div>
+              <Money
+                value={recommendation.savingsAmount}
+                className="block text-2xl font-bold text-primary"
+              />
               <div className="text-xs text-muted-foreground">
                 Estimated Total Savings
               </div>
@@ -56,24 +58,27 @@ export const PaymentRecommendation = ({
                 <div className="text-sm space-y-1">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Rewards:</span>
-                    <span className="font-medium">
-                      ${recommendation.breakdown.rewards.toFixed(2)}
-                    </span>
+                    <Money
+                      value={recommendation.breakdown.rewards}
+                      className="font-medium"
+                    />
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Tax Savings:</span>
-                    <span className="font-medium text-green-600">
-                      ${recommendation.breakdown.taxSavings.toFixed(2)}
-                    </span>
+                    <Money
+                      value={recommendation.breakdown.taxSavings}
+                      className="font-medium text-green-600"
+                    />
                   </div>
                   {recommendation.breakdown.timingBenefit > 0 && (
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">
                         Timing Growth:
                       </span>
-                      <span className="font-medium">
-                        ${recommendation.breakdown.timingBenefit.toFixed(2)}
-                      </span>
+                      <Money
+                        value={recommendation.breakdown.timingBenefit}
+                        className="font-medium"
+                      />
                     </div>
                   )}
                   {recommendation.breakdown.investmentGrowth > 0 && (
@@ -81,9 +86,10 @@ export const PaymentRecommendation = ({
                       <span className="text-muted-foreground">
                         Long-term Growth:
                       </span>
-                      <span className="font-medium">
-                        ${recommendation.breakdown.investmentGrowth.toFixed(2)}
-                      </span>
+                      <Money
+                        value={recommendation.breakdown.investmentGrowth}
+                        className="font-medium"
+                      />
                     </div>
                   )}
                 </div>

@@ -1,4 +1,5 @@
 import type { Database } from "@/integrations/supabase/types";
+import { formatCurrency } from "@/lib/utils";
 
 type TransactionSplit =
   Database["public"]["Tables"]["transaction_splits"]["Row"];
@@ -26,7 +27,7 @@ export function validateSplitAmounts(
   if (Math.abs(totalSplitAmount - parentAmount) > 0.01) {
     return {
       isValid: false,
-      message: `Split amounts ($${totalSplitAmount.toFixed(2)}) must equal transaction amount ($${parentAmount.toFixed(2)})`,
+      message: `Split amounts (${formatCurrency(totalSplitAmount)}) must equal transaction amount (${formatCurrency(parentAmount)})`,
     };
   }
 

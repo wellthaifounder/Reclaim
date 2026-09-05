@@ -40,6 +40,7 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Money } from "@/components/ui/money";
 import {
   Loader2,
   Upload,
@@ -263,9 +264,10 @@ export function SubstantiateDialog({
                     Paid {formatDateOnly(expense.date)}
                   </p>
                 </div>
-                <p className="text-lg font-semibold tabular-nums shrink-0">
-                  ${Number(expense.amount).toFixed(2)}
-                </p>
+                <Money
+                  value={Number(expense.amount)}
+                  className="text-lg font-semibold shrink-0"
+                />
               </div>
               <p className="text-xs text-muted-foreground mt-2">
                 From your bank, so it can't be edited here.

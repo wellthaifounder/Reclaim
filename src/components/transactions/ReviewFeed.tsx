@@ -19,6 +19,7 @@ import {
 } from "@/hooks/useReviewFeed";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Money } from "@/components/ui/money";
 import {
   Card,
   CardContent,
@@ -73,7 +74,7 @@ function GroupRow({
           </div>
 
           <p className="mt-1 text-sm text-muted-foreground">
-            ${group.total_amount.toFixed(2)}
+            <Money value={group.total_amount} />
             {many ? " total" : ""} &middot; {dateRange}
           </p>
 

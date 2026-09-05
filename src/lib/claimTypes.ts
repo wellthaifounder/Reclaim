@@ -99,6 +99,9 @@ export function orderForPacket(
   );
 }
 
-export function formatClaimMoney(n: number): string {
-  return n.toLocaleString("en-US", { style: "currency", currency: "USD" });
-}
+/**
+ * Kept as a named re-export because the claim packet reads better with it, but
+ * it no longer has its own implementation. The previous one called
+ * `toLocaleString` directly on the argument, which throws on a null amount.
+ */
+export { formatCurrency as formatClaimMoney } from "@/lib/utils";

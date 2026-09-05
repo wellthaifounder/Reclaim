@@ -1,6 +1,8 @@
 // Payment Strategy Recommendation Engine
 // Helps users make optimal payment decisions for HSA-eligible expenses
 
+import { formatCurrency } from "@/lib/utils";
+
 export interface PaymentRecommendation {
   method: "hsa" | "rewards-card" | "hsa-invest";
   title: string;
@@ -84,7 +86,7 @@ export const getPaymentRecommendation = (
       confidence: "high",
       reasoning: [
         "This expense is not eligible for HSA reimbursement",
-        `A ${(rewardsRate * 100).toFixed(1)}% rewards card earns $${savingsAmount.toFixed(2)} back on this expense`,
+        `A ${(rewardsRate * 100).toFixed(1)}% rewards card earns ${formatCurrency(savingsAmount)} back on this expense`,
       ],
       breakdown: {
         rewards: savingsAmount,
@@ -128,19 +130,19 @@ export const getPaymentRecommendation = (
   const totalBenefit = rewardsValue + taxSavings + totalInvestmentGrowth;
 
   const reasoning = [
-    `💳 Credit card rewards: +$${rewardsValue.toFixed(2)} (earned immediately)`,
-    `🏥 HSA tax savings: +$${taxSavings.toFixed(2)} (${(taxRate * 100).toFixed(0)}% of expense)`,
+    `💳 Credit card rewards: +${formatCurrency(rewardsValue)} (earned immediately)`,
+    `🏥 HSA tax savings: +${formatCurrency(taxSavings)} (${(taxRate * 100).toFixed(0)}% of expense)`,
   ];
 
   if (timingBenefit > 0) {
     reasoning.push(
-      `📈 Growth during payoff: +$${timingBenefit.toFixed(2)} (${cardPayoffMonths} months${monthlyPayment > 0 ? " with declining balance" : ""})`,
+      `📈 Growth during payoff: +${formatCurrency(timingBenefit)} (${cardPayoffMonths} months${monthlyPayment > 0 ? " with declining balance" : ""})`,
     );
   }
 
   if (longTermGrowth > 0) {
     reasoning.push(
-      `📊 Long-term growth: +$${longTermGrowth.toFixed(2)} (${yearsAfterPayoff.toFixed(1)} years after payoff)`,
+      `📊 Long-term growth: +${formatCurrency(longTermGrowth)} (${yearsAfterPayoff.toFixed(1)} years after payoff)`,
     );
   }
 
@@ -155,7 +157,7 @@ export const getPaymentRecommendation = (
   return {
     method: "hsa-invest",
     title: "Rewards Card + Delayed HSA Reimbursement",
-    description: `Paying with a rewards card ${payoffDescription} and reimbursing from your HSA in ${hsaInvestmentYears} years could save you $${totalBenefit.toFixed(2)}.`,
+    description: `Paying with a rewards card ${payoffDescription} and reimbursing from your HSA in ${hsaInvestmentYears} years could save you ${formatCurrency(totalBenefit)}.`,
     savingsAmount: totalBenefit,
     taxSavings,
     confidence: "high",

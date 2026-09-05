@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatCurrencyWhole } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Shield, Plus, TrendingDown } from "lucide-react";
 import { InsurancePlanDialog } from "@/components/onboarding/InsurancePlanDialog";
@@ -129,13 +130,13 @@ export function InsurancePlanPrompt({
                   {deductibleMet && " ✓"}
                 </span>
                 <span className="text-sm text-muted-foreground">
-                  ${deductibleRemaining.toFixed(0)} remaining
+                  {formatCurrencyWhole(deductibleRemaining)} remaining
                 </span>
               </div>
               <Progress value={deductibleProgress} className="h-2" />
               <p className="text-xs text-muted-foreground">
-                ${insurancePlan.deductible_met?.toFixed(0) || 0} of $
-                {insurancePlan.deductible.toFixed(0)} met
+                {formatCurrencyWhole(insurancePlan.deductible_met ?? 0)} of{" "}
+                {formatCurrencyWhole(insurancePlan.deductible)} met
               </p>
             </div>
           )}
@@ -150,13 +151,13 @@ export function InsurancePlanPrompt({
                     {outOfPocketMet && " ✓"}
                   </span>
                   <span className="text-sm text-muted-foreground">
-                    ${outOfPocketRemaining.toFixed(0)} remaining
+                    {formatCurrencyWhole(outOfPocketRemaining)} remaining
                   </span>
                 </div>
                 <Progress value={oopProgress} className="h-2" />
                 <p className="text-xs text-muted-foreground">
-                  ${insurancePlan.out_of_pocket_met?.toFixed(0) || 0} of $
-                  {insurancePlan.out_of_pocket_max.toFixed(0)} met
+                  {formatCurrencyWhole(insurancePlan.out_of_pocket_met ?? 0)} of{" "}
+                  {formatCurrencyWhole(insurancePlan.out_of_pocket_max)} met
                 </p>
               </div>
             )}
@@ -167,8 +168,8 @@ export function InsurancePlanPrompt({
             deductibleRemaining < 500 && (
               <div className="p-2 bg-blue-100 dark:bg-blue-900 rounded-md">
                 <p className="text-xs text-blue-800 dark:text-blue-200">
-                  💡 You're only ${deductibleRemaining.toFixed(0)} away from
-                  meeting your deductible!
+                  💡 You're only {formatCurrencyWhole(deductibleRemaining)} away
+                  from meeting your deductible!
                 </p>
               </div>
             )}

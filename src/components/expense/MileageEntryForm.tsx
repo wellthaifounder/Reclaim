@@ -37,6 +37,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
+import { Money } from "@/components/ui/money";
+import { formatCurrency } from "@/lib/utils";
 import { Car, Info, Loader2, TriangleAlert } from "lucide-react";
 import { logError } from "@/utils/errorHandler";
 import { PatientPicker } from "@/components/family/PatientPicker";
@@ -151,7 +153,7 @@ export function MileageEntryForm() {
         .single();
       if (error || !invoice) throw error ?? new Error("Insert failed");
 
-      toast.success(`Mileage saved — $${preview.toFixed(2)} claimable.`);
+      toast.success(`Mileage saved — ${formatCurrency(preview)} claimable.`);
       navigate(`/bills/${invoice.id}`);
     } catch (error) {
       logError("MileageEntryForm save", error);
@@ -349,23 +351,22 @@ export function MileageEntryForm() {
                   : ""}{" "}
                 at {formatMileageRate(startPeriod.ratePerMile)}&cent;
               </span>
-              <span>
-                $
-                {(
+              <Money
+                value={
                   Math.round(totalMiles * startPeriod.ratePerMile * 100) / 100
-                ).toFixed(2)}
-              </span>
+                }
+              />
             </div>
             {parkingAmount > 0 && (
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Parking and tolls</span>
-                <span>${parkingAmount.toFixed(2)}</span>
+                <Money value={parkingAmount} />
               </div>
             )}
             <Separator className="my-1" />
             <div className="flex justify-between font-medium">
               <span>Claimable</span>
-              <span>${preview.toFixed(2)}</span>
+              <Money value={preview} />
             </div>
           </div>
         )}
