@@ -144,6 +144,10 @@ export default function Substantiate() {
         return [];
       }
 
+      // receipt_count comes from receipt_invoices, not the receipts embed --
+      // attachment lives in the join table now, so a document attached only
+      // through the multi-attach path (AttachDocumentDialog) still needs to
+      // count here.
       const { data, error } = await supabase
         .from("invoices")
         .select(
@@ -152,7 +156,7 @@ export default function Substantiate() {
            classification_confidence, classification_reasoning,
            classification_warnings,
            rule:pub_502_rules!eligibility_basis_rule_id ( id, name, eligibility_status, section_ref, conditions ),
-           receipts ( id )`,
+           receipt_invoices ( receipt_id )`,
         )
         .eq("user_id", user.id)
         .in("lifecycle_status", [...SUBSTANTIATE_STATES])
@@ -164,7 +168,7 @@ export default function Substantiate() {
       return (data ?? []).map((r: unknown) => {
         const row = r as Record<string, unknown> & {
           rule: QueueExpense["rule"] | QueueExpense["rule"][] | null;
-          receipts: { id: string }[] | null;
+          receipt_invoices: { receipt_id: string }[] | null;
         };
         // PostgREST returns an embedded to-one relation as an object, but as a
         // single-element array under some join shapes. Normalise both.
@@ -189,7 +193,7 @@ export default function Substantiate() {
           classification_warnings: Array.isArray(row.classification_warnings)
             ? (row.classification_warnings as string[])
             : null,
-          receipt_count: (row.receipts ?? []).length,
+          receipt_count: (row.receipt_invoices ?? []).length,
           rule,
         };
       });

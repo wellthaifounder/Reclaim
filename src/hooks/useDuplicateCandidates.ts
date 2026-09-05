@@ -103,22 +103,23 @@ export function useDuplicateCandidates() {
         new Set(rows.flatMap((r) => [r.expense_a_id, r.expense_b_id])),
       );
 
-      const [{ data: expenses, error: expErr }, { data: receipts }] =
+      // Attachment lives in receipt_invoices now, not receipts.invoice_id --
+      // a document shared with another expense still needs to count here.
+      const [{ data: expenses, error: expErr }, { data: links }] =
         await Promise.all([
           supabase.from("invoices").select(SIDE_COLUMNS).in("id", expenseIds),
           supabase
-            .from("receipts")
+            .from("receipt_invoices")
             .select("invoice_id")
             .in("invoice_id", expenseIds),
         ]);
       if (expErr) throw expErr;
 
       const receiptCounts = new Map<string, number>();
-      for (const r of receipts ?? []) {
-        if (!r.invoice_id) continue;
+      for (const l of links ?? []) {
         receiptCounts.set(
-          r.invoice_id,
-          (receiptCounts.get(r.invoice_id) ?? 0) + 1,
+          l.invoice_id,
+          (receiptCounts.get(l.invoice_id) ?? 0) + 1,
         );
       }
 

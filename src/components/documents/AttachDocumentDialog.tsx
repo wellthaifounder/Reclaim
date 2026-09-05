@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Dialog,
   DialogContent,
@@ -22,12 +22,16 @@ interface AttachDocumentDialogProps {
   onAttached: () => void;
 }
 
-interface UnattachedReceipt {
+interface PickableReceipt {
   id: string;
   document_type: string | null;
   description: string | null;
   uploaded_at: string;
   file_type: string;
+  /** How many OTHER expenses this document is already attached to. A
+   * document can substantiate more than one expense (a hospital bill paid in
+   * instalments, say), so this is a hint, not an exclusion. */
+  attachedElsewhereCount: number;
 }
 
 export const AttachDocumentDialog = ({
@@ -36,18 +40,12 @@ export const AttachDocumentDialog = ({
   onOpenChange,
   onAttached,
 }: AttachDocumentDialogProps) => {
-  const [receipts, setReceipts] = useState<UnattachedReceipt[]>([]);
+  const [receipts, setReceipts] = useState<PickableReceipt[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [attaching, setAttaching] = useState(false);
 
-  useEffect(() => {
-    if (open) {
-      loadUnattachedReceipts();
-    }
-  }, [open]);
-
-  const loadUnattachedReceipts = async () => {
+  const loadPickableReceipts = useCallback(async () => {
     try {
       setLoading(true);
       const {
@@ -55,22 +53,60 @@ export const AttachDocumentDialog = ({
       } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { data, error } = await supabase
-        .from("receipts")
-        .select("id, document_type, description, uploaded_at, file_type")
-        .eq("user_id", user.id)
-        .is("invoice_id", null)
-        .order("uploaded_at", { ascending: false });
+      // Every document the user has, and separately, which of those are
+      // already attached to this expense (excluded -- attaching twice is a
+      // no-op) or to some other expense (kept, and counted: a document can
+      // substantiate more than one expense, so being attached elsewhere is
+      // not a reason to hide it here).
+      const [{ data: allReceipts, error: receiptsError }, { data: links }] =
+        await Promise.all([
+          supabase
+            .from("receipts")
+            .select("id, document_type, description, uploaded_at, file_type")
+            .eq("user_id", user.id)
+            .order("uploaded_at", { ascending: false }),
+          supabase
+            .from("receipt_invoices")
+            .select("receipt_id, invoice_id")
+            .eq("user_id", user.id),
+        ]);
 
-      if (error) throw error;
-      setReceipts(data || []);
+      if (receiptsError) throw receiptsError;
+
+      const attachedHere = new Set(
+        (links ?? [])
+          .filter((l) => l.invoice_id === invoiceId)
+          .map((l) => l.receipt_id),
+      );
+      const elsewhereCounts = new Map<string, number>();
+      for (const l of links ?? []) {
+        if (l.invoice_id === invoiceId) continue;
+        elsewhereCounts.set(
+          l.receipt_id,
+          (elsewhereCounts.get(l.receipt_id) ?? 0) + 1,
+        );
+      }
+
+      const pickable = (allReceipts ?? [])
+        .filter((r) => !attachedHere.has(r.id))
+        .map((r) => ({
+          ...r,
+          attachedElsewhereCount: elsewhereCounts.get(r.id) ?? 0,
+        }));
+      setReceipts(pickable);
     } catch (error) {
-      logError("Error loading unattached receipts", error);
+      logError("Error loading documents to attach", error);
       toast.error("Failed to load documents");
     } finally {
       setLoading(false);
     }
-  };
+  }, [invoiceId]);
+
+  useEffect(() => {
+    if (open) {
+      void loadPickableReceipts();
+    }
+  }, [open, loadPickableReceipts]);
 
   const handleAttach = async () => {
     if (selectedIds.length === 0) {
@@ -80,10 +116,19 @@ export const AttachDocumentDialog = ({
 
     try {
       setAttaching(true);
-      const { error } = await supabase
-        .from("receipts")
-        .update({ invoice_id: invoiceId })
-        .in("id", selectedIds);
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      const { error } = await supabase.from("receipt_invoices").upsert(
+        selectedIds.map((receiptId) => ({
+          receipt_id: receiptId,
+          invoice_id: invoiceId,
+          user_id: user.id,
+        })),
+        { onConflict: "receipt_id,invoice_id", ignoreDuplicates: true },
+      );
 
       if (error) throw error;
 
@@ -125,7 +170,7 @@ export const AttachDocumentDialog = ({
           ) : receipts.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               <FileText className="h-12 w-12 mx-auto mb-2 opacity-50" />
-              <p>No unattached documents available</p>
+              <p>No documents available to attach</p>
               <p className="text-sm mt-1">
                 Upload documents first or check the Documents center
               </p>
@@ -140,6 +185,7 @@ export const AttachDocumentDialog = ({
                 <Checkbox
                   checked={selectedIds.includes(receipt.id)}
                   onCheckedChange={() => toggleSelection(receipt.id)}
+                  onClick={(e) => e.stopPropagation()}
                 />
                 <FileText className="h-5 w-5 text-muted-foreground" />
                 <div className="flex-1">
@@ -155,6 +201,14 @@ export const AttachDocumentDialog = ({
                     <Calendar className="h-3 w-3" />
                     {format(new Date(receipt.uploaded_at), "MMM d, yyyy")}
                   </div>
+                  {receipt.attachedElsewhereCount > 0 && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Already attached to{" "}
+                      {receipt.attachedElsewhereCount === 1
+                        ? "1 other expense"
+                        : `${receipt.attachedElsewhereCount} other expenses`}
+                    </p>
+                  )}
                 </div>
               </div>
             ))

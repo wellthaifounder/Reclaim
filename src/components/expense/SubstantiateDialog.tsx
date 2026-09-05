@@ -109,12 +109,16 @@ export function SubstantiateDialog({
     queryKey: ["substantiate-receipts", expenseId],
     enabled: open && !!expenseId,
     queryFn: async () => {
+      // Attachment lives in receipt_invoices now, not receipts.invoice_id --
+      // a document can be shared with another expense, so filtering on the
+      // legacy column here would miss anything attached only through the
+      // multi-attach path (AttachDocumentDialog).
       const { data, error } = await supabase
         .from("receipts")
         .select(
-          "id, file_path, file_type, document_type, description, display_order, uploaded_at",
+          "id, file_path, file_type, document_type, description, display_order, uploaded_at, receipt_invoices!inner(invoice_id)",
         )
-        .eq("invoice_id", expenseId!)
+        .eq("receipt_invoices.invoice_id", expenseId!)
         .order("display_order", { ascending: true });
       if (error) throw error;
       return data ?? [];

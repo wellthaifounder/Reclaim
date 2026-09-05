@@ -108,15 +108,18 @@ export default function BillDetail() {
     enabled: !isNewBill && !!id,
   });
 
-  // Fetch receipts/documents
+  // Fetch receipts/documents. Attachment lives in receipt_invoices now, not
+  // receipts.invoice_id -- a document can be shared with another expense, so
+  // filtering on the legacy column would miss anything attached only through
+  // the multi-attach path (AttachDocumentDialog).
   const { data: receipts, refetch: refetchReceipts } = useQuery({
     queryKey: ["receipts", id],
     queryFn: async () => {
       if (isNewBill || !id) return [];
       const { data, error } = await supabase
         .from("receipts")
-        .select("*")
-        .eq("invoice_id", id)
+        .select("*, receipt_invoices!inner(invoice_id)")
+        .eq("receipt_invoices.invoice_id", id)
         .order("display_order");
 
       if (error) throw error;

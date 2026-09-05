@@ -563,9 +563,13 @@ async function applyRemovals(
 
     if (candidateIds.length > 0) {
       // Exclude any that have documentation attached — the presence of a
-      // receipt means the user engaged with it.
+      // receipt means the user engaged with it. Attachment lives in
+      // receipt_invoices now, not receipts.invoice_id: a document attached
+      // only through the multi-attach path still counts as engagement, and
+      // missing it here would let this cleanup delete an invoice the user
+      // has, in fact, documented.
       const { data: withReceipts } = await supabase
-        .from("receipts")
+        .from("receipt_invoices")
         .select("invoice_id")
         .in("invoice_id", candidateIds);
       const keep = new Set(
