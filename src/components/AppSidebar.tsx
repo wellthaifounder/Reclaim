@@ -3,6 +3,7 @@ import {
   FileText,
   Settings,
   HelpCircle,
+  ClipboardCheck,
   LayoutDashboard,
   Building2,
 } from "lucide-react";
@@ -59,6 +60,14 @@ const primaryMenuItems: MenuItem[] = [
     label: "Expenses",
     path: "/expenses",
     badgeKey: "unreviewedTransactions",
+  },
+  // Step two of the workflow. Sits between Expenses and Reimburse because
+  // that is the order the work happens: categorise, substantiate, then claim.
+  {
+    icon: ClipboardCheck,
+    label: "Substantiate",
+    path: "/substantiate",
+    badgeKey: null,
   },
   {
     icon: FileText,
