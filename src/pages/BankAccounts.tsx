@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
+import { PageHeader } from "@/components/PageHeader";
 import { PlaidLink } from "@/components/PlaidLink";
 import { Button } from "@/components/ui/button";
 import {
@@ -163,17 +164,11 @@ export default function BankAccounts() {
         </div>
 
         <div className="mb-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-foreground">
-                Bank Accounts
-              </h1>
-              <p className="text-muted-foreground mt-1">
-                Connect your bank accounts to automatically import transactions
-              </p>
-            </div>
-            <PlaidLink onSuccess={fetchConnections} />
-          </div>
+          <PageHeader
+            title="Bank Accounts"
+            description="Connect your bank accounts to automatically import transactions"
+            action={<PlaidLink onSuccess={fetchConnections} />}
+          />
         </div>
 
         {connections.length === 0 ? (
@@ -232,9 +227,11 @@ export default function BankAccounts() {
                         {syncing === connection.id ? "Syncing..." : "Sync"}
                       </Button>
                       <Button
-                        variant="destructive"
-                        size="sm"
+                        variant="outline"
+                        size="icon"
+                        className="h-11 w-11 text-destructive hover:text-destructive"
                         onClick={() => handleDelete(connection.id)}
+                        aria-label="Disconnect bank account"
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>

@@ -31,6 +31,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
+import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -1275,11 +1276,10 @@ export default function Substantiation() {
         </button>
 
         <div className="mb-6">
-          <h1 className="text-2xl font-semibold mb-1">Reimbursement Records</h1>
-          <p className="text-sm text-muted-foreground">
-            IRS-defensible bundles of your confirmed eligible expenses. Generate
-            one when you're ready to file for HSA reimbursement.
-          </p>
+          <PageHeader
+            title="Reimbursement Records"
+            description="IRS-defensible bundles of your confirmed eligible expenses. Generate one when you're ready to file for HSA reimbursement."
+          />
         </div>
 
         {/* Workstream E4: deposit-match prompts. Confirming is the moment the
@@ -1436,8 +1436,8 @@ export default function Substantiation() {
         <Card
           className={`mb-6 ${isShoebox ? "border-emerald-300 bg-emerald-50/40" : "border-primary/30"}`}
         >
-          <CardContent className="p-5 flex items-center gap-4">
-            <div className="flex-1">
+          <CardContent className="p-5 flex flex-col gap-4 sm:flex-row sm:items-center">
+            <div className="flex-1 min-w-0">
               <p className="text-sm font-medium uppercase tracking-wide text-muted-foreground mb-1">
                 {isShoebox ? "Substantiated & banked" : "Ready to submit"}
               </p>
@@ -1460,6 +1460,7 @@ export default function Substantiation() {
               size="lg"
               variant={isShoebox ? "outline" : "default"}
               disabled={eligible.length === 0}
+              className="w-full sm:w-auto"
               onClick={() => {
                 setTaxYear(CURRENT_TAX_YEAR);
                 setSelectedIds(new Set(eligibleNow.map((e) => e.id)));

@@ -133,22 +133,35 @@ export const DocumentCard = ({
               variant="outline"
               size="sm"
               onClick={handleView}
-              className="flex-1"
+              className="flex-1 h-11"
             >
               <Eye className="h-3 w-3 mr-1" />
               View
             </Button>
-            <Button variant="outline" size="sm" onClick={handleDownload}>
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-11 w-11"
+              onClick={handleDownload}
+              aria-label="Download document"
+            >
               <Download className="h-3 w-3" />
             </Button>
-            <Button variant="outline" size="sm" onClick={onEdit}>
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-11 w-11"
+              onClick={onEdit}
+              aria-label="Edit document"
+            >
               <Edit className="h-3 w-3" />
             </Button>
             <Button
               variant="outline"
-              size="sm"
+              size="icon"
+              className="h-11 w-11 text-destructive hover:text-destructive"
               onClick={() => onDelete(receipt.id)}
-              className="text-destructive hover:text-destructive"
+              aria-label="Delete document"
             >
               <Trash2 className="h-3 w-3" />
             </Button>

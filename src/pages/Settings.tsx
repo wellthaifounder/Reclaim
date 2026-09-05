@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
+import { PageHeader } from "@/components/PageHeader";
 import { ThemeToggleGroup } from "@/components/ThemeToggle";
 import { FamilyRosterCard } from "@/components/family/FamilyRosterCard";
 import { useRecomputeTiming } from "@/hooks/useHSAEligibility";
@@ -289,10 +290,10 @@ const Settings = () => {
         </div>
 
         <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">Account Settings</h1>
-          <p className="text-muted-foreground">
-            Manage your account preferences and security
-          </p>
+          <PageHeader
+            title="Account Settings"
+            description="Manage your account preferences and security"
+          />
         </div>
 
         <div className="space-y-6">
