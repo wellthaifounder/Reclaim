@@ -146,7 +146,10 @@ export const AuthenticatedNav = ({
                     className={cn(
                       "relative flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md transition-colors whitespace-nowrap",
                       isActivePath(item.path)
-                        ? "text-primary bg-accent"
+                        ? // accent-foreground, not primary: the teal primary on
+                          // the gold accent measured 2.41:1, under the 4.5:1
+                          // floor. These two tokens are a designed pair (8.52:1).
+                          "text-accent-foreground bg-accent"
                         : "text-muted-foreground hover:text-foreground hover:bg-accent/50",
                     )}
                     aria-label={item.label}
@@ -158,7 +161,10 @@ export const AuthenticatedNav = ({
                         truthiness rules (the badge prop is `number | undefined`;
                         `0 && …` evaluates to `0` and renders as the digit). */}
                     {item.badge !== undefined && item.badge > 0 && (
-                      <span className="bg-yellow-500 text-white text-xs px-1.5 py-0.5 rounded-full min-w-[20px] text-center">
+                      // Was white on yellow-500: 1.92:1. Primary rather than
+                      // accent because the active pill is itself accent, and a
+                      // gold badge on a gold pill stops reading as a badge.
+                      <span className="bg-primary text-primary-foreground text-xs px-1.5 py-0.5 rounded-full min-w-[20px] text-center">
                         {item.badge}
                       </span>
                     )}
@@ -235,7 +241,7 @@ export const AuthenticatedNav = ({
                               {item.label}
                             </span>
                             {"badge" in item && (item.badge ?? 0) > 0 && (
-                              <span className="bg-yellow-500 text-white text-xs px-1.5 py-0.5 rounded-full min-w-[20px] text-center">
+                              <span className="bg-primary text-primary-foreground text-xs px-1.5 py-0.5 rounded-full min-w-[20px] text-center">
                                 {item.badge}
                               </span>
                             )}
