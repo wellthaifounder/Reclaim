@@ -51,14 +51,26 @@ interface DashboardData {
   reclaimedYtd: number;
 }
 
-const ZERO: BucketCounts = { count: 0, total: 0 };
-const EMPTY_DATA: DashboardData = {
-  needsReceipt: ZERO,
-  pendingReview: ZERO,
-  eligible: ZERO,
-  submitted: ZERO,
-  reclaimedYtd: 0,
-};
+// A factory, not a shared constant. This used to be one frozen-looking `ZERO`
+// object assigned to all four bucket keys, copied with `{ ...EMPTY_DATA }` --
+// a one-level copy, so every key still pointed at that same object. All four
+// counters were therefore the same counter: `needsReceipt.count++` also
+// incremented `submitted.count`, and the four buckets rendered identical
+// figures (2/2/9/2 items showed as 15/15/15/15, and the headline came out as
+// exactly double one bucket). Because `ZERO` was module-level and mutated in
+// place, the totals also accumulated across reloads.
+//
+// Each call returns four independent objects. Do not hoist this back into a
+// constant.
+function emptyDashboardData(): DashboardData {
+  return {
+    needsReceipt: { count: 0, total: 0 },
+    pendingReview: { count: 0, total: 0 },
+    eligible: { count: 0, total: 0 },
+    submitted: { count: 0, total: 0 },
+    reclaimedYtd: 0,
+  };
+}
 
 const CURRENT_YEAR = new Date().getFullYear();
 
@@ -74,7 +86,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { isShoebox } = useReimbursementStrategy();
   const { isComplete: onboardingComplete } = useOnboardingStatus();
-  const [data, setData] = useState<DashboardData>(EMPTY_DATA);
+  const [data, setData] = useState<DashboardData>(emptyDashboardData);
   const [loading, setLoading] = useState(true);
 
   // Step 0. Auth sends every sign-in to /dashboard, which makes this the one
@@ -117,7 +129,7 @@ export default function Dashboard() {
           .select("lifecycle_status, amount, date, reimbursed_at")
           .eq("user_id", user.id);
 
-        const fresh: DashboardData = { ...EMPTY_DATA };
+        const fresh: DashboardData = emptyDashboardData();
 
         for (const row of invoiceRows ?? []) {
           const amount = Number(row.amount) || 0;

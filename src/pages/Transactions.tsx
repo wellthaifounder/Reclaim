@@ -34,6 +34,7 @@ import { MissingHSADateBanner } from "@/components/dashboard/MissingHSADateBanne
 import { TransactionsSkeleton } from "@/components/skeletons/TransactionsSkeleton";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { logError } from "@/utils/errorHandler";
+import { formatCurrency } from "@/lib/utils";
 import type { Database } from "@/integrations/supabase/types";
 
 // Derived from the generated row type rather than hand-written. The previous
@@ -452,9 +453,21 @@ export default function Transactions() {
     (t) => t.transfer_kind === "card_payment",
   );
 
+  // "Medical" means CONFIRMED medical. The classifier sets is_medical=true at
+  // the same time as needs_review=true for anything it thinks is medical but
+  // wants a human to confirm, so filtering on is_medical alone counts money the
+  // user has not agreed to yet. On the seeded account that read "Medical
+  // $15,109.32" directly above a queue of 27 undecided transactions worth
+  // $8,194.32 -- 54% of the figure -- so the same screen called those charges
+  // decided and undecided at once. Confirmed and pending are now separate.
+  const confirmedMedical = spending.filter(
+    (t) => t.is_medical && !t.needs_review,
+  );
+  const pendingMedical = spending.filter((t) => t.is_medical && t.needs_review);
+
   const stats = {
     total: spending.length,
-    medical: spending.filter((t) => t.is_medical).length,
+    medical: confirmedMedical.length,
     // The one true review count. Do not reach for `reconciliation_status ===
     // "unlinked"` here: plaidSync.ts stamps that on every row at ingest, so it
     // always equals `total` and means "no expense attached yet", not "a human
@@ -465,9 +478,14 @@ export default function Transactions() {
     // useAttentionItems, correctly filtered by is_medical.
     needsReview: spending.filter((t) => t.needs_review).length,
     totalAmount: spending.reduce((sum, t) => sum + Number(t.amount), 0),
-    medicalAmount: spending
-      .filter((t) => t.is_medical)
-      .reduce((sum, t) => sum + Number(t.amount), 0),
+    medicalAmount: confirmedMedical.reduce(
+      (sum, t) => sum + Number(t.amount),
+      0,
+    ),
+    pendingMedicalAmount: pendingMedical.reduce(
+      (sum, t) => sum + Number(t.amount),
+      0,
+    ),
     transfers: transactions.length - spending.length,
   };
 
@@ -541,20 +559,30 @@ export default function Transactions() {
               </p>
             </Card>
             <Card className="p-4">
-              <p className="text-sm text-muted-foreground">Medical</p>
-              <p className="text-2xl font-bold text-primary">{stats.medical}</p>
+              <p className="text-sm text-muted-foreground">
+                Medical, confirmed
+              </p>
+              <p className="text-2xl font-bold text-primary tabular-nums">
+                {stats.medical}
+              </p>
             </Card>
             <Card className="p-4">
               <p className="text-sm text-muted-foreground">Needs Review</p>
-              <p className="text-2xl font-bold text-yellow-600">
+              <p className="text-2xl font-bold text-yellow-600 tabular-nums">
                 {stats.needsReview}
               </p>
             </Card>
             <Card className="p-4">
-              <p className="text-sm text-muted-foreground">Medical Total</p>
-              <p className="text-2xl font-bold text-foreground">
-                ${stats.medicalAmount.toFixed(2)}
+              <p className="text-sm text-muted-foreground">Confirmed total</p>
+              <p className="text-2xl font-bold text-foreground tabular-nums">
+                {formatCurrency(stats.medicalAmount)}
               </p>
+              {stats.pendingMedicalAmount > 0 && (
+                <p className="text-xs text-muted-foreground mt-1 tabular-nums">
+                  {formatCurrency(stats.pendingMedicalAmount)} awaiting your
+                  review
+                </p>
+              )}
             </Card>
           </div>
 

@@ -9,7 +9,13 @@
  * 4. Generating error IDs for support reference
  */
 
-type ToastFunction = (message: string, options?: any) => void;
+/** The subset of a toast library's options this module actually passes. */
+interface ToastOptions {
+  description?: string;
+  duration?: number;
+}
+
+type ToastFunction = (message: string, options?: ToastOptions) => void;
 
 /**
  * Log error securely (development only)
@@ -17,13 +23,68 @@ type ToastFunction = (message: string, options?: any) => void;
 export const logError = (
   message: string,
   error?: unknown,
-  context?: Record<string, any>,
+  context?: Record<string, unknown>,
 ) => {
   if (import.meta.env.DEV) {
     console.error(`[${new Date().toISOString()}] ${message}`, error, context);
   }
   // In production, would send to secure logging service (Sentry, LogRocket, etc.)
   // Example: captureException(error, { contexts: context });
+};
+
+/**
+ * Pull a raw message string off anything throwable, for MATCHING ONLY.
+ *
+ * The result is server text. Never render it -- pass it through
+ * `toUserMessage` and show that instead.
+ */
+const rawMessage = (error: unknown): string =>
+  error instanceof Error
+    ? error.message
+    : typeof error === "object" && error && "message" in error
+      ? String((error as { message: unknown }).message)
+      : "";
+
+/**
+ * Turn a thrown value into something a person can read.
+ *
+ * The trap this exists to close: `err instanceof Error ? err.message : "..."`.
+ * A Supabase `FunctionsHttpError` IS an Error, so that branch always wins and
+ * the friendly fallback beside it is dead code. `/onboarding/import` shipped
+ * exactly that, which is how a user who had just handed over their bank
+ * credentials was shown "Edge Function returned a non-2xx status code" --
+ * meaningless to them, and it names our infrastructure. CLAUDE.md requires
+ * client-facing errors to be generic; this is the helper that keeps that true.
+ *
+ * Pass a `fallback` written for the specific screen. The raw text is only ever
+ * pattern-matched, never returned.
+ */
+export const toUserMessage = (
+  error: unknown,
+  fallback = "Something went wrong. Please try again.",
+): string => {
+  const message = rawMessage(error);
+
+  // Supabase edge-function transport failures. The user did nothing wrong and
+  // there is nothing for them to fix, so say so and let them retry.
+  if (
+    /non-2xx status code|FunctionsHttpError|FunctionsRelayError|FunctionsFetchError/i.test(
+      message,
+    )
+  ) {
+    return "Something went wrong on our end. Your bank connection is fine — please try again.";
+  }
+
+  // Offline or the request never landed.
+  if (/Failed to fetch|NetworkError|ERR_INTERNET_DISCONNECTED/i.test(message)) {
+    return "We couldn't reach Reclaim. Check your connection and try again.";
+  }
+
+  if (/timeout|timed out|AbortError/i.test(message)) {
+    return "That took too long to respond. Please try again.";
+  }
+
+  return fallback;
 };
 
 /**
@@ -136,7 +197,10 @@ export const sanitizePHI = (text: string): string => {
 
       // Dates of birth (various formats)
       .replace(
-        /\b(DOB|Date of Birth|Birth Date)[\s:]*\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}\b/gi,
+        // `-` is last in each class, so it stays literal and cannot open a
+        // range. Verified identical to the previously escaped `[\/\-]` form
+        // across the separator, label and near-miss cases.
+        /\b(DOB|Date of Birth|Birth Date)[\s:]*\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b/gi,
         "[DOB-REDACTED]",
       )
 

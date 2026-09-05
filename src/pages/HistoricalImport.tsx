@@ -28,7 +28,7 @@ import {
   AlertCircle,
   ArrowRight,
 } from "lucide-react";
-import { logError } from "@/utils/errorHandler";
+import { logError, toUserMessage } from "@/utils/errorHandler";
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 
 interface SyncResult {
@@ -96,6 +96,10 @@ export default function HistoricalImport() {
   const [errorMsg, setErrorMsg] = useState<string>("");
   const [startedAt] = useState(() => Date.now());
   const [, setTick] = useState(0);
+  // Bumping this re-runs the sync effect. The failure this screen shows is
+  // usually transient, so retrying is the action most likely to resolve it --
+  // and until now the screen offered no way to do it.
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     const id = setInterval(() => setTick((t) => t + 1), 1_500);
@@ -176,10 +180,15 @@ export default function HistoricalImport() {
       } catch (err) {
         logError("HistoricalImport sync failed", err);
         if (cancelled) return;
+        // Was `err instanceof Error ? err.message : <friendly>`, which put the
+        // raw "Edge Function returned a non-2xx status code" on screen seconds
+        // after the user handed over their bank credentials -- a FunctionsHttpError
+        // is an Error, so the friendly branch could never run.
         setErrorMsg(
-          err instanceof Error
-            ? err.message
-            : "We couldn't finish the import. You can still add bills manually.",
+          toUserMessage(
+            err,
+            "We couldn't finish the import. Your bank connection is fine — you can try again, or add expenses manually for now.",
+          ),
         );
         setPhase("error");
       }
@@ -190,7 +199,7 @@ export default function HistoricalImport() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [attempt]);
 
   // ── Loading state ────────────────────────────────────────────────────────
   if (phase === "loading") {
@@ -237,14 +246,23 @@ export default function HistoricalImport() {
             We couldn't finish the import
           </h1>
           <p className="text-muted-foreground mb-6">{errorMsg}</p>
-          <div className="flex gap-3 justify-center">
+          {/* Retry is primary: this failure is usually transient, and moving on
+              means walking away from the history the user just connected a bank
+              to import. Carrying on stays available, quietly. */}
+          <div className="flex flex-col sm:flex-row gap-3 sm:justify-center">
             <Button
-              variant="outline"
-              onClick={() => navigate("/bank-accounts")}
+              className="w-full sm:w-auto"
+              onClick={() => {
+                setErrorMsg("");
+                setPhase("loading");
+                setAttempt((n) => n + 1);
+              }}
             >
-              Manage Bank Accounts
+              Try again
             </Button>
             <Button
+              variant="outline"
+              className="w-full sm:w-auto"
               onClick={() =>
                 navigate(
                   midOnboarding ? "/welcome?step=household" : "/expenses",

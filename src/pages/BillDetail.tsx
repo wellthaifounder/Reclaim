@@ -24,6 +24,7 @@ import { FileText, Upload } from "lucide-react";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
 import { SubstantiationPanel } from "@/components/expense/SubstantiationPanel";
 import { logError } from "@/utils/errorHandler";
+import { todayLocalISO } from "@/lib/utils";
 import { ReceiptGallery } from "@/components/expense/ReceiptGallery";
 import { MultiFileUpload } from "@/components/expense/MultiFileUpload";
 import { Input } from "@/components/ui/input";
@@ -68,7 +69,7 @@ export default function BillDetail() {
   const [newFiles, setNewFiles] = useState<UploadedFile[]>([]);
   const [isAnalyzing] = useState(false);
   const [formData, setFormData] = useState({
-    date: new Date().toISOString().split("T")[0],
+    date: todayLocalISO(),
     vendor: "",
     totalAmount: "",
     category: "",

@@ -26,6 +26,28 @@ export function formatCurrency(
 }
 
 /**
+ * A calendar date as `YYYY-MM-DD`, read in the viewer's own timezone.
+ *
+ * Do not reach for `date.toISOString().split("T")[0]` for this. That converts
+ * to UTC first, so for anyone behind UTC -- every US timezone -- it returns
+ * *tomorrow* from early evening onward. On this product that is not cosmetic:
+ * date of service decides whether an expense clears the HSA establishment date
+ * and which tax year it lands in, so a form defaulting to tomorrow can push an
+ * expense into a year it does not belong to.
+ */
+export function toLocalISODate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+/** Today's calendar date in the viewer's timezone, as `YYYY-MM-DD`. */
+export function todayLocalISO(): string {
+  return toLocalISODate(new Date());
+}
+
+/**
  * Format a number with proper thousand separators
  * @param num - The number to format
  * @param decimals - Number of decimal places (default: 0)

@@ -9,22 +9,17 @@ import {
 import { Download, FileText, FileSpreadsheet } from "lucide-react";
 import { toast } from "sonner";
 import { logError } from "@/utils/errorHandler";
-import { generateAnalyticsReportPDF } from "@/lib/pdfGenerator";
+import {
+  generateAnalyticsReportPDF,
+  type AnalyticsReport,
+} from "@/lib/pdfGenerator";
 
-interface ExportData {
-  stats: {
-    totalExpenses: number;
-    hsaEligible: number;
-    projectedSavings: number;
-    actualSavings: number;
-    avgMonthly: number;
-    unreimbursedHsaTotal: number;
-  };
-  monthlyData: any[];
-  categoryData: any[];
-  paymentMethodsRewards: any[];
-  yearlyData: any[];
-}
+// The four arrays here were `any[]`, which meant nothing checked that what
+// this component builds into CSV and JSON matches what it then passes to
+// generateAnalyticsReportPDF. Deriving from that function's own input type
+// removes the duplication and makes a future drift a compile error.
+// `dateRange` is omitted because it arrives as a separate prop.
+type ExportData = Omit<AnalyticsReport, "dateRange">;
 
 interface ExportAnalyticsProps {
   data: ExportData;

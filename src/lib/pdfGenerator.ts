@@ -6,7 +6,11 @@ import jsPDF from "jspdf";
 // submission and carries the Pub 502 basis and confirmation timestamp this one
 // never did.
 
-interface AnalyticsReport {
+// Exported so ExportAnalytics can derive its own props from it. That component
+// hands its data straight to generateAnalyticsReportPDF, and its four arrays
+// were typed `any[]`, so a shape mismatch between the two would not have been
+// caught by the compiler.
+export interface AnalyticsReport {
   dateRange: string;
   stats: {
     totalExpenses: number;
