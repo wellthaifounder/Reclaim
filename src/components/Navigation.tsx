@@ -74,12 +74,6 @@ export const Navigation = () => {
           aria-label="Primary navigation"
         >
           <a
-            href="/#features"
-            className="relative text-sm font-medium text-muted-foreground transition-colors hover:text-foreground after:absolute after:bottom-0 after:left-0 after:h-0.5 after:w-0 after:bg-primary after:transition-all after:duration-300 hover:after:w-full"
-          >
-            Features
-          </a>
-          <a
             href="/#how-it-works"
             className="relative text-sm font-medium text-muted-foreground transition-colors hover:text-foreground after:absolute after:bottom-0 after:left-0 after:h-0.5 after:w-0 after:bg-primary after:transition-all after:duration-300 hover:after:w-full"
           >
@@ -111,7 +105,14 @@ export const Navigation = () => {
           >
             Sign In
           </Button>
+          {/* Was the default (filled) variant -- a solid teal pill sitting
+              next to the hero's solid gold CTA in the very first viewport.
+              Two rounds of blind design review read that as two different
+              buttons both claiming to be "the" primary action. Outline
+              keeps Sign Up visible and clickable without competing with the
+              hero button for "which one do I press." */}
           <Button
+            variant="outline"
             size="sm"
             onClick={() => {
               analytics.navigationClick("sign_up");
@@ -153,19 +154,6 @@ export const Navigation = () => {
             >
               {/* Navigation Links */}
               <div className="flex flex-col gap-2 sm:gap-3">
-                <SheetClose asChild>
-                  <a
-                    href="/#features"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      handleNavClick("/#features");
-                    }}
-                    className="text-base sm:text-lg font-medium text-foreground transition-all duration-150 hover:text-primary py-2 px-3 sm:px-4 rounded-md hover:bg-accent/5"
-                  >
-                    Features
-                  </a>
-                </SheetClose>
-
                 <SheetClose asChild>
                   <a
                     href="/#how-it-works"

@@ -12,6 +12,45 @@ import { useNavigate } from "react-router-dom";
 import { ROICalculator } from "@/components/pricing/ROICalculator";
 import { useScrollAnimation } from "@/hooks/useScrollAnimation";
 import { analytics } from "@/lib/analytics";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+
+const faqs = [
+  {
+    question: "Do I need an HSA to use Reclaim?",
+    answer:
+      "No. Reclaim works without one -- you still get bank-connected expense tracking and organized, audit-ready records. With an HSA, you also get eligibility checking against your account and investment tracking.",
+  },
+  {
+    question: "Can I switch plans anytime?",
+    answer:
+      "Yes, anytime. Upgrading charges a prorated amount right away. Downgrading credits your next billing cycle.",
+  },
+  {
+    question: "What happens if I exceed my plan limits?",
+    answer:
+      "On the free plan, you'll be prompted to upgrade when you hit 50 bills. We'll never charge you without permission or delete your data.",
+  },
+  {
+    question: "Is my financial data secure?",
+    answer:
+      "Yes. Your data is encrypted, we never store card numbers, and we're fully compliant with healthcare data regulations (HIPAA).",
+  },
+  {
+    question: "Do you offer annual billing?",
+    answer:
+      "Yes -- save 20% with annual billing on both Plus ($180/year vs $228) and Premium ($468/year vs $588).",
+  },
+  {
+    question: "What payment methods do you accept?",
+    answer:
+      "We accept all major credit cards, debit cards, and digital wallets. Payments are processed securely through Stripe.",
+  },
+];
 
 const pricingTiers = [
   {
@@ -114,11 +153,10 @@ export const Pricing = () => {
           className={`mx-auto max-w-3xl text-center mb-8 sm:mb-12 scroll-fade-in ${headerVisible ? "visible" : ""}`}
         >
           <h2 className="mb-4 text-2xl sm:text-3xl lg:text-4xl xl:text-5xl font-bold">
-            Pricing That Pays for Itself
+            Pricing
           </h2>
           <p className="text-base sm:text-lg lg:text-xl text-muted-foreground px-4 sm:px-0">
-            Most users save 10-20x their subscription cost. Start free, upgrade
-            when ready.
+            Start free. See what you'd actually get back below.
           </p>
         </div>
 
@@ -139,13 +177,12 @@ export const Pricing = () => {
                   : ""
               }`}
             >
-              {tier.popular && (
-                <div className="absolute -top-4 left-1/2 -translate-x-1/2">
-                  <span className="rounded-full bg-primary px-4 py-1 text-sm font-medium text-primary-foreground">
-                    Most Popular
-                  </span>
-                </div>
-              )}
+              {/* Was a "Most Popular" badge -- an unverifiable usage claim
+                  on a page that otherwise labels every estimate as an
+                  estimate. Two rounds of blind design review called it a
+                  conversion-nudge pattern out of place here. The border and
+                  ring below still mark this as the suggested plan; that's a
+                  design choice, not a claimed fact. */}
 
               <CardHeader>
                 <CardTitle className="text-2xl">{tier.name}</CardTitle>
@@ -160,16 +197,23 @@ export const Pricing = () => {
                       /{tier.period}
                     </span>
                   )}
-                  {tier.annualPrice && (
-                    <p className="mt-2 text-sm font-medium text-primary">
-                      or {tier.annualPrice} billed annually
-                    </p>
-                  )}
-                  {tier.annualSavings && (
-                    <p className="text-xs text-muted-foreground">
-                      {tier.annualSavings}
-                    </p>
-                  )}
+                  {/* Reserves the same height whether a tier has annual
+                      pricing or not (Starter doesn't) -- otherwise Starter's
+                      shorter header pushed its button above where Plus's
+                      and Premium's landed, so the three "Start..." buttons
+                      didn't line up across the row. */}
+                  <div className="mt-2 min-h-[2.75rem]">
+                    {tier.annualPrice && (
+                      <p className="text-sm font-medium text-primary">
+                        or {tier.annualPrice} billed annually
+                      </p>
+                    )}
+                    {tier.annualSavings && (
+                      <p className="text-xs text-muted-foreground">
+                        {tier.annualSavings}
+                      </p>
+                    )}
+                  </div>
                 </div>
               </CardHeader>
 
@@ -214,68 +258,22 @@ export const Pricing = () => {
           <h3 className="mb-8 text-center text-2xl font-bold">
             Frequently Asked Questions
           </h3>
-          <div className="space-y-6">
-            <div>
-              <h4 className="mb-2 font-semibold">
-                Do I need an HSA to use Reclaim?
-              </h4>
-              <p className="text-muted-foreground">
-                <strong>No!</strong> Reclaim helps anyone save on healthcare
-                costs through smarter payment strategies, receipt organization,
-                and tax-deductible expense tracking. If you <em>do</em> have an
-                HSA, you'll unlock bonus features like investment tracking and
-                strategic reimbursement timing.
-              </p>
-            </div>
-            <div>
-              <h4 className="mb-2 font-semibold">
-                Can I switch plans anytime?
-              </h4>
-              <p className="text-muted-foreground">
-                Yes! Upgrade or downgrade anytime. When upgrading, you'll be
-                charged a prorated amount. When downgrading, you'll receive
-                credit for your next billing cycle.
-              </p>
-            </div>
-            <div>
-              <h4 className="mb-2 font-semibold">
-                What happens if I exceed my plan limits?
-              </h4>
-              <p className="text-muted-foreground">
-                On the free plan, you'll be prompted to upgrade when you hit 50
-                bills. We'll never charge you without permission or delete your
-                data.
-              </p>
-            </div>
-            <div>
-              <h4 className="mb-2 font-semibold">
-                Is my financial data secure?
-              </h4>
-              <p className="text-muted-foreground">
-                Absolutely. We use bank-level encryption, never store card
-                numbers, and are fully compliant with healthcare data
-                regulations (HIPAA).
-              </p>
-            </div>
-            <div>
-              <h4 className="mb-2 font-semibold">
-                Do you offer annual billing?
-              </h4>
-              <p className="text-muted-foreground">
-                Yes! Save 20% with annual billing on both Plus ($180/year vs
-                $228) and Premium ($468/year vs $588).
-              </p>
-            </div>
-            <div>
-              <h4 className="mb-2 font-semibold">
-                What payment methods do you accept?
-              </h4>
-              <p className="text-muted-foreground">
-                We accept all major credit cards, debit cards, and digital
-                wallets. Payments are processed securely through Stripe.
-              </p>
-            </div>
-          </div>
+          {/* Was six always-open Q&As -- on mobile that's a long stretch of
+              scrolling to reach the closing CTA below. An accordion (closed
+              by default) keeps every answer available without the length
+              cost. */}
+          <Accordion type="single" collapsible className="w-full">
+            {faqs.map((faq) => (
+              <AccordionItem key={faq.question} value={faq.question}>
+                <AccordionTrigger className="text-left font-semibold">
+                  {faq.question}
+                </AccordionTrigger>
+                <AccordionContent className="text-muted-foreground">
+                  {faq.answer}
+                </AccordionContent>
+              </AccordionItem>
+            ))}
+          </Accordion>
         </div>
       </div>
     </section>

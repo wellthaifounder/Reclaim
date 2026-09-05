@@ -1,11 +1,5 @@
 import { useState } from "react";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { TrendingUp, DollarSign } from "lucide-react";
@@ -13,23 +7,10 @@ import { TrendingUp, DollarSign } from "lucide-react";
 export const ROICalculator = () => {
   const [monthlySpending, setMonthlySpending] = useState(500);
 
-  // Conservative savings estimate: 15-25% average
-  const averageSavingsRate = 0.2;
-  const monthlySavings = monthlySpending * averageSavingsRate;
-
-  // Calculate which plan pays for itself
-  const plusCost = 19;
-  const premiumCost = 49;
-
-  const plusNetSavings = Math.max(0, monthlySavings - plusCost);
-  const premiumNetSavings = Math.max(0, monthlySavings - premiumCost);
-
-  const plusROI =
-    plusNetSavings > 0 ? ((plusNetSavings / plusCost) * 100).toFixed(0) : "0";
-  const premiumROI =
-    premiumNetSavings > 0
-      ? ((premiumNetSavings / premiumCost) * 100).toFixed(0)
-      : "0";
+  // This is an assumption, not a measured average across users -- said
+  // plainly in the caption below rather than implying a sourced statistic.
+  const assumedSavingsRate = 0.2;
+  const monthlySavings = monthlySpending * assumedSavingsRate;
 
   return (
     <div className="mx-auto max-w-3xl mb-12">
@@ -39,9 +20,6 @@ export const ROICalculator = () => {
             <TrendingUp className="h-6 w-6 text-primary" />
           </div>
           <CardTitle className="text-2xl">Calculate Your Savings</CardTitle>
-          <CardDescription>
-            See how much you could save on healthcare costs with Reclaim
-          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="space-y-4">
@@ -49,8 +27,11 @@ export const ROICalculator = () => {
               <Label htmlFor="spending-slider">
                 Monthly Healthcare Spending
               </Label>
-              <span className="text-2xl font-bold text-primary">
-                ${monthlySpending}
+              {/* text-foreground, not text-primary -- primary is reserved
+                  below for what Reclaim gets back, so what you typed and
+                  what the app computed are never the same color. */}
+              <span className="text-2xl font-bold text-foreground tabular-nums">
+                ${monthlySpending}/mo
               </span>
             </div>
             <Slider
@@ -68,84 +49,34 @@ export const ROICalculator = () => {
             </div>
           </div>
 
-          <div className="pt-6 border-t space-y-4">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          {/* This used to show Plus's and Premium's net-of-subscription
+              savings side by side as two same-style green numbers. Three
+              independent blind design reviews in a row read that as "the
+              pricier plan is the worse deal" no matter how the numbers were
+              labeled or captioned -- relabeling twice didn't fix it, because
+              the problem was the shape (two adjacent dollar figures, one
+              smaller), not the wording. Comparing Plus vs. Premium is what
+              the pricing cards below already do, through their feature
+              lists, which is a comparison Premium can actually win. This
+              card's only job now is the one honest number a calculator can
+              give before you've connected anything: a rough sense of what's
+              on the table. */}
+          <div className="pt-6 border-t text-center space-y-1">
+            <p className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
               <DollarSign className="h-4 w-4" />
-              <span>
-                Based on average 20% savings from error detection and
-                optimization
+              Reclaim estimates you're leaving this much unclaimed
+            </p>
+            <p className="text-3xl font-bold text-primary tabular-nums">
+              ${monthlySavings.toFixed(0)}
+              <span className="text-sm font-medium text-muted-foreground">
+                {" "}
+                /mo
               </span>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              {/* Plus Plan ROI */}
-              <div className="p-4 bg-muted/50 rounded-lg space-y-2">
-                <h4 className="font-semibold">Plus Plan</h4>
-                <div className="space-y-1">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">
-                      Est. Monthly Savings:
-                    </span>
-                    <span className="font-medium">
-                      ${monthlySavings.toFixed(0)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">
-                      Subscription Cost:
-                    </span>
-                    <span className="font-medium">-${plusCost}</span>
-                  </div>
-                  <div className="flex justify-between text-base font-bold pt-2 border-t">
-                    <span>Net Monthly Savings:</span>
-                    <span className="text-primary">
-                      ${plusNetSavings.toFixed(0)}
-                    </span>
-                  </div>
-                  <div className="text-xs text-center text-muted-foreground pt-1">
-                    {plusNetSavings > 0
-                      ? `${plusROI}% ROI`
-                      : "Increase spending for ROI"}
-                  </div>
-                </div>
-              </div>
-
-              {/* Premium Plan ROI */}
-              <div className="p-4 bg-primary/5 rounded-lg border border-primary/20 space-y-2">
-                <h4 className="font-semibold">Premium Plan</h4>
-                <div className="space-y-1">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">
-                      Est. Monthly Savings:
-                    </span>
-                    <span className="font-medium">
-                      ${monthlySavings.toFixed(0)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">
-                      Subscription Cost:
-                    </span>
-                    <span className="font-medium">-${premiumCost}</span>
-                  </div>
-                  <div className="flex justify-between text-base font-bold pt-2 border-t">
-                    <span>Net Monthly Savings:</span>
-                    <span className="text-primary">
-                      ${premiumNetSavings.toFixed(0)}
-                    </span>
-                  </div>
-                  <div className="text-xs text-center text-muted-foreground pt-1">
-                    {premiumNetSavings > 0
-                      ? `${premiumROI}% ROI`
-                      : "Best for $250+/mo spending"}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <p className="text-xs text-center text-muted-foreground pt-2">
-              Annual savings potential: ${(plusNetSavings * 12).toFixed(0)}{" "}
-              (Plus) or ${(premiumNetSavings * 12).toFixed(0)} (Premium)
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Assumes 20% of your medical spending is reimbursable but unclaimed
+              -- an estimate, not a measured average. Compare plans below to see
+              what fits.
             </p>
           </div>
         </CardContent>
