@@ -1,10 +1,15 @@
 // Reclaim — 4-tab mobile bottom navigation.
 //
 // Follows the spec's spine in order: Transactions is where money gets sorted
-// into medical / non-medical, Expenses is what came out of that, and Records
-// is where a claim gets built. Expense Groups was retired on 2026-08-20 with
-// the rest of the care-events surface, and Transactions took the free slot —
-// it is step one of the workflow and had been buried behind "More".
+// into medical / non-medical, Expenses is what came out of that, and Reimburse
+// is where a reimbursement packet gets built. Expense Groups was retired on
+// 2026-08-20 with the rest of the care-events surface, and Transactions took
+// the free slot — it is step one of the workflow and had been buried behind
+// "More".
+//
+// Labelled "Reimburse," not "Records" or "Substantiation" -- this tab is the
+// third step of Categorize -> Substantiate -> Reimburse, not the second. See
+// design review Phase 5 correction, 2026-09-04.
 //
 // The remaining surfaces (Documents, Bank Accounts) live behind the sidebar's
 // "More" group on desktop and the hamburger sheet on mobile.
@@ -16,7 +21,7 @@ const TABS = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
   { icon: Receipt, label: "Expenses", path: "/expenses" },
   { icon: FileCheck, label: "Documents", path: "/documents" },
-  { icon: FileText, label: "Records", path: "/substantiation" },
+  { icon: FileText, label: "Reimburse", path: "/substantiation" },
 ];
 
 export const BottomTabNavigation = () => {

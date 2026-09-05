@@ -65,8 +65,11 @@ export const AuthenticatedNav = ({
   };
 
   // Reclaim Phase 5 W1 — primary nav. Top-bar uses the BottomTabNavigation's
-  // short labels (Groups / Records) so all 4 fit at lg breakpoints without
-  // truncating. The sidebar + mobile hamburger keep the longer names.
+  // short labels (Groups / Reimburse) so all 4 fit at lg breakpoints without
+  // truncating. The sidebar + mobile hamburger keep the same name now too --
+  // see design review Phase 5 correction, 2026-09-04: this page is the
+  // Reimburse step of Categorize -> Substantiate -> Reimburse, not
+  // Substantiation itself, so both nav levels now agree on "Reimburse".
   //
   // Both counts land on Expenses now that it is one page: transactions waiting
   // to be categorised are its Review tab, expenses waiting on eligibility are
@@ -83,7 +86,7 @@ export const AuthenticatedNav = ({
       path: "/expenses",
       badge: expensesBadge,
     },
-    { icon: FileText, label: "Records", path: "/substantiation" },
+    { icon: FileText, label: "Reimburse", path: "/substantiation" },
   ];
 
   // Mobile hamburger sheet — has drawer space for full names.
@@ -95,7 +98,7 @@ export const AuthenticatedNav = ({
       path: "/expenses",
       badge: expensesBadge,
     },
-    { icon: FileText, label: "Substantiation", path: "/substantiation" },
+    { icon: FileText, label: "Reimburse", path: "/substantiation" },
   ];
 
   const moreItems: NavItem[] = [

@@ -44,10 +44,15 @@ interface MenuItem {
 }
 
 // Reclaim Phase 5 W1 — primary IA per brief §9.
-//   Dashboard · Expenses · Expense Groups · Substantiation
+//   Dashboard · Expenses · Expense Groups · Reimburse
 // Everything Wellth-era (Transactions, HSA Claims, HSA Calculator, Reports,
 // Documents, Bank Accounts, HSA Guide, Ledger) lives behind the "More" group
 // below until Phase 6 dead-code sweep decides what stays.
+//
+// Labelled "Reimburse," not "Substantiation" -- this is the third step of the
+// app's Categorize -> Substantiate -> Reimburse model (building a reimbursement
+// packet from already-substantiated expenses), not the second. See design
+// review Phase 5 correction, 2026-09-04.
 const primaryMenuItems: MenuItem[] = [
   {
     icon: LayoutDashboard,
@@ -65,7 +70,7 @@ const primaryMenuItems: MenuItem[] = [
   },
   {
     icon: FileText,
-    label: "Substantiation",
+    label: "Reimburse",
     path: "/substantiation",
     badgeKey: null,
   },
