@@ -38,7 +38,7 @@ const BankAccounts = lazy(() => import("./pages/BankAccounts"));
 const HistoricalImport = lazy(() => import("./pages/HistoricalImport"));
 const Welcome = lazy(() => import("./pages/Welcome"));
 const ExpenseEntry = lazy(() => import("./pages/ExpenseEntry"));
-const Review = lazy(() => import("./pages/Review"));
+const Substantiate = lazy(() => import("./pages/Substantiate"));
 const Substantiation = lazy(() => import("./pages/Substantiation"));
 const Documents = lazy(() => import("./pages/Documents"));
 const Settings = lazy(() => import("./pages/Settings"));
@@ -283,16 +283,25 @@ const App = () => (
                           </ProtectedRoute>
                         }
                       />
-                      {/* Reclaim Phase 3: classification review + audit-trail capture */}
+                      {/* Reclaim Phase 5 W2: Substantiate — step two of
+                          Categorize -> Substantiate -> Reimburse. Attaching a
+                          document and confirming eligibility, in one place. */}
                       <Route
-                        path="/review"
+                        path="/substantiate"
                         element={
                           <ProtectedRoute>
                             <ErrorBoundary>
-                              <Review />
+                              <Substantiate />
                             </ErrorBoundary>
                           </ProtectedRoute>
                         }
+                      />
+                      {/* /review was Phase 3's classification queue. Its work
+                          moved to /substantiate; the path stays as a redirect
+                          so old links and bookmarks don't 404. */}
+                      <Route
+                        path="/review"
+                        element={<Navigate to="/substantiate" replace />}
                       />
                       {/* Reclaim Phase 4 W1+W2: Substantiation Record generation + SUBMITTED state */}
                       <Route

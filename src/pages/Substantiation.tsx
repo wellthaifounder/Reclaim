@@ -1160,9 +1160,9 @@ export default function Substantiation() {
                   Nothing eligible for {taxYear} yet. Confirm expenses on the{" "}
                   <button
                     className="underline text-foreground"
-                    onClick={() => navigate("/review")}
+                    onClick={() => navigate("/substantiate")}
                   >
-                    review page
+                    Substantiate page
                   </button>{" "}
                   to add them to your reclaim list.
                 </p>
