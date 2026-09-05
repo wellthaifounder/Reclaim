@@ -1,13 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { Upload, Search, FileText, Tag } from "lucide-react";
@@ -16,6 +10,7 @@ import { EditDocumentDialog } from "@/components/documents/EditDocumentDialog";
 import { MultiFileUpload } from "@/components/expense/MultiFileUpload";
 import { Badge } from "@/components/ui/badge";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
+import { PageHeader } from "@/components/PageHeader";
 import { logError } from "@/utils/errorHandler";
 interface Receipt {
   id: string;
@@ -163,24 +158,27 @@ const Documents = () => {
   const attachmentStatus = ["all", "attached", "unattached"];
   return (
     <AuthenticatedLayout>
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-4 py-8 pb-24 md:pb-8">
         <Card className="mb-6">
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <FileText className="h-6 w-6" />
+            <PageHeader
+              title={
+                <span className="flex items-center gap-2 text-2xl">
+                  <FileText className="h-6 w-6 shrink-0" />
                   Documents Center
-                </CardTitle>
-                <CardDescription>
-                  Manage all your healthcare documents in one place
-                </CardDescription>
-              </div>
-              <Button onClick={() => setShowUpload(!showUpload)}>
-                <Upload className="h-4 w-4 mr-2" />
-                Upload Documents
-              </Button>
-            </div>
+                </span>
+              }
+              description="Manage all your healthcare documents in one place"
+              action={
+                <Button
+                  onClick={() => setShowUpload(!showUpload)}
+                  className="w-full sm:w-auto"
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  Upload Documents
+                </Button>
+              }
+            />
           </CardHeader>
           <CardContent>
             {showUpload && (
