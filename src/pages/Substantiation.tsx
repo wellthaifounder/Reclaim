@@ -1275,9 +1275,7 @@ export default function Substantiation() {
         </button>
 
         <div className="mb-6">
-          <h1 className="text-2xl font-semibold mb-1">
-            Substantiation Records
-          </h1>
+          <h1 className="text-2xl font-semibold mb-1">Reimbursement Records</h1>
           <p className="text-sm text-muted-foreground">
             IRS-defensible bundles of your confirmed eligible expenses. Generate
             one when you're ready to file for HSA reimbursement.
