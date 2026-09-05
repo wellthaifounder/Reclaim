@@ -24,6 +24,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
+import { formatCurrency } from "@/lib/utils";
 import { Info, Plus, X, Loader2, ClipboardCheck } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -113,7 +114,7 @@ export function SubstantiationPanel({
       const message =
         error instanceof Error &&
         /reimbursable_within_paid|check constraint/i.test(error.message)
-          ? `You can't claim more than the $${amountPaid.toFixed(2)} you paid.`
+          ? `You can't claim more than the ${formatCurrency(amountPaid)} you paid.`
           : "Couldn't save that. Please try again.";
       toast.error(message);
       return false;
@@ -143,7 +144,7 @@ export function SubstantiationPanel({
     }
     if (parsed > amountPaid) {
       toast.error(
-        `You can't claim more than the $${amountPaid.toFixed(2)} you paid.`,
+        `You can't claim more than the ${formatCurrency(amountPaid)} you paid.`,
       );
       return;
     }
@@ -283,16 +284,16 @@ export function SubstantiationPanel({
                 : ""}{" "}
               at {(mileage.rate * 100).toFixed(0)}&cent; a mile
               {mileage.parkingAndTolls
-                ? `, plus $${mileage.parkingAndTolls.toFixed(2)} in parking and tolls`
+                ? `, plus ${formatCurrency(mileage.parkingAndTolls)} in parking and tolls`
                 : ""}{" "}
-              &mdash; ${amountPaid.toFixed(2)}. Lower it if part of the driving
-              wasn&rsquo;t for medical care.
+              &mdash; {formatCurrency(amountPaid)}. Lower it if part of the
+              driving wasn&rsquo;t for medical care.
             </p>
           ) : (
             <p className="text-xs text-muted-foreground">
-              You paid ${amountPaid.toFixed(2)}. Lower this if some of it came
-              back to you &mdash; an insurance refund, say. You can never claim
-              more than you paid.
+              You paid {formatCurrency(amountPaid)}. Lower this if some of it
+              came back to you &mdash; an insurance refund, say. You can never
+              claim more than you paid.
             </p>
           )}
           <div className="flex items-center gap-2">
@@ -311,7 +312,7 @@ export function SubstantiationPanel({
             </Button>
             {parseFloat(amount) < amountPaid && (
               <span className="text-xs text-muted-foreground">
-                ${(amountPaid - parseFloat(amount || "0")).toFixed(2)} not
+                {formatCurrency(amountPaid - parseFloat(amount || "0"))} not
                 claimable
               </span>
             )}

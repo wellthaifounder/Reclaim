@@ -37,6 +37,7 @@ import {
   Keyboard,
 } from "lucide-react";
 import { logError } from "@/utils/errorHandler";
+import { formatCurrency } from "@/lib/utils";
 
 interface BucketCounts {
   count: number;
@@ -74,13 +75,9 @@ function emptyDashboardData(): DashboardData {
 
 const CURRENT_YEAR = new Date().getFullYear();
 
-function fmtMoney(n: number): string {
-  return n.toLocaleString("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 2,
-  });
-}
+// Was a file-local formatter, one of seven across the app. Output is identical
+// to the canonical one; this just stops it being an eighth.
+const fmtMoney = formatCurrency;
 
 export default function Dashboard() {
   const navigate = useNavigate();

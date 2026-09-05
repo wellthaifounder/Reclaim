@@ -1,5 +1,6 @@
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Money } from "@/components/ui/money";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -117,15 +118,17 @@ export function PaymentPlanFields({
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <div>
                   <p className="text-muted-foreground">Total Amount:</p>
-                  <p className="font-semibold">
-                    ${parseFloat(totalAmount).toFixed(2)}
-                  </p>
+                  <Money
+                    value={parseFloat(totalAmount)}
+                    className="block font-semibold"
+                  />
                 </div>
                 <div>
                   <p className="text-muted-foreground">This Payment:</p>
-                  <p className="font-semibold">
-                    ${parseFloat(currentAmount).toFixed(2)}
-                  </p>
+                  <Money
+                    value={parseFloat(currentAmount)}
+                    className="block font-semibold"
+                  />
                 </div>
                 <div>
                   <p className="text-muted-foreground">Installments:</p>

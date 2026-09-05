@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatCurrency } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -135,7 +136,7 @@ function EditableField({
     if (data?.value === null || data?.value === undefined)
       return "Not detected";
     if (field === "total_amount") {
-      return `$${Number(data.value).toFixed(2)}`;
+      return formatCurrency(Number(data.value));
     }
     return String(data.value);
   };

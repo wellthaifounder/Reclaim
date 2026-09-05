@@ -7,6 +7,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Money } from "@/components/ui/money";
 import { Calendar, DollarSign } from "lucide-react";
 
 interface TimelineExpense {
@@ -138,9 +139,7 @@ export function PaymentStrategyTimeline({
                             : "Medium-term"}
                         </Badge>
                       </div>
-                      <span className="font-semibold">
-                        ${expense.amount.toFixed(2)}
-                      </span>
+                      <Money value={expense.amount} className="font-semibold" />
                     </div>
                     <div className="text-sm text-muted-foreground space-y-1">
                       <div className="flex items-center gap-4">
@@ -207,11 +206,11 @@ export function PaymentStrategyTimeline({
                       </div>
                     )}
                   </div>
-                  <span
+                  <Money
+                    value={flow.net}
+                    whole
                     className={`text-sm font-medium w-20 text-right ${flow.net >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}
-                  >
-                    ${flow.net.toFixed(0)}
-                  </span>
+                  />
                 </div>
               ))}
             </div>

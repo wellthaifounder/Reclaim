@@ -20,6 +20,7 @@ import jsPDF from "jspdf";
 import { supabase } from "@/integrations/supabase/client";
 import { logError } from "@/utils/errorHandler";
 import { custodianSubmissionInstructions } from "@/lib/custodianInstructions";
+import { formatCurrency } from "@/lib/utils";
 import {
   ATTESTATION_STATEMENT,
   documentLabel,
@@ -73,12 +74,11 @@ function fmtTimestamp(iso: string): string {
   );
 }
 
-function fmtMoney(n: number): string {
-  return n.toLocaleString("en-US", {
-    style: "currency",
-    currency: "USD",
-  });
-}
+// Was a module-private `toLocaleString` call, which throws on a null amount.
+// Output is byte-identical to the canonical formatter -- verified across zero,
+// rounding boundaries, negatives and seven figures -- so the generated record
+// is unchanged.
+const fmtMoney = formatCurrency;
 
 /**
  * Download one document from the receipts bucket.

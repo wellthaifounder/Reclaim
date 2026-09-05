@@ -25,6 +25,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { formatCurrency } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import {
   Loader2,
@@ -301,8 +302,8 @@ export default function Review() {
               variant="outline"
               className="bg-amber-50 text-amber-700 border-amber-200"
             >
-              {totals.pendingCount} pending · $
-              {totals.pendingDollars.toFixed(2)}
+              {totals.pendingCount} pending ·{" "}
+              {formatCurrency(totals.pendingDollars)}
             </Badge>
             {totals.needsReceiptCount > 0 && (
               <Badge
@@ -327,7 +328,7 @@ export default function Review() {
                     <div className="min-w-0">
                       <p className="font-semibold truncate">{e.vendor}</p>
                       <p className="text-sm text-muted-foreground">
-                        ${e.amount.toFixed(2)} ·{" "}
+                        {formatCurrency(e.amount)} ·{" "}
                         <span className="inline-flex items-center gap-1">
                           <CalendarDays className="h-3 w-3" />
                           {new Date(e.date + "T00:00:00").toLocaleDateString()}

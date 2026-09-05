@@ -5,6 +5,7 @@ import {
   DollarSign,
   TrendingUp,
 } from "lucide-react";
+import { formatCurrency } from "@/lib/utils";
 
 export interface DashboardAction {
   priority: number;
@@ -57,8 +58,8 @@ export function getNextAction(stats: DashboardStats): DashboardAction {
     return {
       priority: 3,
       title: "Claim Money from Your HSA",
-      description: `You have $${stats.hsaClaimableAmount.toFixed(2)} ready to reimburse`,
-      buttonText: `Claim $${stats.hsaClaimableAmount.toFixed(2)}`,
+      description: `You have ${formatCurrency(stats.hsaClaimableAmount)} ready to reimburse`,
+      buttonText: `Claim ${formatCurrency(stats.hsaClaimableAmount)}`,
       route: "/substantiation",
       icon: DollarSign,
       timeEstimate: "~3 minutes",

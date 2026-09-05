@@ -13,6 +13,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Money } from "@/components/ui/money";
 import { Copy, FileText, Landmark, PencilLine, Check } from "lucide-react";
 import { format } from "date-fns";
 import {
@@ -70,9 +71,10 @@ function SideCard({
       </div>
 
       <p className="truncate font-medium text-foreground">{side.vendor}</p>
-      <p className="text-lg font-semibold text-foreground">
-        ${side.amount.toFixed(2)}
-      </p>
+      <Money
+        value={side.amount}
+        className="block text-lg font-semibold text-foreground"
+      />
       <p className="text-sm text-muted-foreground">
         {format(new Date(side.date), "MMM d, yyyy")}
         {side.patient_name ? ` · ${side.patient_name}` : ""}

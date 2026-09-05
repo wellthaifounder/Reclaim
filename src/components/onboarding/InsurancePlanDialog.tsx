@@ -20,6 +20,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Shield, DollarSign } from "lucide-react";
 import { logError } from "@/utils/errorHandler";
+import { formatCurrency } from "@/lib/utils";
 
 interface InsurancePlanDialogProps {
   open: boolean;
@@ -109,9 +110,13 @@ export function InsurancePlanDialog({
       toast.success("Insurance plan saved successfully!");
       onOpenChange(false);
       onSuccess?.();
-    } catch (error: any) {
+    } catch (error) {
       logError("Error saving insurance plan", error);
-      toast.error(error.message || "Failed to save insurance plan");
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to save insurance plan";
+      toast.error(message);
     } finally {
       setSaving(false);
     }
@@ -278,8 +283,8 @@ export function InsurancePlanDialog({
                     <span className="text-muted-foreground">
                       Deductible Remaining:
                     </span>
-                    <span className="font-semibold">
-                      ${deductibleRemaining.toFixed(2)}
+                    <span className="font-semibold tabular-nums">
+                      {formatCurrency(deductibleRemaining)}
                       {deductibleRemaining === 0 && " ✓"}
                     </span>
                   </div>
@@ -289,8 +294,8 @@ export function InsurancePlanDialog({
                     <span className="text-muted-foreground">
                       Out-of-Pocket Remaining:
                     </span>
-                    <span className="font-semibold">
-                      ${oopRemaining.toFixed(2)}
+                    <span className="font-semibold tabular-nums">
+                      {formatCurrency(oopRemaining)}
                       {oopRemaining === 0 && " ✓"}
                     </span>
                   </div>

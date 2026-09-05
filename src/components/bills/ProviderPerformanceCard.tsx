@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Money } from "@/components/ui/money";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Building2, TrendingUp, AlertTriangle, Star } from "lucide-react";
@@ -88,9 +89,10 @@ export function ProviderPerformanceCard({
           </div>
           <div>
             <p className="text-xs text-muted-foreground">Overcharges Found</p>
-            <p className="font-semibold text-orange-600">
-              ${Number(provider.total_overcharges_found).toFixed(2)}
-            </p>
+            <Money
+              value={Number(provider.total_overcharges_found)}
+              className="block font-semibold text-orange-600"
+            />
           </div>
         </div>
 

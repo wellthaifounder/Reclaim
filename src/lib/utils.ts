@@ -6,16 +6,42 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 /**
- * Format a number as currency with proper localization
- * @param amount - The number to format
+ * What we show instead of an amount when there is no amount to show.
+ *
+ * Deliberately not "$0.00". A null amount means *unknown* -- a nullable column
+ * that was never filled in, a total over an empty set -- and rendering that as
+ * zero states a figure we do not have. On a product where the numbers are
+ * someone's medical spending and their tax position, a confidently wrong $0.00
+ * is worse than a visible blank.
+ */
+export const MONEY_PLACEHOLDER = "—";
+
+/**
+ * The one money formatter. Everything user-facing goes through here.
+ *
+ * The app previously carried seven of these, five producing identical output,
+ * and the sites that used none of them built strings by hand with
+ * `` `$${n.toFixed(2)}` `` -- which is why five-figure amounts rendered as
+ * `$15109.32`, with no thousands separator. `Intl.NumberFormat` places the
+ * separators and the symbol correctly.
+ *
+ * Accepts null/undefined/NaN because three of the formatters this replaces
+ * called `toLocaleString` straight on the argument, which *throws* on null.
+ * Several call sites read from nullable database columns, so that was a live
+ * crash, not a hypothetical one.
+ *
+ * @param amount - The number to format; null/undefined/non-finite renders as `MONEY_PLACEHOLDER`
  * @param currency - The currency code (default: USD)
- * @param options - Additional Intl.NumberFormat options
+ * @param options - Additional Intl.NumberFormat options (e.g. whole dollars)
  */
 export function formatCurrency(
-  amount: number,
+  amount: number | null | undefined,
   currency: string = "USD",
   options?: Intl.NumberFormatOptions,
 ): string {
+  if (typeof amount !== "number" || !Number.isFinite(amount)) {
+    return MONEY_PLACEHOLDER;
+  }
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency,
@@ -23,6 +49,17 @@ export function formatCurrency(
     maximumFractionDigits: 2,
     ...options,
   }).format(amount);
+}
+
+/** Whole-dollar money, for headline figures where cents are noise. */
+export function formatCurrencyWhole(
+  amount: number | null | undefined,
+  currency: string = "USD",
+): string {
+  return formatCurrency(amount, currency, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  });
 }
 
 /**

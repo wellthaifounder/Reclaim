@@ -6,6 +6,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Award, TrendingUp, CreditCard } from "lucide-react";
+import { Money } from "@/components/ui/money";
+import { formatCurrency } from "@/lib/utils";
 import {
   BarChart,
   Bar,
@@ -77,16 +79,18 @@ export const RewardsOptimizationDashboard = ({
             <p className="text-sm text-muted-foreground">
               Total Rewards Earned
             </p>
-            <p className="text-3xl font-bold text-primary">
-              ${totalRewards.toFixed(2)}
-            </p>
+            <Money
+              value={totalRewards}
+              className="block text-3xl font-bold text-primary"
+            />
           </div>
           <div className="space-y-1">
             <p className="text-sm text-muted-foreground">Top Earning Card</p>
             <p className="text-lg font-semibold">{bestCard.name}</p>
-            <p className="text-sm text-muted-foreground">
-              ${bestCard.rewardsEarned.toFixed(2)}
-            </p>
+            <Money
+              value={bestCard.rewardsEarned}
+              className="block text-sm text-muted-foreground"
+            />
           </div>
         </div>
 
@@ -136,7 +140,7 @@ export const RewardsOptimizationDashboard = ({
                             {payload[0].payload.name}
                           </p>
                           <p className="text-sm">
-                            Rewards: ${value.toFixed(2)}
+                            Rewards: {formatCurrency(value)}
                           </p>
                           <p className="text-sm text-muted-foreground">
                             Rate: {payload[0].payload.rate}%
@@ -180,8 +184,8 @@ export const RewardsOptimizationDashboard = ({
                     <div>
                       <p className="font-medium">{pm.name}</p>
                       <p className="text-muted-foreground">
-                        {pm.rewardsRate}% rewards • ${pm.totalSpent.toFixed(2)}{" "}
-                        spent
+                        {pm.rewardsRate}% rewards •{" "}
+                        {formatCurrency(pm.totalSpent)} spent
                       </p>
                     </div>
                   </div>

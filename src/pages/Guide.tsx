@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatCurrencyWhole } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
   Upload,
@@ -61,15 +62,15 @@ const Guide = () => {
                     Contributions are pre-tax (payroll) or tax-deductible
                     (direct). In {CURRENT_TAX_YEAR}, you can contribute up to{" "}
                     <strong>
-                      ${HSA_LIMITS_CURRENT.selfOnly.toLocaleString()}
+                      {formatCurrencyWhole(HSA_LIMITS_CURRENT.selfOnly)}
                     </strong>{" "}
                     (self-only) or{" "}
                     <strong>
-                      ${HSA_LIMITS_CURRENT.family.toLocaleString()}
+                      {formatCurrencyWhole(HSA_LIMITS_CURRENT.family)}
                     </strong>{" "}
-                    (family), plus $
-                    {HSA_LIMITS_CURRENT.catchUp.toLocaleString()} catch-up if
-                    you're 55+.
+                    (family), plus{" "}
+                    {formatCurrencyWhole(HSA_LIMITS_CURRENT.catchUp)} catch-up
+                    if you're 55+.
                   </p>
                 </div>
                 <div className="rounded-lg border p-4 space-y-2">
@@ -307,10 +308,11 @@ const Guide = () => {
               <CardContent className="pt-6 space-y-2">
                 <h3 className="font-semibold">Max out contributions</h3>
                 <p className="text-sm text-muted-foreground">
-                  Contribute the full $
-                  {HSA_LIMITS_CURRENT.selfOnly.toLocaleString()} (self-only) or
-                  ${HSA_LIMITS_CURRENT.family.toLocaleString()} (family) each
-                  year. Every dollar you contribute reduces your taxable income.
+                  Contribute the full{" "}
+                  {formatCurrencyWhole(HSA_LIMITS_CURRENT.selfOnly)} (self-only)
+                  or {formatCurrencyWhole(HSA_LIMITS_CURRENT.family)} (family)
+                  each year. Every dollar you contribute reduces your taxable
+                  income.
                 </p>
               </CardContent>
             </Card>

@@ -15,6 +15,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Money } from "@/components/ui/money";
+import { formatCurrency } from "@/lib/utils";
 import { useTransactionSplits } from "@/hooks/useTransactionSplits";
 import {
   validateSplitAmounts,
@@ -130,7 +132,7 @@ export function TransactionSplitDialog({
         <ResponsiveDialogTitle>Split Transaction</ResponsiveDialogTitle>
         <ResponsiveDialogDescription>
           Divide this transaction across multiple HSA accounts or categories.
-          Total amount: ${transaction.amount.toFixed(2)}
+          Total amount: {formatCurrency(transaction.amount)}
         </ResponsiveDialogDescription>
       </ResponsiveDialogHeader>
 
@@ -234,23 +236,21 @@ export function TransactionSplitDialog({
         <div className="bg-muted p-3 rounded-lg">
           <div className="flex justify-between text-sm">
             <span>Total Transaction:</span>
-            <span className="font-semibold">
-              ${transaction.amount.toFixed(2)}
-            </span>
+            <Money value={transaction.amount} className="font-semibold" />
           </div>
           <div className="flex justify-between text-sm">
             <span>Total Allocated:</span>
-            <span className="font-semibold">
-              ${(transaction.amount - remaining).toFixed(2)}
-            </span>
+            <Money
+              value={transaction.amount - remaining}
+              className="font-semibold"
+            />
           </div>
           <div className="flex justify-between text-sm">
             <span>Remaining:</span>
-            <span
+            <Money
+              value={remaining}
               className={`font-semibold ${remaining > 0 ? "text-destructive" : "text-success"}`}
-            >
-              ${remaining.toFixed(2)}
-            </span>
+            />
           </div>
         </div>
 

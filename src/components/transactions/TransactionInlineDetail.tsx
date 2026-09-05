@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Money } from "@/components/ui/money";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -146,9 +147,10 @@ export function TransactionInlineDetail({
               <DollarSign className="h-4 w-4" />
               <span>Amount</span>
             </div>
-            <p className="font-medium text-lg">
-              ${Math.abs(transaction.amount).toFixed(2)}
-            </p>
+            <Money
+              value={Math.abs(transaction.amount)}
+              className="font-medium text-lg block"
+            />
           </div>
 
           <div className="space-y-1">

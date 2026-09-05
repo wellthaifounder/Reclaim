@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Money } from "@/components/ui/money";
 import { Badge } from "@/components/ui/badge";
 import { TrendingUp, TrendingDown, DollarSign } from "lucide-react";
 import {
@@ -79,10 +80,10 @@ export function ProviderChargeComparison({
                     <Badge variant="outline">{charge.cpt_code}</Badge>
                   </TableCell>
                   <TableCell className="text-right font-semibold">
-                    ${Number(charge.average_charge).toFixed(2)}
+                    <Money value={Number(charge.average_charge)} />
                   </TableCell>
                   <TableCell className="text-right">
-                    ${Number(charge.medicare_rate).toFixed(2)}
+                    <Money value={Number(charge.medicare_rate)} />
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
