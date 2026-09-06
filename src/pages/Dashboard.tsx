@@ -131,6 +131,13 @@ export default function Dashboard() {
         for (const row of invoiceRows ?? []) {
           const amount = Number(row.amount) || 0;
           switch (row.lifecycle_status) {
+            // 'captured' counts as needing a receipt (2026-09-06). It means no
+            // document and no eligibility decision, which is exactly the work
+            // this bucket names. Falling through every case instead, it made
+            // the dashboard report "You're all caught up" and $0.00 over a
+            // Substantiate queue holding twenty expenses -- the same omission
+            // that hid six real ones worth $2,642.13.
+            case "captured":
             case "needs_receipt":
               fresh.needsReceipt.count++;
               fresh.needsReceipt.total += amount;
@@ -259,7 +266,7 @@ export default function Dashboard() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => navigate("/expenses")}
+                  onClick={() => navigate("/substantiate")}
                 >
                   See all expenses
                 </Button>
@@ -302,7 +309,7 @@ export default function Dashboard() {
               copy={
                 isShoebox
                   ? "Saved for future reimbursement"
-                  : "Generate your Substantiation Record"
+                  : "Generate your Reimbursement Record"
               }
               ctaLabel={isShoebox ? "" : "Submit"}
               onClick={

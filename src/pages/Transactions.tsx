@@ -562,18 +562,18 @@ export default function Transactions() {
 
           <div className="flex items-center justify-between sticky top-0 z-10 bg-background py-2 mb-4">
             <div>
-              <h1 className="text-3xl font-bold text-foreground">Expenses</h1>
+              <h1 className="text-3xl font-bold text-foreground">
+                Transactions
+              </h1>
               <p className="text-muted-foreground text-sm mt-1">
-                Decide what's medical, then get it documented and claimed
+                Decide which of these were medical
               </p>
             </div>
-            {/* Was a dialog that wrote a bare transaction with no patient and
-                no date of service -- the two things a claim is refused for
-                lacking. It now goes to the one entry form, which asks. */}
-            <Button variant="outline" onClick={() => navigate("/expenses/new")}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add manually
-            </Button>
+            {/* "Add manually" moved to the Expenses page (2026-09-06). It
+                creates an EXPENSE -- it is the only route that records a cash
+                payment or mileage, neither of which has a transaction at all --
+                so offering it on the list of things the bank sent put it on the
+                one page whose contents it cannot add to. */}
           </div>
 
           {/* Stats Cards */}

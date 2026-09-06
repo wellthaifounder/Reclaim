@@ -250,7 +250,7 @@ const Guide = () => {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => navigate("/expenses")}
+                      onClick={() => navigate("/transactions")}
                     >
                       Open Transactions
                       <ArrowRight className="h-3.5 w-3.5 ml-1" />
@@ -352,7 +352,7 @@ const Guide = () => {
 
         {/* CTA */}
         <div className="text-center py-6">
-          <Button size="lg" onClick={() => navigate("/expenses")}>
+          <Button size="lg" onClick={() => navigate("/transactions")}>
             Get Started with Your Transactions
             <ArrowRight className="h-4 w-4 ml-2" />
           </Button>

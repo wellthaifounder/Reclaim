@@ -7,7 +7,13 @@ import {
   QueryClientProvider,
 } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  useLocation,
+} from "react-router-dom";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { SubscriptionProvider } from "@/contexts/SubscriptionContext";
 import { HSAProvider } from "@/contexts/HSAContext";
@@ -109,6 +115,18 @@ const queryClient = new QueryClient({
   },
 });
 
+/**
+ * Redirect to /transactions keeping the query string and hash.
+ *
+ * A bare <Navigate to="/transactions"> drops them, which would quietly break
+ * the bookmarks this redirect exists to protect: /expenses?tab=review lands on
+ * the All tab instead of the review queue, with nothing to say why.
+ */
+const RedirectToTransactions = () => {
+  const { search, hash } = useLocation();
+  return <Navigate to={{ pathname: "/transactions", search, hash }} replace />;
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider>
@@ -159,8 +177,23 @@ const App = () => (
                             /bills and /transactions redirect rather than 404:
                             both have been live long enough to be bookmarked
                             and to sit in the installed app's history. */}
+                      {/* Renamed 2026-09-06: this page lists TRANSACTIONS, and
+                          calling it Expenses cost real confusion -- an expense
+                          is the claim you build from a transaction, carries the
+                          date of service and the documentation, and is what
+                          /substantiate lists. Step one is now named for the
+                          object it actually shows.
+
+                          The direction of the /transactions redirect flipped:
+                          it is the real route now, and /expenses redirects to
+                          it. /expenses keeps working rather than moving to the
+                          page now LABELLED Expenses, because it has been live
+                          long enough to be bookmarked and to sit in the
+                          installed app's history -- pointing an existing
+                          bookmark at a different-but-plausible page is a
+                          silent break, not an error anyone would notice. */}
                       <Route
-                        path="/expenses"
+                        path="/transactions"
                         element={
                           <ProtectedRoute>
                             <ErrorBoundary>
@@ -171,11 +204,11 @@ const App = () => (
                       />
                       <Route
                         path="/bills"
-                        element={<Navigate to="/expenses" replace />}
+                        element={<RedirectToTransactions />}
                       />
                       <Route
-                        path="/transactions"
-                        element={<Navigate to="/expenses" replace />}
+                        path="/expenses"
+                        element={<RedirectToTransactions />}
                       />
                       {/* One way in, one way out (2026-08-21).
 

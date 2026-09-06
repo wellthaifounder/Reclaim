@@ -62,6 +62,7 @@ import {
   Sparkles,
   CalendarDays,
   User,
+  Plus,
 } from "lucide-react";
 import { toast } from "sonner";
 import { logError } from "@/utils/errorHandler";
@@ -322,11 +323,24 @@ export default function Substantiate() {
                 here.
               </p>
               <div className="flex flex-col sm:flex-row justify-center gap-2 pt-2">
-                <Button variant="outline" onClick={() => navigate("/expenses")}>
-                  See all expenses
+                <Button
+                  variant="outline"
+                  onClick={() => navigate("/transactions")}
+                >
+                  See all transactions
                 </Button>
                 <Button onClick={() => navigate("/substantiation")}>
                   Go to Reimburse
+                </Button>
+              </div>
+              <div className="pt-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => navigate("/expenses/new")}
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add an expense manually
                 </Button>
               </div>
             </CardContent>
@@ -340,10 +354,25 @@ export default function Substantiate() {
   return (
     <AuthenticatedLayout>
       <div className="max-w-3xl mx-auto px-4 py-8">
-        <PageHeader
-          title="Substantiate"
-          description="Attach what proves each expense, then confirm whether it's eligible. Each confirmation is the timestamped record your Reimbursement Record cites."
-        />
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <PageHeader
+              title="Expenses"
+              description="Attach what proves each expense, then confirm whether it's eligible. Each confirmation is the timestamped record your Reimbursement Record cites."
+            />
+          </div>
+          {/* Moved here from the transaction list: this is the only way to
+              record a cash payment or mileage, which never appear in a bank
+              feed, and what it creates is an expense -- this page's object. */}
+          <Button
+            variant="outline"
+            className="shrink-0"
+            onClick={() => navigate("/expenses/new")}
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Add manually
+          </Button>
+        </div>
 
         <div className="flex flex-wrap gap-2 mt-4 mb-6 text-xs">
           {totals.needsReceiptCount > 0 && (

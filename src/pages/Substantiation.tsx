@@ -269,7 +269,7 @@ async function producePacket(
  */
 function reportPacket(recordNumber: string, report: ClaimPacketReport | null) {
   if (!report) {
-    toast.success(`Substantiation Record ${recordNumber} generated.`);
+    toast.success(`Reimbursement Record ${recordNumber} generated.`);
     return;
   }
   const documents = `${report.documentCount} document${report.documentCount === 1 ? "" : "s"}`;
@@ -1009,7 +1009,7 @@ export default function Substantiation() {
             <Sparkles className="h-4 w-4 absolute -top-1 -right-1 text-violet-500 animate-pulse" />
           </div>
           <h1 className="text-xl font-semibold mb-2">
-            Generating your Substantiation Record
+            Generating your Reimbursement Record
           </h1>
           <p className="text-sm text-muted-foreground italic">{progress}</p>
         </div>
@@ -1033,7 +1033,7 @@ export default function Substantiation() {
 
           <div className="mb-6">
             <h1 className="text-2xl font-semibold mb-1">
-              Generate a Substantiation Record
+              Generate a Reimbursement Record
             </h1>
             <p className="text-sm text-muted-foreground">
               You'll get one file to send your custodian: a summary of every
@@ -1162,7 +1162,7 @@ export default function Substantiation() {
                     className="underline text-foreground"
                     onClick={() => navigate("/substantiate")}
                   >
-                    Substantiate page
+                    Expenses page
                   </button>{" "}
                   to add them to your reclaim list.
                 </p>
