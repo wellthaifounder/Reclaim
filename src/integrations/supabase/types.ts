@@ -545,6 +545,7 @@ export type Database = {
           description: string;
           irs_category: string | null;
           is_medical: boolean;
+          is_reviewable_otc: boolean;
           notes: string | null;
           updated_at: string;
         };
@@ -555,6 +556,7 @@ export type Database = {
           description: string;
           irs_category?: string | null;
           is_medical?: boolean;
+          is_reviewable_otc?: boolean;
           notes?: string | null;
           updated_at?: string;
         };
@@ -565,6 +567,7 @@ export type Database = {
           description?: string;
           irs_category?: string | null;
           is_medical?: boolean;
+          is_reviewable_otc?: boolean;
           notes?: string | null;
           updated_at?: string;
         };
@@ -1484,10 +1487,19 @@ export type Database = {
         Args: { p_rule_id: string };
         Returns: number;
       };
-      bulk_review_merchant: {
-        Args: { p_is_medical: boolean; p_merchant_key: string };
-        Returns: number;
-      };
+      bulk_review_merchant:
+        | {
+            Args: { p_is_medical: boolean; p_merchant_key: string };
+            Returns: number;
+          }
+        | {
+            Args: {
+              p_is_medical: boolean;
+              p_lane?: string;
+              p_merchant_key: string;
+            };
+            Returns: number;
+          };
       can_view_provider_review: {
         Args: { p_is_flagged: boolean; p_user_id: string };
         Returns: boolean;
@@ -1689,10 +1701,12 @@ export type Database = {
           display_name: string;
           earliest_date: string;
           explanation: string;
+          lane: string;
           latest_date: string;
           mcc: string;
           merchant_entity_id: string;
           merchant_key: string;
+          single_transaction_id: string;
           total_amount: number;
           txn_count: number;
         }[];

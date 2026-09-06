@@ -280,6 +280,78 @@ Deno.test("a rule result carries its rule id for provenance", async () => {
   assertEquals(r.ruleId, r0.id);
 });
 
+// ── Possible-OTC lane ─────────────────────────────────────────────────────
+// Widening the net (Phase 4): grocery/general-merchandise/warehouse-club
+// merchants stay NOT medical — no phantom expense, no total moved — but now
+// get queued for review, since a basket there can still contain an
+// IRS-qualifying item. "Whole Foods Market" was previously pinned in the
+// false-positives test above purely as isMedical === false; it still belongs
+// there, but now also has a stronger claim to pin: it should land specifically
+// in the OTC lane rather than being silently discarded as "none".
+
+Deno.test(
+  "a grocery merchant is queued for review without becoming medical",
+  async () => {
+    const r = await classify(txn({ name: "Whole Foods Market" }));
+    assertEquals(r.isMedical, false);
+    assertEquals(r.needsReview, true);
+    assertEquals(r.reason, "possible_otc");
+  },
+);
+
+Deno.test(
+  "Plaid's grocery/general-merchandise categories route to the OTC lane, not medical",
+  async () => {
+    const r = await classify(
+      txn({
+        name: "TARGET T-1234",
+        personal_finance_category: {
+          primary: "GENERAL_MERCHANDISE",
+          detailed: "GENERAL_MERCHANDISE_SUPERSTORES",
+          confidence_level: "VERY_HIGH",
+        },
+      }),
+    );
+    assertEquals(r.isMedical, false);
+    assertEquals(r.needsReview, true);
+    assertEquals(r.reason, "possible_otc");
+  },
+);
+
+Deno.test(
+  "a warehouse-club brand name alone is enough to queue for review",
+  async () => {
+    const r = await classify(txn({ name: "COSTCO WHSE #0442" }));
+    assertEquals(r.isMedical, false);
+    assertEquals(r.needsReview, true);
+    assertEquals(r.reason, "possible_otc");
+  },
+);
+
+Deno.test(
+  "a user rule still overrides the OTC lane, same as every other tier",
+  async () => {
+    const r = await classify(txn({ name: "Whole Foods Market" }), [
+      rule("name_pattern", "whole foods market", true),
+    ]);
+    assertEquals(r.isMedical, true);
+    assertEquals(r.reason, "rule");
+  },
+);
+
+Deno.test(
+  "a plain grocery run with no OTC signal at all stays fully silent",
+  async () => {
+    // Confirms the OTC lane didn't accidentally widen to catch everything —
+    // a merchant with no grocery/general-merchandise/warehouse-club signal at
+    // all (medical or otherwise) is still "none", not "possible_otc".
+    const r = await classify(txn({ name: "STARBUCKS" }));
+    assertEquals(r.isMedical, false);
+    assertEquals(r.needsReview, false);
+    assertEquals(r.reason, "none");
+  },
+);
+
 // ── Explanation ───────────────────────────────────────────────────────────
 
 Deno.test(
