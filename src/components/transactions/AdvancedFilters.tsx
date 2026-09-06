@@ -68,9 +68,17 @@ export function AdvancedFilters({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="outline" size="sm" className="gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          className="shrink-0 gap-2"
+          aria-label="Advanced filters"
+        >
           <Filter className="h-4 w-4" />
-          Advanced Filters
+          {/* Label drops on a phone. Spelled out, this button took half the
+              width of the search row and the search placeholder truncated to
+              "Search transa". The icon carries it at that size. */}
+          <span className="hidden sm:inline">Advanced Filters</span>
           {hasActiveFilters && (
             <span className="ml-1 rounded-full bg-primary px-2 py-0.5 text-xs text-primary-foreground">
               Active
@@ -95,8 +103,11 @@ export function AdvancedFilters({
             <Label>Amount</Label>
             <Select
               value={filters.amountOperator || ""}
-              onValueChange={(value: any) =>
-                updateFilter("amountOperator", value)
+              onValueChange={(value) =>
+                updateFilter(
+                  "amountOperator",
+                  value as FilterCriteria["amountOperator"],
+                )
               }
             >
               <SelectTrigger>
@@ -139,8 +150,11 @@ export function AdvancedFilters({
             <Label>Date</Label>
             <Select
               value={filters.dateOperator || ""}
-              onValueChange={(value: any) =>
-                updateFilter("dateOperator", value)
+              onValueChange={(value) =>
+                updateFilter(
+                  "dateOperator",
+                  value as FilterCriteria["dateOperator"],
+                )
               }
             >
               <SelectTrigger>
@@ -224,8 +238,11 @@ export function AdvancedFilters({
             <Label>HSA Eligible</Label>
             <Select
               value={filters.isHsaEligible || "all"}
-              onValueChange={(value: any) =>
-                updateFilter("isHsaEligible", value)
+              onValueChange={(value) =>
+                updateFilter(
+                  "isHsaEligible",
+                  value as FilterCriteria["isHsaEligible"],
+                )
               }
             >
               <SelectTrigger>
@@ -245,7 +262,7 @@ export function AdvancedFilters({
               <Label>HSA Account</Label>
               <Select
                 value={filters.hsaAccountId || "all"}
-                onValueChange={(value: any) =>
+                onValueChange={(value) =>
                   updateFilter(
                     "hsaAccountId",
                     value === "all" ? undefined : value,

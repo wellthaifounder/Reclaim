@@ -7,7 +7,13 @@ import {
   QueryClientProvider,
 } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  useLocation,
+} from "react-router-dom";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { SubscriptionProvider } from "@/contexts/SubscriptionContext";
 import { HSAProvider } from "@/contexts/HSAContext";
@@ -30,15 +36,17 @@ import Dashboard from "./pages/Dashboard";
 
 // Lazy load non-critical pages for better performance
 const BillDetail = lazy(() => import("./pages/BillDetail"));
-// Serves /expenses. Named for the transactions it categorises; it also hosts
-// the expense list as its "To claim" tab, so Bills is no longer routed
-// directly -- Transactions imports it.
+// Step one: the bank transactions waiting for a medical / not-medical call.
+// Bills, the old expense list, was archived on 2026-09-06 along with the
+// "To claim" tab that embedded it -- expenses live on /substantiate and
+// /substantiation now, which are nav destinations in their own right.
 const Transactions = lazy(() => import("./pages/Transactions"));
 const BankAccounts = lazy(() => import("./pages/BankAccounts"));
 const HistoricalImport = lazy(() => import("./pages/HistoricalImport"));
 const Welcome = lazy(() => import("./pages/Welcome"));
 const ExpenseEntry = lazy(() => import("./pages/ExpenseEntry"));
 const Substantiate = lazy(() => import("./pages/Substantiate"));
+const AllExpenses = lazy(() => import("./pages/AllExpenses"));
 const Substantiation = lazy(() => import("./pages/Substantiation"));
 const Documents = lazy(() => import("./pages/Documents"));
 const Settings = lazy(() => import("./pages/Settings"));
@@ -109,6 +117,18 @@ const queryClient = new QueryClient({
   },
 });
 
+/**
+ * Redirect to /transactions keeping the query string and hash.
+ *
+ * A bare <Navigate to="/transactions"> drops them, which would quietly break
+ * the bookmarks this redirect exists to protect: /expenses?tab=review lands on
+ * the All tab instead of the review queue, with nothing to say why.
+ */
+const RedirectToTransactions = () => {
+  const { search, hash } = useLocation();
+  return <Navigate to={{ pathname: "/transactions", search, hash }} replace />;
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider>
@@ -151,16 +171,28 @@ const App = () => (
                             different objects -- one transaction can become
                             several expenses -- but to the person looking at
                             them both are "money I spent", and three URLs for
-                            that was the confusion. They are now tabs on one
-                            page: Review / All / Medical / Non-Medical read
-                            transactions, "To claim" renders the expense list
-                            embedded.
+                            that was the confusion.
 
-                            /bills and /transactions redirect rather than 404:
+                            /bills and /expenses redirect rather than 404:
                             both have been live long enough to be bookmarked
                             and to sit in the installed app's history. */}
+                      {/* Renamed 2026-09-06: this page lists TRANSACTIONS, and
+                          calling it Expenses cost real confusion -- an expense
+                          is the claim you build from a transaction, carries the
+                          date of service and the documentation, and is what
+                          /substantiate lists. Step one is now named for the
+                          object it actually shows.
+
+                          The direction of the /transactions redirect flipped:
+                          it is the real route now, and /expenses redirects to
+                          it. /expenses keeps working rather than moving to the
+                          page now LABELLED Expenses, because it has been live
+                          long enough to be bookmarked and to sit in the
+                          installed app's history -- pointing an existing
+                          bookmark at a different-but-plausible page is a
+                          silent break, not an error anyone would notice. */}
                       <Route
-                        path="/expenses"
+                        path="/transactions"
                         element={
                           <ProtectedRoute>
                             <ErrorBoundary>
@@ -171,11 +203,11 @@ const App = () => (
                       />
                       <Route
                         path="/bills"
-                        element={<Navigate to="/expenses" replace />}
+                        element={<RedirectToTransactions />}
                       />
                       <Route
-                        path="/transactions"
-                        element={<Navigate to="/expenses" replace />}
+                        path="/expenses"
+                        element={<RedirectToTransactions />}
                       />
                       {/* One way in, one way out (2026-08-21).
 
@@ -283,6 +315,22 @@ const App = () => (
                           </ProtectedRoute>
                         }
                       />
+                      {/* The expense ledger: every expense at every stage,
+                          including ones already claimed. /substantiate is a
+                          queue that empties; this is the record that does not.
+                          Sits under /expenses/* alongside /expenses/new -- the
+                          bare /expenses root redirects for bookmark reasons
+                          only, its children are expense pages. */}
+                      <Route
+                        path="/expenses/all"
+                        element={
+                          <ProtectedRoute>
+                            <ErrorBoundary>
+                              <AllExpenses />
+                            </ErrorBoundary>
+                          </ProtectedRoute>
+                        }
+                      />
                       {/* Reclaim Phase 5 W2: Substantiate — step two of
                           Categorize -> Substantiate -> Reimburse. Attaching a
                           document and confirming eligibility, in one place. */}
@@ -303,7 +351,7 @@ const App = () => (
                         path="/review"
                         element={<Navigate to="/substantiate" replace />}
                       />
-                      {/* Reclaim Phase 4 W1+W2: Substantiation Record generation + SUBMITTED state */}
+                      {/* Reclaim Phase 4 W1+W2: Medical Expense Record generation + SUBMITTED state */}
                       <Route
                         path="/substantiation"
                         element={

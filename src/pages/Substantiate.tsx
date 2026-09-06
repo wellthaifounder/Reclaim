@@ -21,7 +21,7 @@
 //     deliberately not wizards: substantiation is resumable by nature, so
 //     every field saves on its own. Do not redesign them into a flow.
 //   - **Confirm eligible / ineligible** — moved verbatim from /review's act().
-//     confirmed_at is the audit-trail moat: Substantiation Records cite that
+//     confirmed_at is the audit-trail moat: Medical Expense Records cite that
 //     timestamp as the user's explicit eligibility-determination event, so it
 //     is stamped ONLY for a real determination, never for a deferral.
 //
@@ -62,6 +62,8 @@ import {
   Sparkles,
   CalendarDays,
   User,
+  Plus,
+  ListFilter,
 } from "lucide-react";
 import { toast } from "sonner";
 import { logError } from "@/utils/errorHandler";
@@ -321,12 +323,29 @@ export default function Substantiate() {
                 expenses arrive from your bank or your uploads, they'll show up
                 here.
               </p>
+              {/* An empty queue is exactly when someone comes looking for an
+                  expense they have already dealt with, so the ledger is the
+                  first thing offered here. */}
               <div className="flex flex-col sm:flex-row justify-center gap-2 pt-2">
-                <Button variant="outline" onClick={() => navigate("/expenses")}>
-                  See all expenses
+                <Button
+                  variant="outline"
+                  onClick={() => navigate("/expenses/all")}
+                >
+                  <ListFilter className="mr-2 h-4 w-4" />
+                  All expenses
                 </Button>
                 <Button onClick={() => navigate("/substantiation")}>
                   Go to Reimburse
+                </Button>
+              </div>
+              <div className="pt-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => navigate("/expenses/new")}
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add an expense manually
                 </Button>
               </div>
             </CardContent>
@@ -340,10 +359,34 @@ export default function Substantiate() {
   return (
     <AuthenticatedLayout>
       <div className="max-w-3xl mx-auto px-4 py-8">
-        <PageHeader
-          title="Substantiate"
-          description="Attach what proves each expense, then confirm whether it's eligible. Each confirmation is the timestamped record your Reimbursement Record cites."
-        />
+        {/* Laid out here rather than through PageHeader's `action` slot: that
+            slot is capped at max-w-sm for a case that carries a paragraph of
+            legal text, and two buttons stack vertically inside it. */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0 flex-1">
+            <PageHeader
+              title="Expenses"
+              description="Attach what proves each expense, then confirm whether it's eligible. Each confirmation is the timestamped record your Medical Expense Record cites."
+            />
+          </div>
+          <div className="flex shrink-0 flex-wrap gap-2">
+            {/* This page is a QUEUE -- it holds only what still needs work, and
+                empties. The ledger behind this button is the record that does
+                not, so someone looking for an expense they already claimed has
+                somewhere to find it. */}
+            <Button variant="outline" onClick={() => navigate("/expenses/all")}>
+              <ListFilter className="mr-2 h-4 w-4" />
+              All expenses
+            </Button>
+            {/* Moved here from the transaction list: this is the only way to
+                record a cash payment or mileage, which never appear in a bank
+                feed, and what it creates is an expense -- this page's object. */}
+            <Button variant="outline" onClick={() => navigate("/expenses/new")}>
+              <Plus className="mr-2 h-4 w-4" />
+              Add manually
+            </Button>
+          </div>
+        </div>
 
         <div className="flex flex-wrap gap-2 mt-4 mb-6 text-xs">
           {totals.needsReceiptCount > 0 && (

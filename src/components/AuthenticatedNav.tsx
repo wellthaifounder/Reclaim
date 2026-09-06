@@ -72,37 +72,33 @@ export const AuthenticatedNav = ({
   // Reimburse step of Categorize -> Substantiate -> Reimburse, not
   // Substantiation itself, so both nav levels now agree on "Reimburse".
   //
-  // Both counts land on Expenses now that it is one page: transactions waiting
-  // to be categorised are its Review tab, expenses waiting on eligibility are
-  // its To-claim tab. Two badges on one destination would just ask the user to
-  // do arithmetic, so they are summed -- the number means "things on this page
-  // that want you".
-  const expensesBadge = unreviewedTransactions + pendingReviews;
+  // The two counts were summed onto one nav item while a single page did both
+  // jobs. They now belong to different destinations, so the sum has to go:
+  // transactions awaiting a medical decision are work on Transactions, and
+  // expenses that are eligible and unclaimed are work on Reimburse. Leaving
+  // them summed would advertise work on a page that cannot do it -- the same
+  // dead end as a badge counting rows its own queue filters out.
 
-  const mainNavItems: NavItem[] = [
+  const spineItems: NavItem[] = [
     { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
     {
       icon: Receipt,
-      label: "Expenses",
-      path: "/expenses",
-      badge: expensesBadge,
+      label: "Transactions",
+      path: "/transactions",
+      badge: unreviewedTransactions,
     },
-    { icon: ClipboardCheck, label: "Substantiate", path: "/substantiate" },
-    { icon: FileText, label: "Reimburse", path: "/substantiation" },
+    { icon: ClipboardCheck, label: "Expenses", path: "/substantiate" },
+    {
+      icon: FileText,
+      label: "Reimburse",
+      path: "/substantiation",
+      badge: pendingReviews,
+    },
   ];
 
-  // Mobile hamburger sheet — has drawer space for full names.
-  const coreItems: NavItem[] = [
-    { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
-    {
-      icon: Receipt,
-      label: "Expenses",
-      path: "/expenses",
-      badge: expensesBadge,
-    },
-    { icon: ClipboardCheck, label: "Substantiate", path: "/substantiate" },
-    { icon: FileText, label: "Reimburse", path: "/substantiation" },
-  ];
+  const mainNavItems: NavItem[] = spineItems;
+  // Mobile hamburger sheet — same four, and it has drawer space for full names.
+  const coreItems: NavItem[] = spineItems;
 
   const moreItems: NavItem[] = [
     { icon: Building2, label: "Bank Accounts", path: "/bank-accounts" },

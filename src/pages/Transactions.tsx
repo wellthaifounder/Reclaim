@@ -8,8 +8,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Plus, Search, ArrowLeftRight } from "lucide-react";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Plus, Search, Info, ScrollText } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import {
@@ -32,7 +43,10 @@ import {
 import { canSplitIntoExpenses } from "@/lib/expenseSplitUtils";
 import { SplitTransactionCard } from "@/components/transactions/SplitTransactionCard";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
-import Bills from "@/pages/Bills";
+import {
+  CategorizationRulesManager,
+  RULES_BLURB,
+} from "@/components/transactions/CategorizationRulesManager";
 import { MissingHSADateBanner } from "@/components/dashboard/MissingHSADateBanner";
 import { TransactionsSkeleton } from "@/components/skeletons/TransactionsSkeleton";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -98,6 +112,7 @@ export default function Transactions() {
   );
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [deciding, setDeciding] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(false);
   // Transfers and split parents have no medical decision to make, so "select
   // all" must not sweep them in and then fail on them one row at a time.
   const selectableIds = useMemo(
@@ -114,7 +129,12 @@ export default function Transactions() {
   // alone so the tab survives a refresh and can be linked to.
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const TABS = ["review", "all", "medical", "non-medical", "to-claim"];
+  // "To claim" removed 2026-09-06. It embedded the whole expense list inside
+  // the transaction list -- step two's object on step one's page -- which is
+  // the confusion the Transactions/Expenses rename set out to end. Expenses
+  // that need work are on /substantiate; expenses ready to claim are on
+  // /substantiation. Both are nav destinations of their own now.
+  const TABS = ["review", "all", "medical", "non-medical"];
   const requestedTab = searchParams.get("tab");
   const activeTab =
     requestedTab && TABS.includes(requestedTab) ? requestedTab : "all";
@@ -538,80 +558,124 @@ export default function Transactions() {
         <div className="container mx-auto px-4 py-8 max-w-6xl">
           {!hsaOpenedDate && <MissingHSADateBanner onDateSet={fetchHSADate} />}
 
-          {/* Workstream C5. The spec asks for this warning explicitly: a card
-              payment is not a reimbursable expense, and users who reimburse it
-              instead of the underlying charges either double-claim or claim
-              something that was never a medical purchase. */}
-          {cardPayments.length > 0 && (
-            <Alert className="mb-6">
-              <ArrowLeftRight className="h-4 w-4" />
-              <AlertTitle>
-                Credit card payments aren&rsquo;t expenses
-              </AlertTitle>
-              <AlertDescription>
-                We found {cardPayments.length} payment
-                {cardPayments.length === 1 ? "" : "s"} to your credit card and
-                left {cardPayments.length === 1 ? "it" : "them"} out of your
-                totals. Claim the original charges on the card &mdash; the
-                pharmacy, the doctor &mdash; not the payment that settles the
-                balance. Claiming the payment would either double up on those
-                charges or claim something that was never a medical purchase.
-              </AlertDescription>
-            </Alert>
-          )}
-
-          <div className="flex items-center justify-between sticky top-0 z-10 bg-background py-2 mb-4">
-            <div>
-              <h1 className="text-3xl font-bold text-foreground">Expenses</h1>
+          <div className="flex flex-wrap items-start justify-between gap-2 sticky top-0 z-10 bg-background py-2 mb-3">
+            <div className="min-w-0">
+              <h1 className="text-3xl font-bold text-foreground">
+                Transactions
+              </h1>
               <p className="text-muted-foreground text-sm mt-1">
-                Decide what's medical, then get it documented and claimed
+                Decide which of these were medical
               </p>
             </div>
-            {/* Was a dialog that wrote a bare transaction with no patient and
-                no date of service -- the two things a claim is refused for
-                lacking. It now goes to the one entry form, which asks. */}
-            <Button variant="outline" onClick={() => navigate("/expenses/new")}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add manually
-            </Button>
+            {/* "Add manually" moved to the Expenses page (2026-09-06). It
+                creates an EXPENSE -- it is the only route that records a cash
+                payment or mileage, neither of which has a transaction at all --
+                so offering it on the list of things the bank sent put it on the
+                one page whose contents it cannot add to. */}
+            <div className="flex shrink-0 items-center gap-1">
+              {/* Workstream C5, demoted from a banner to a disclosure
+                  (2026-09-06). A card payment is not a reimbursable expense,
+                  and reimbursing one instead of the underlying charges is
+                  either a double-claim or a claim on something that was never
+                  medical -- so the warning still has to be here. But it never
+                  changes and it is not a task, and as a permanent block at the
+                  top of the page it pushed the actual list below the fold on
+                  every visit for ever. The count stays visible; the reasoning
+                  is one tap away.
+
+                  A Popover rather than a Tooltip on purpose: a tooltip opens on
+                  hover, which a phone cannot do, and this is exactly the screen
+                  people use on a phone. */}
+              {cardPayments.length > 0 && (
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 gap-1.5 px-2 text-xs text-muted-foreground"
+                    >
+                      <Info className="h-3.5 w-3.5" aria-hidden="true" />
+                      {cardPayments.length} card payment
+                      {cardPayments.length === 1 ? "" : "s"} excluded
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="w-80 space-y-2">
+                    <p className="text-sm font-medium">
+                      Credit card payments aren&rsquo;t expenses
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      We found {cardPayments.length} payment
+                      {cardPayments.length === 1 ? "" : "s"} to your credit card
+                      and left {cardPayments.length === 1 ? "it" : "them"} out
+                      of your totals. Claim the original charges on the card
+                      &mdash; the pharmacy, the doctor &mdash; not the payment
+                      that settles the balance. Claiming the payment would
+                      either double up on those charges or claim something that
+                      was never a medical purchase.
+                    </p>
+                  </PopoverContent>
+                </Popover>
+              )}
+              {/* The rules engine was built in full and then left at the bottom
+                  of Settings, three screens away from the only place anyone
+                  thinks about categorization. Same component, surfaced where
+                  the work happens. */}
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8"
+                onClick={() => setRulesOpen(true)}
+              >
+                <ScrollText className="mr-1.5 h-3.5 w-3.5" />
+                Rules
+              </Button>
+            </div>
           </div>
 
-          {/* Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-            <Card className="p-4">
-              <p className="text-sm text-muted-foreground">
-                Total Transactions
+          {/* One hairline-divided strip, not four cards. The four Cards this
+              replaces stood ~96px tall and cost a third of a phone screen
+              before a single transaction appeared; the same four numbers now
+              fit in one band. `gap-px` over a `bg-border` parent draws the
+              dividers, so they stay correct when the grid wraps to two
+              columns. */}
+          <div className="mb-4 grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-4">
+            <div className="bg-card px-3 py-2">
+              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                Transactions
               </p>
-              <p className="text-2xl font-bold text-foreground">
+              <p className="text-lg font-semibold text-foreground tabular-nums">
                 {stats.total}
               </p>
-            </Card>
-            <Card className="p-4">
-              <p className="text-sm text-muted-foreground">
+            </div>
+            <div className="bg-card px-3 py-2">
+              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
                 Medical, confirmed
               </p>
-              <p className="text-2xl font-bold text-primary tabular-nums">
+              <p className="text-lg font-semibold text-primary tabular-nums">
                 {stats.medical}
               </p>
-            </Card>
-            <Card className="p-4">
-              <p className="text-sm text-muted-foreground">Needs Review</p>
-              <p className="text-2xl font-bold text-yellow-600 tabular-nums">
+            </div>
+            <div className="bg-card px-3 py-2">
+              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                Needs review
+              </p>
+              <p className="text-lg font-semibold tabular-nums text-yellow-700 dark:text-yellow-500">
                 {liveNeedsReview}
               </p>
-            </Card>
-            <Card className="p-4">
-              <p className="text-sm text-muted-foreground">Confirmed total</p>
-              <p className="text-2xl font-bold text-foreground tabular-nums">
+            </div>
+            <div className="bg-card px-3 py-2">
+              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                Confirmed total
+              </p>
+              <p className="text-lg font-semibold text-foreground tabular-nums">
                 {formatCurrency(stats.medicalAmount)}
               </p>
               {stats.pendingMedicalAmount > 0 && (
-                <p className="text-xs text-muted-foreground mt-1 tabular-nums">
-                  {formatCurrency(stats.pendingMedicalAmount)} awaiting your
-                  review
+                <p className="text-[11px] text-muted-foreground tabular-nums">
+                  +{formatCurrency(stats.pendingMedicalAmount)} awaiting you
                 </p>
               )}
-            </Card>
+            </div>
           </div>
 
           {/* Search and Filters */}
@@ -619,7 +683,9 @@ export default function Transactions() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
               <Input
-                placeholder="Search by vendor, description, or amount..."
+                // Short enough to survive a 390px screen. The old placeholder
+                // rendered as "Search by ver" next to the filter button.
+                placeholder="Search transactions..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10"
@@ -633,7 +699,9 @@ export default function Transactions() {
 
           {/* Tabs */}
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="mb-6">
+            {/* Wraps rather than clips: at 390px the four tabs are a little
+                wider than the screen, and "Non-Medical" lost its tail. */}
+            <TabsList className="mb-6 flex h-auto max-w-full flex-wrap justify-start">
               {/* One review tab, not two. "Review Queue" (one-at-a-time
                   swipe) and "Needs Review" (flat list) were two routes to the
                   same decision, and the flat list still told users confirming
@@ -653,19 +721,7 @@ export default function Transactions() {
               <TabsTrigger value="all">All</TabsTrigger>
               <TabsTrigger value="medical">Medical</TabsTrigger>
               <TabsTrigger value="non-medical">Non-Medical</TabsTrigger>
-              {/* The old /bills list, merged in here 2026-08-20. The tabs to
-                  its left are bank transactions -- money that moved. This one
-                  is expenses: what a medical transaction became once it has a
-                  service date, a patient and documents. They are different
-                  objects, which is why this is a separate tab rather than
-                  another filter, but both are "expenses" to the person
-                  looking at them, so they share a page. */}
-              <TabsTrigger value="to-claim">To claim</TabsTrigger>
             </TabsList>
-
-            <TabsContent value="to-claim" className="space-y-4">
-              <Bills embedded />
-            </TabsContent>
 
             <TabsContent value="review" className="space-y-4">
               {/* Workstream C6. Above the categorize feed on purpose: a
@@ -676,16 +732,11 @@ export default function Transactions() {
             </TabsContent>
 
             {/* One content block serves All / Medical / Non-Medical, keyed to
-                whichever is active. "review" and "to-claim" have their own
-                blocks above, so they are excluded here -- without this guard
-                a `value={activeTab}` block also matches them and the page
-                renders two lists at once. */}
+                whichever is active. "review" has its own block above, so it is
+                excluded here -- without this guard a `value={activeTab}` block
+                also matches it and the page renders two lists at once. */}
             <TabsContent
-              value={
-                activeTab === "review" || activeTab === "to-claim"
-                  ? "__inactive__"
-                  : activeTab
-              }
+              value={activeTab === "review" ? "__inactive__" : activeTab}
               className="space-y-4"
             >
               {filteredTransactions.length === 0 ? (
@@ -828,6 +879,22 @@ export default function Transactions() {
             onSplit={fetchTransactions}
           />
         )}
+
+        {/* The same rules screen Settings shows, opened from where the
+            decisions get made. Rendered only while open so its rule-impact
+            queries do not run on every visit to the transaction list. */}
+        <Dialog open={rulesOpen} onOpenChange={setRulesOpen}>
+          <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <ScrollText className="h-5 w-5" />
+                Categorization rules
+              </DialogTitle>
+              <DialogDescription>{RULES_BLURB}</DialogDescription>
+            </DialogHeader>
+            {rulesOpen && <CategorizationRulesManager embedded />}
+          </DialogContent>
+        </Dialog>
 
         {/* Workstream C3 — offer a rule after a categorization decision. */}
         <CreateRulePrompt

@@ -1,16 +1,23 @@
 // Reclaim Phase 5 W1 — Dashboard rewrite to the state-machine action queue.
 //
-// Replaces the Wellth-era widget-grid dashboard with the action queue from
-// brief §8: one primary number (available to reclaim) and four buckets the
-// user can step through to complete the reimbursement loop.
+// One primary number (available to reclaim) and a queue of buckets the user
+// steps through to complete the reimbursement loop.
 //
-// Buckets, in narrative order:
-//   1. NEEDS RECEIPT     → attach a document to expenses that need one
-//   2. PENDING REVIEW    → confirm AI classifications
-//   3. READY TO SUBMIT   → bundle ELIGIBLE expenses into a Substantiation
-//                          Record (relabeled "Shoebox Balance" for users
-//                          on the shoebox strategy, with no CTA)
-//   4. SUBMITTED         → waiting on a matching HSA deposit
+// **The queue is grouped by the three steps of the spine** (2026-09-06):
+//
+//   1. CATEGORIZE   → transactions waiting for a medical / not-medical call
+//   2. SUBSTANTIATE → needs receipt, pending review
+//   3. REIMBURSE    → ready to submit, submitted
+//
+// Step 1 had no bucket at all until now, which meant the front door could say
+// "You're all caught up" over a review queue holding twenty-seven undecided
+// transactions -- the one step of the workflow that cannot proceed without the
+// user was the only one the dashboard never mentioned. The three headings show
+// even when a step is empty: they are the map of the product, and a map that
+// disappears when you are on top of your work teaches nothing.
+//
+// The step-1 count comes from useAttentionItems, which defines it to match
+// review_feed_groups() exactly. Do not re-derive it here.
 //
 // Empty state ("you're all caught up — $X reclaimed this year") never
 // shows a void; the reclaimed-YTD figure always provides a sense of
@@ -20,6 +27,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useReimbursementStrategy } from "@/hooks/useReimbursementStrategy";
+import { useAttentionItems } from "@/hooks/useAttentionItems";
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
 import { Card, CardContent } from "@/components/ui/card";
@@ -35,6 +43,7 @@ import {
   PiggyBank,
   Camera,
   Keyboard,
+  Tags,
 } from "lucide-react";
 import { logError } from "@/utils/errorHandler";
 import { formatCurrency } from "@/lib/utils";
@@ -82,6 +91,11 @@ const fmtMoney = formatCurrency;
 export default function Dashboard() {
   const navigate = useNavigate();
   const { isShoebox } = useReimbursementStrategy();
+  const {
+    unreviewedTransactions,
+    unreviewedAmount,
+    isLoading: attentionLoading,
+  } = useAttentionItems();
   const { isComplete: onboardingComplete } = useOnboardingStatus();
   const [data, setData] = useState<DashboardData>(emptyDashboardData);
   const [loading, setLoading] = useState(true);
@@ -131,6 +145,13 @@ export default function Dashboard() {
         for (const row of invoiceRows ?? []) {
           const amount = Number(row.amount) || 0;
           switch (row.lifecycle_status) {
+            // 'captured' counts as needing a receipt (2026-09-06). It means no
+            // document and no eligibility decision, which is exactly the work
+            // this bucket names. Falling through every case instead, it made
+            // the dashboard report "You're all caught up" and $0.00 over a
+            // Substantiate queue holding twenty expenses -- the same omission
+            // that hid six real ones worth $2,642.13.
+            case "captured":
             case "needs_receipt":
               fresh.needsReceipt.count++;
               fresh.needsReceipt.total += amount;
@@ -174,15 +195,21 @@ export default function Dashboard() {
   }, [navigate]);
 
   // Available to reclaim = ELIGIBLE + NEEDS_RECEIPT (per brief §8).
+  //
+  // Undecided transactions are deliberately NOT in this figure. Nobody has
+  // said they are medical yet, and putting money the user has not claimed into
+  // the headline is the auto-categorization the whole approval flow exists to
+  // undo. It gets its own bucket instead.
   const availableToReclaim = data.eligible.total + data.needsReceipt.total;
   const allClear =
     !loading &&
+    unreviewedTransactions === 0 &&
     data.needsReceipt.count === 0 &&
     data.pendingReview.count === 0 &&
     data.eligible.count === 0 &&
     data.submitted.count === 0;
 
-  if (loading) {
+  if (loading || attentionLoading) {
     return (
       <AuthenticatedLayout>
         <div className="max-w-2xl mx-auto px-4 py-8 space-y-4">
@@ -259,7 +286,7 @@ export default function Dashboard() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => navigate("/expenses")}
+                  onClick={() => navigate("/substantiate")}
                 >
                   See all expenses
                 </Button>
@@ -268,7 +295,22 @@ export default function Dashboard() {
           </Card>
         ) : (
           <>
-            {/* NEEDS RECEIPT */}
+            {/* ── Step 1 · Categorize ───────────────────────────────────── */}
+            <StepHeading step={1} name="Categorize" />
+            <BucketCard
+              icon={Tags}
+              tone="sky"
+              label="Waiting on you"
+              count={unreviewedTransactions}
+              total={unreviewedAmount}
+              noun="transaction"
+              copy="Say which of these were medical"
+              ctaLabel="Categorize"
+              onClick={() => navigate("/transactions?tab=review")}
+            />
+
+            {/* ── Step 2 · Substantiate ─────────────────────────────────── */}
+            <StepHeading step={2} name="Substantiate" />
             <BucketCard
               icon={Receipt}
               tone="amber"
@@ -279,8 +321,6 @@ export default function Dashboard() {
               ctaLabel="Attach"
               onClick={() => navigate("/substantiate")}
             />
-
-            {/* PENDING REVIEW */}
             <BucketCard
               icon={Eye}
               tone="violet"
@@ -292,6 +332,8 @@ export default function Dashboard() {
               onClick={() => navigate("/substantiate")}
             />
 
+            {/* ── Step 3 · Reimburse ────────────────────────────────────── */}
+            <StepHeading step={3} name="Reimburse" />
             {/* READY TO SUBMIT  /  Shoebox Balance */}
             <BucketCard
               icon={isShoebox ? PiggyBank : CheckCircle2}
@@ -302,15 +344,13 @@ export default function Dashboard() {
               copy={
                 isShoebox
                   ? "Saved for future reimbursement"
-                  : "Generate your Substantiation Record"
+                  : "Generate your Medical Expense Record"
               }
               ctaLabel={isShoebox ? "" : "Submit"}
               onClick={
                 isShoebox ? undefined : () => navigate("/substantiation")
               }
             />
-
-            {/* SUBMITTED */}
             <BucketCard
               icon={Clock}
               tone="slate"
@@ -336,24 +376,67 @@ export default function Dashboard() {
   );
 }
 
+// ── Step heading ────────────────────────────────────────────────────────
+
+/**
+ * The name of one step of the spine, over the buckets belonging to it.
+ *
+ * Numbered because the steps really are a sequence -- an expense cannot be
+ * substantiated before it is categorized, or claimed before it is
+ * substantiated -- so the numbers carry information rather than decoration.
+ */
+function StepHeading({ step, name }: { step: number; name: string }) {
+  return (
+    <div className="flex items-center gap-2 pt-3 first:pt-0">
+      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[11px] font-semibold text-muted-foreground tabular-nums">
+        {step}
+      </span>
+      <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        {name}
+      </h2>
+    </div>
+  );
+}
+
 // ── Bucket card ─────────────────────────────────────────────────────────
 
+// Each tone needs a dark pair. The light-only fills these replaced put a
+// near-white disc on a dark page -- the brightest thing on the screen, on the
+// decoration rather than the number.
 const TONE_STYLES: Record<
-  "amber" | "violet" | "emerald" | "slate",
+  "sky" | "amber" | "violet" | "emerald" | "slate",
   { icon: string; bg: string }
 > = {
-  amber: { icon: "text-amber-700", bg: "bg-amber-50" },
-  violet: { icon: "text-violet-700", bg: "bg-violet-50" },
-  emerald: { icon: "text-emerald-700", bg: "bg-emerald-50" },
-  slate: { icon: "text-slate-700", bg: "bg-slate-100" },
+  sky: {
+    icon: "text-sky-700 dark:text-sky-300",
+    bg: "bg-sky-50 dark:bg-sky-950",
+  },
+  amber: {
+    icon: "text-amber-700 dark:text-amber-300",
+    bg: "bg-amber-50 dark:bg-amber-950",
+  },
+  violet: {
+    icon: "text-violet-700 dark:text-violet-300",
+    bg: "bg-violet-50 dark:bg-violet-950",
+  },
+  emerald: {
+    icon: "text-emerald-700 dark:text-emerald-300",
+    bg: "bg-emerald-50 dark:bg-emerald-950",
+  },
+  slate: {
+    icon: "text-slate-700 dark:text-slate-300",
+    bg: "bg-slate-100 dark:bg-slate-800",
+  },
 };
 
 interface BucketCardProps {
   icon: React.ComponentType<{ className?: string }>;
-  tone: "amber" | "violet" | "emerald" | "slate";
+  tone: "sky" | "amber" | "violet" | "emerald" | "slate";
   label: string;
   count: number;
   total: number;
+  /** What this bucket counts. Step 1 holds transactions, not expenses yet. */
+  noun?: string;
   copy: string;
   ctaLabel: string;
   onClick?: () => void;
@@ -365,6 +448,7 @@ function BucketCard({
   label,
   count,
   total,
+  noun = "expense",
   copy,
   ctaLabel,
   onClick,
@@ -387,7 +471,8 @@ function BucketCard({
           <div className="flex items-baseline gap-2 flex-wrap">
             <p className="font-semibold text-sm sm:text-base">{label}</p>
             <p className="text-xs text-muted-foreground tabular-nums">
-              {count} expense{count === 1 ? "" : "s"} · {fmtMoney(total)}
+              {count} {noun}
+              {count === 1 ? "" : "s"} · {fmtMoney(total)}
             </p>
           </div>
           <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">

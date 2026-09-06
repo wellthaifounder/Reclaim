@@ -53,19 +53,22 @@ const primaryMenuItems: MenuItem[] = [
     path: "/dashboard",
     badgeKey: null,
   },
-  // Carries the unreviewed count: Expenses is now where reviewing happens,
-  // so the badge belongs on it rather than on a separate Transactions item.
+  // Step one, and it is named for what it lists: transactions the bank sent,
+  // waiting to be sorted into medical or not. Carries the unreviewed count,
+  // because this is where that sorting happens.
   {
     icon: Receipt,
-    label: "Expenses",
-    path: "/expenses",
+    label: "Transactions",
+    path: "/transactions",
     badgeKey: "unreviewedTransactions",
   },
-  // Step two of the workflow. Sits between Expenses and Reimburse because
-  // that is the order the work happens: categorise, substantiate, then claim.
+  // Step two, and the expense list proper: an expense is the claim built from
+  // a transaction, and it is the object that carries the date of service, the
+  // patient and the documentation. "Substantiate" survives as the verb on the
+  // page itself -- precise, but too rare a word to spend a nav slot on.
   {
     icon: ClipboardCheck,
-    label: "Substantiate",
+    label: "Expenses",
     path: "/substantiate",
     badgeKey: null,
   },

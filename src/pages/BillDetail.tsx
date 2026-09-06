@@ -280,18 +280,22 @@ export default function BillDetail() {
       <div className="container mx-auto px-4 py-8 pb-24 md:pb-8 max-w-6xl">
         <Breadcrumb className="mb-6">
           <BreadcrumbList>
+            {/* Went to /bills, which now redirects to the TRANSACTION list --
+                so the way back out of an expense landed on a list that does not
+                contain it. Points at the expense ledger instead, and says the
+                word the rest of the app says. */}
             <BreadcrumbItem>
               <BreadcrumbLink
-                onClick={() => navigate("/bills")}
+                onClick={() => navigate("/expenses/all")}
                 className="cursor-pointer"
               >
-                Bills
+                All expenses
               </BreadcrumbLink>
             </BreadcrumbItem>
             <BreadcrumbSeparator />
             <BreadcrumbItem>
               <BreadcrumbPage className="truncate max-w-[260px]">
-                {isNewBill ? "Add New Bill" : bill?.vendor || "Bill Details"}
+                {isNewBill ? "Add New Bill" : bill?.vendor || "Expense details"}
               </BreadcrumbPage>
             </BreadcrumbItem>
           </BreadcrumbList>
@@ -299,12 +303,12 @@ export default function BillDetail() {
 
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2">
-            {isNewBill ? "Add New Bill" : "Bill Details"}
+            {isNewBill ? "Add New Bill" : "Expense details"}
           </h1>
           <p className="text-muted-foreground">
             {isNewBill
               ? "Upload medical bills and documentation to start tracking this expense"
-              : "View and manage bill information, payments, and documentation"}
+              : "Everything recorded about this expense, and the paperwork behind it"}
           </p>
         </div>
 
