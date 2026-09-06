@@ -19,6 +19,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
 import { FocusedLayout } from "@/components/FocusedLayout";
+import { PlaidLink } from "@/components/PlaidLink";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -322,10 +323,27 @@ export default function HistoricalImport() {
                 seen their own money first; offering "I'll do it later" here
                 would hand back the drop-off the ordering exists to prevent.
                 Every individual question on the next screens is still
-                skippable. */}
+                skippable. Connecting another account is forward motion, not
+                an escape hatch, so it stays consistent with that intent even
+                mid-onboarding. */}
+            {r.medical_detected === 0 && (
+              <div className="rounded-lg border bg-muted/30 p-4 text-left space-y-3">
+                <div>
+                  <p className="text-sm font-medium">
+                    Pay for care with a different card or bank?
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Reclaim can only see what a connected account shows it —
+                    link another one to check that too.
+                  </p>
+                </div>
+                <PlaidLink />
+              </div>
+            )}
             <div className="flex flex-col gap-2 pt-2">
               <Button
                 size="lg"
+                variant={r.medical_detected === 0 ? "outline" : "default"}
                 onClick={() =>
                   navigate(
                     midOnboarding ? "/welcome?step=household" : "/expenses",

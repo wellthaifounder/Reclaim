@@ -85,6 +85,11 @@ export function useReviewFeed() {
     queryClient.invalidateQueries({ queryKey: ["review-feed"] });
     queryClient.invalidateQueries({ queryKey: ["transactions"] });
     queryClient.invalidateQueries({ queryKey: ["inbox-items"] });
+    // The nav badge (sidebar + top nav) reads this query, via
+    // AuthenticatedLayout. Without it, deciding a merchant here cleared the
+    // review feed itself but left the badge showing the pre-decision count
+    // until something else happened to refetch it.
+    queryClient.invalidateQueries({ queryKey: ["attention-items"] });
   };
 
   /**
