@@ -1,4 +1,8 @@
-// Reclaim Phase 4 W1+W2 — Substantiation Record list + generation flow.
+// Reclaim Phase 4 W1+W2 — Medical Expense Record list + generation flow.
+//
+// The document was titled "Substantiation Record" until 2026-09-06. See
+// drawCover in lib/substantiationRecord.ts for the reasoning; the table, the
+// module and the RCM-YYYY-NNNN record number all keep their old names.
 //
 // Two views in one page:
 //   - "list": prior records + a hero CTA showing how many ELIGIBLE expenses
@@ -269,7 +273,7 @@ async function producePacket(
  */
 function reportPacket(recordNumber: string, report: ClaimPacketReport | null) {
   if (!report) {
-    toast.success(`Reimbursement Record ${recordNumber} generated.`);
+    toast.success(`Medical Expense Record ${recordNumber} generated.`);
     return;
   }
   const documents = `${report.documentCount} document${report.documentCount === 1 ? "" : "s"}`;
@@ -1009,7 +1013,7 @@ export default function Substantiation() {
             <Sparkles className="h-4 w-4 absolute -top-1 -right-1 text-violet-500 animate-pulse" />
           </div>
           <h1 className="text-xl font-semibold mb-2">
-            Generating your Reimbursement Record
+            Generating your Medical Expense Record
           </h1>
           <p className="text-sm text-muted-foreground italic">{progress}</p>
         </div>
@@ -1033,12 +1037,13 @@ export default function Substantiation() {
 
           <div className="mb-6">
             <h1 className="text-2xl font-semibold mb-1">
-              Generate a Reimbursement Record
+              Generate a Medical Expense Record
             </h1>
             <p className="text-sm text-muted-foreground">
-              You'll get one file to send your custodian: a summary of every
-              expense with its IRS Publication 502 basis and the date you
-              confirmed it, plus every supporting document attached to it.
+              One file that proves each expense qualified: every expense with
+              its IRS Publication 502 basis and the date you confirmed it, plus
+              every supporting document attached to it. Send it to your
+              custodian, or keep it for your own records.
             </p>
           </div>
 
@@ -1277,8 +1282,8 @@ export default function Substantiation() {
 
         <div className="mb-6">
           <PageHeader
-            title="Reimbursement Records"
-            description="IRS-defensible bundles of your confirmed eligible expenses. Generate one when you're ready to file for HSA reimbursement."
+            title="Medical Expense Records"
+            description="IRS-defensible bundles of your confirmed eligible expenses. Generate one to claim from your HSA, or to file away as proof you can produce years later."
           />
         </div>
 

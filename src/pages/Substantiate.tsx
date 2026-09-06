@@ -21,7 +21,7 @@
 //     deliberately not wizards: substantiation is resumable by nature, so
 //     every field saves on its own. Do not redesign them into a flow.
 //   - **Confirm eligible / ineligible** — moved verbatim from /review's act().
-//     confirmed_at is the audit-trail moat: Substantiation Records cite that
+//     confirmed_at is the audit-trail moat: Medical Expense Records cite that
 //     timestamp as the user's explicit eligibility-determination event, so it
 //     is stamped ONLY for a real determination, never for a deferral.
 //
@@ -366,7 +366,7 @@ export default function Substantiate() {
           <div className="min-w-0 flex-1">
             <PageHeader
               title="Expenses"
-              description="Attach what proves each expense, then confirm whether it's eligible. Each confirmation is the timestamped record your Reimbursement Record cites."
+              description="Attach what proves each expense, then confirm whether it's eligible. Each confirmation is the timestamped record your Medical Expense Record cites."
             />
           </div>
           <div className="flex shrink-0 flex-wrap gap-2">

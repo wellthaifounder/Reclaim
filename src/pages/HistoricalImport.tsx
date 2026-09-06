@@ -372,7 +372,7 @@ export default function HistoricalImport() {
 
         <p className="text-xs text-muted-foreground text-center mt-6 max-w-md mx-auto">
           We won't auto-mark any of these as eligible. You confirm each one —
-          that confirmation timestamp is what makes your Reimbursement Record
+          that confirmation timestamp is what makes your Medical Expense Record
           audit-defensible.
         </p>
       </div>

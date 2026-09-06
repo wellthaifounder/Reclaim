@@ -344,7 +344,7 @@ export default function Dashboard() {
               copy={
                 isShoebox
                   ? "Saved for future reimbursement"
-                  : "Generate your Reimbursement Record"
+                  : "Generate your Medical Expense Record"
               }
               ctaLabel={isShoebox ? "" : "Submit"}
               onClick={

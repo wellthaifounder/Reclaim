@@ -351,7 +351,7 @@ const App = () => (
                         path="/review"
                         element={<Navigate to="/substantiate" replace />}
                       />
-                      {/* Reclaim Phase 4 W1+W2: Substantiation Record generation + SUBMITTED state */}
+                      {/* Reclaim Phase 4 W1+W2: Medical Expense Record generation + SUBMITTED state */}
                       <Route
                         path="/substantiation"
                         element={
