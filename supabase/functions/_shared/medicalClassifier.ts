@@ -72,6 +72,7 @@ export type ClassificationReason =
   | "mcc"
   | "personal_finance_category"
   | "keyword"
+  | "possible_otc"
   | "none";
 
 export interface ClassificationResult {
@@ -128,6 +129,49 @@ const TRUSTED_PFC_CONFIDENCE: ReadonlySet<string> = new Set([
   "VERY_HIGH",
   "HIGH",
 ]);
+
+// ── Possible-OTC lane ─────────────────────────────────────────────────────
+// Grocery, general-merchandise and warehouse-club purchases are never
+// classified medical outright — a basket at Target or Costco is overwhelmingly
+// not a medical expense, and flipping is_medical here would resurrect exactly
+// the false-positive flood the 2026-08-14 rewrite fixed. But some of those
+// baskets genuinely do contain an IRS-qualifying item (allergy medicine,
+// contact lens solution, a first-aid kit), and today those are invisible: they
+// never enter the review queue, so the app finds $0 of OTC spending even when
+// it exists on a receipt already scanned. This tier flags the transaction for
+// review without touching is_medical, so it can neither create a phantom
+// expense nor move any total — the only thing that happens is the transaction
+// becomes visible to ExpenseSplitDialog, which can pull the medical portion
+// out.
+const OTC_PFC_DETAILED: ReadonlySet<string> = new Set([
+  "FOOD_AND_DRINK_GROCERIES",
+  "GENERAL_MERCHANDISE_SUPERSTORES",
+  "GENERAL_MERCHANDISE_DISCOUNT_STORES",
+  "GENERAL_MERCHANDISE_CONVENIENCE_STORES",
+  "GENERAL_MERCHANDISE_ONLINE_MARKETPLACES",
+  "GENERAL_MERCHANDISE_WHOLESALE_CLUBS",
+  "GENERAL_MERCHANDISE_OTHER_GENERAL_MERCHANDISE",
+]);
+
+// Named brands, for the transactions Plaid gives no personal_finance_category
+// or MCC at all — matched the same word-boundary-anchored way as the medical
+// keyword lists above, so "Amazon" cannot match anything containing it as a
+// substring.
+export const OTC_LANE_BRANDS: readonly string[] = [
+  "whole foods",
+  "trader joe's",
+  "safeway",
+  "kroger",
+  "publix",
+  "albertsons",
+  "vons",
+  "walmart",
+  "target",
+  "costco",
+  "sam's club",
+  "bj's wholesale",
+  "amazon",
+];
 
 // ── Keywords ──────────────────────────────────────────────────────────────
 // Split by reliability. Brands are distinctive enough to accept outright;
@@ -264,6 +308,7 @@ function buildMatcher(terms: readonly string[]): RegExp {
 
 const BRAND_RE = buildMatcher(MEDICAL_BRANDS);
 const TERM_RE = buildMatcher(MEDICAL_TERMS);
+const OTC_BRAND_RE = buildMatcher(OTC_LANE_BRANDS);
 
 function firstMatch(re: RegExp, haystack: string): string | null {
   const m = re.exec(haystack);
@@ -309,6 +354,32 @@ async function loadMccCache(supabase: SupabaseClient): Promise<void> {
 export function _resetMccCacheForTests(): void {
   mccCacheLoaded = false;
   mccCache = new Map();
+  otcMccCacheLoaded = false;
+  otcMccCache = new Set();
+}
+
+// Separate cache, separate flag: the two queries filter on opposite values of
+// is_reviewable_otc, so one cold-start miss on this tier must not also
+// re-trigger (or be masked by) the medical MCC load above.
+let otcMccCacheLoaded = false;
+let otcMccCache: Set<string> = new Set();
+
+async function loadOtcMccCache(supabase: SupabaseClient): Promise<void> {
+  if (otcMccCacheLoaded) return;
+  const { data, error } = await supabase
+    .from("mcc_codes")
+    .select("code")
+    .eq("is_reviewable_otc", true);
+  if (error) {
+    console.warn(
+      "[medicalClassifier] OTC MCC cache load failed; continuing without the OTC-lane MCC signal.",
+      error.message,
+    );
+    otcMccCacheLoaded = true;
+    return;
+  }
+  otcMccCache = new Set((data ?? []).map((r) => r.code as string));
+  otcMccCacheLoaded = true;
 }
 
 // ── Public API ────────────────────────────────────────────────────────────
@@ -425,6 +496,48 @@ export async function classifyTransaction(
       reason: "keyword",
       confidence: 0.6,
       explanation: `Merchant name contains "${term}" — confirm this was a medical expense.`,
+    };
+  }
+
+  // Tier 6 — possible OTC. Deliberately last: every tier above this one is a
+  // stronger claim that the transaction IS medical, and none of them fired.
+  // is_medical stays false either way, so this can only ever add a transaction
+  // to the review queue — it can never create an expense or move a total.
+  if (txn.mcc) {
+    await loadOtcMccCache(supabase);
+    if (otcMccCache.has(txn.mcc)) {
+      return {
+        isMedical: false,
+        needsReview: true,
+        reason: "possible_otc",
+        mccCode: txn.mcc,
+        confidence: 0.5,
+        explanation: `Merchant category code ${txn.mcc} is a grocery/general-merchandise category — worth a look for any medical items in the basket.`,
+      };
+    }
+  }
+  if (OTC_PFC_DETAILED.has(detailed)) {
+    return {
+      isMedical: false,
+      needsReview: true,
+      reason: "possible_otc",
+      confidence: 0.5,
+      explanation: `Plaid categorized this as ${detailed
+        .toLowerCase()
+        .replace(
+          /_/g,
+          " ",
+        )} — worth a look for any medical items in the basket.`,
+    };
+  }
+  const otcBrand = firstMatch(OTC_BRAND_RE, vendor);
+  if (otcBrand) {
+    return {
+      isMedical: false,
+      needsReview: true,
+      reason: "possible_otc",
+      confidence: 0.45,
+      explanation: `"${otcBrand}" sells over-the-counter medical items alongside everything else — worth a look at what was in this basket.`,
     };
   }
 

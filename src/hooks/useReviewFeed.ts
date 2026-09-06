@@ -34,6 +34,19 @@ export interface ReviewGroup {
   /** Present only when every transaction in the group agrees on it. */
   merchant_entity_id: string | null;
   mcc: string | null;
+  /**
+   * 'medical': the classifier thinks this IS medical, confirm or reject.
+   * 'possible_otc': the classifier does NOT think this is medical (grocery,
+   * warehouse club, general merchandise) but flagged it because a basket
+   * there can still contain an IRS-qualifying item. is_medical is false on
+   * every row in this lane until a split or bulk decision changes it.
+   */
+  lane: "medical" | "possible_otc";
+  /**
+   * Populated only when txn_count is 1 — the only case ExpenseSplitDialog can
+   * act on unambiguously, since splitting means picking one specific basket.
+   */
+  single_transaction_id: string | null;
 }
 
 /**
@@ -70,7 +83,7 @@ export function useReviewFeed() {
     staleTime: 60 * 1000,
     queryFn: async (): Promise<ReviewGroup[]> => {
       const { data, error } = await supabase.rpc("review_feed_groups", {
-        p_limit: 50,
+        p_limit: 75,
       });
       if (error) throw error;
       return (data ?? []).map((g) => ({
@@ -98,10 +111,12 @@ export function useReviewFeed() {
     mutationFn: async (input: {
       merchantKey: string;
       isMedical: boolean;
+      lane?: ReviewGroup["lane"];
     }): Promise<number> => {
       const { data, error } = await supabase.rpc("bulk_review_merchant", {
         p_merchant_key: input.merchantKey,
         p_is_medical: input.isMedical,
+        p_lane: input.lane,
       });
       if (error) throw error;
       return data ?? 0;
@@ -110,17 +125,20 @@ export function useReviewFeed() {
     onError: (error) => logError("Bulk merchant review failed", error),
   });
 
-  const totalPending = (feedQuery.data ?? []).reduce(
-    (sum, g) => sum + g.txn_count,
-    0,
-  );
+  const allGroups = feedQuery.data ?? [];
+  const medicalGroups = allGroups.filter((g) => g.lane === "medical");
+  const otcGroups = allGroups.filter((g) => g.lane === "possible_otc");
+  const totalPending = allGroups.reduce((sum, g) => sum + g.txn_count, 0);
 
   return {
-    groups: feedQuery.data ?? [],
+    groups: allGroups,
+    medicalGroups,
+    otcGroups,
     totalPending,
     isLoading: feedQuery.isLoading,
     error: feedQuery.error,
     decideGroup,
+    invalidate,
     refetch: feedQuery.refetch,
   };
 }
