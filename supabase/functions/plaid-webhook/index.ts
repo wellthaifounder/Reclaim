@@ -35,7 +35,6 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { decryptPlaidToken } from "../_shared/encryption.ts";
 import {
-  autoCaptureExpenses,
   detectDuplicates,
   detectTransfers,
   matchDeposits,
@@ -230,10 +229,15 @@ serve(async (req) => {
     });
 
     // ── 5. Capture + deposit matching (shared with plaid-sync-transactions)
-    const captured = await autoCaptureExpenses(supabase, {
-      userId: connection.user_id,
-      ingested,
-    });
+    //
+    // Expenses are no longer created here (2026-09-06): a background webhook is
+    // the last place that should file a claim the user has never seen. The
+    // database creates the expense when a transaction becomes confirmed medical
+    // (trigger `trg_transactions_confirm_medical`), which covers the
+    // rule-confirmed rows this drain just inserted.
+    const captured = ingested.filter(
+      (t) => t.classification.reason === "rule" && t.classification.isMedical,
+    ).length;
     const depositCandidates = await matchDeposits(supabase, {
       userId: connection.user_id,
     });

@@ -17,6 +17,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuthUser } from "@/hooks/useAuthUser";
 import { logError } from "@/utils/errorHandler";
 import type { RuleMatchType } from "@/lib/merchantNormalize";
 
@@ -77,9 +78,20 @@ export function groupRuleKey(
 
 export function useReviewFeed() {
   const queryClient = useQueryClient();
+  // review_feed_groups is SECURITY INVOKER and filters on auth.uid(). Fired
+  // before the session has been restored it returns zero rows -- correctly,
+  // there is no user -- and react-query then serves that empty answer from
+  // cache for a full staleTime. That is the "open the bookmark and it says
+  // Nothing to review, open it again and everything is there" bug: the first
+  // visit raced the session, the second was served real data. Keyed by user and
+  // gated on having one, the query cannot run before there is somebody to run
+  // it for, and two accounts can never share a cache entry.
+  const { user } = useAuthUser();
+  const userId = user?.id;
 
   const feedQuery = useQuery({
-    queryKey: ["review-feed"],
+    queryKey: ["review-feed", userId],
+    enabled: !!userId,
     staleTime: 60 * 1000,
     queryFn: async (): Promise<ReviewGroup[]> => {
       const { data, error } = await supabase.rpc("review_feed_groups", {

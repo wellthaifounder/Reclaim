@@ -166,14 +166,14 @@ Deno.test(
 Deno.test("MCC tier fires and carries the Pub 502 rule", async () => {
   const r = await classify(txn({ name: "SOME CLINIC LLC", mcc: "8011" }));
   assertEquals(r.isMedical, true);
-  assertEquals(r.needsReview, false);
+  assertEquals(r.needsReview, true);
   assertEquals(r.reason, "mcc");
   assertEquals(r.pub502RuleId, "doctor-visits");
   assertEquals(r.irsCategory, "Doctors");
 });
 
 Deno.test(
-  "high-confidence Plaid category is accepted without review",
+  "even a very-high-confidence Plaid category still waits for the user",
   async () => {
     const r = await classify(
       txn({
@@ -186,7 +186,7 @@ Deno.test(
       }),
     );
     assertEquals(r.isMedical, true);
-    assertEquals(r.needsReview, false);
+    assertEquals(r.needsReview, true);
     assertEquals(r.reason, "personal_finance_category");
   },
 );
@@ -209,16 +209,55 @@ Deno.test(
   },
 );
 
-Deno.test("known brands are accepted; generic terms go to review", async () => {
+Deno.test("both known brands and generic terms go to review", async () => {
   const brand = await classify(
     txn({ name: "WALGREENS #4521", merchant_name: "Walgreens" }),
   );
   assertEquals(brand.isMedical, true);
-  assertEquals(brand.needsReview, false);
+  assertEquals(brand.needsReview, true);
 
   const generic = await classify(txn({ name: "RIVERSIDE DENTAL GROUP" }));
   assertEquals(generic.isMedical, true);
   assertEquals(generic.needsReview, true);
+});
+
+// The one thing that still decides without asking, and why: a rule IS the
+// user's decision, recorded once and applied standing. Take this away and the
+// rules screen does nothing.
+Deno.test("a user's own rule still decides without review", async () => {
+  const r = await classify(txn({ name: "NW HEALTH BENTONVILLE" }), [
+    rule("name_pattern", "nw health", true),
+  ]);
+  assertEquals(r.isMedical, true);
+  assertEquals(r.needsReview, false);
+  assertEquals(r.reason, "rule");
+});
+
+// The classifier must never confirm anything on its own. This is the guard on
+// the whole model: a confirmed transaction becomes an expense, and an expense
+// is a claim against an HSA.
+Deno.test("no signal tier ever confirms medical without the user", async () => {
+  const signals = [
+    txn({ name: "SOME CLINIC LLC", mcc: "8011" }),
+    txn({ name: "WALGREENS #4521", merchant_name: "Walgreens" }),
+    txn({
+      name: "MERCY PRIMARY CARE",
+      personal_finance_category: {
+        primary: "MEDICAL",
+        detailed: "MEDICAL_PRIMARY_CARE",
+        confidence_level: "VERY_HIGH",
+      },
+    }),
+  ];
+  for (const t of signals) {
+    const r = await classify(t);
+    assertEquals(r.isMedical, true);
+    assertEquals(
+      r.needsReview,
+      true,
+      `${t.name} was confirmed medical without the user`,
+    );
+  }
 });
 
 // ── User preference ───────────────────────────────────────────────────────
