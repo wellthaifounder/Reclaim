@@ -25,14 +25,16 @@ interface DocumentCardProps {
     document_type: string | null;
     description: string | null;
     uploaded_at: string;
-    invoice_id: string | null;
   };
+  /** How many expenses this document is attached to, via receipt_invoices. */
+  attachedCount: number;
   onEdit: () => void;
   onDelete: (id: string) => void;
 }
 
 export const DocumentCard = ({
   receipt,
+  attachedCount,
   onEdit,
   onDelete,
 }: DocumentCardProps) => {
@@ -79,7 +81,7 @@ export const DocumentCard = ({
   };
 
   const isImage = receipt.file_type.startsWith("image/");
-  const isAttached = !!receipt.invoice_id;
+  const isAttached = attachedCount > 0;
 
   return (
     <>
@@ -104,7 +106,7 @@ export const DocumentCard = ({
             </div>
           </div>
 
-          {/* Attached / on file (2026-08-21).
+          {/* Attached / on file (2026-08-21, multi-attach 2026-09-05).
 
               This used to be three states: attached to a bill, attached to a
               payment, or an amber "not linked to any collection" warning with
@@ -113,12 +115,17 @@ export const DocumentCard = ({
               that isn't attached yet is a perfectly good document. It gets
               picked up from the substantiate dialog, where the expense it
               belongs to is on screen, and one document can serve several
-              expenses. So an unattached document is now stated, not scolded. */}
+              expenses -- via receipt_invoices, so attachedCount can be > 1.
+              So an unattached document is now stated, not scolded. */}
           <div className="flex items-center gap-1 text-xs text-muted-foreground bg-muted/50 p-2 rounded">
             {isAttached ? (
               <>
                 <Link2 className="h-3 w-3" />
-                <span>Attached to an expense</span>
+                <span>
+                  {attachedCount === 1
+                    ? "Attached to an expense"
+                    : `Attached to ${attachedCount} expenses`}
+                </span>
               </>
             ) : (
               <>

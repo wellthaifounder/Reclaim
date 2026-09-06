@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -19,7 +19,6 @@ interface Receipt {
   document_type: string | null;
   description: string | null;
   uploaded_at: string;
-  invoice_id: string | null;
 }
 
 /** A file chosen in the upload panel but not yet sent to storage. */
@@ -31,18 +30,17 @@ interface PendingUpload {
 const Documents = () => {
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [filteredReceipts, setFilteredReceipts] = useState<Receipt[]>([]);
+  // How many expenses each document is attached to, via receipt_invoices.
+  // A document with no entry here is unattached.
+  const [attachedCounts, setAttachedCounts] = useState<Map<string, number>>(
+    new Map(),
+  );
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedType, setSelectedType] = useState<string>("all");
   const [editingReceipt, setEditingReceipt] = useState<Receipt | null>(null);
   const [showUpload, setShowUpload] = useState(false);
   const [newFiles, setNewFiles] = useState<PendingUpload[]>([]);
-  useEffect(() => {
-    loadReceipts();
-  }, []);
-  useEffect(() => {
-    filterReceipts();
-  }, [receipts, searchQuery, selectedType]);
   const loadReceipts = async () => {
     try {
       setLoading(true);
@@ -51,17 +49,32 @@ const Documents = () => {
       } = await supabase.auth.getSession();
       const user = session?.user;
       if (!user) throw new Error("Not authenticated");
-      const { data, error } = await supabase
-        .from("receipts")
-        // Columns enumerated rather than `*`: `receipts` gains columns over
-        // time and a wildcard here would start shipping them to the client
-        // the moment they land.
-        .select(
-          "id, file_path, file_type, document_type, description, uploaded_at, invoice_id",
-        )
-        .eq("user_id", user.id)
-        .order("uploaded_at", { ascending: false });
+      const [{ data, error }, { data: links, error: linksError }] =
+        await Promise.all([
+          supabase
+            .from("receipts")
+            // Columns enumerated rather than `*`: `receipts` gains columns
+            // over time and a wildcard here would start shipping them to the
+            // client the moment they land.
+            .select(
+              "id, file_path, file_type, document_type, description, uploaded_at",
+            )
+            .eq("user_id", user.id)
+            .order("uploaded_at", { ascending: false }),
+          // Attachment now lives in receipt_invoices, not receipts.invoice_id
+          // -- a document can be attached to more than one expense.
+          supabase
+            .from("receipt_invoices")
+            .select("receipt_id")
+            .eq("user_id", user.id),
+        ]);
       if (error) throw error;
+      if (linksError) throw linksError;
+      const counts = new Map<string, number>();
+      for (const l of links ?? []) {
+        counts.set(l.receipt_id, (counts.get(l.receipt_id) ?? 0) + 1);
+      }
+      setAttachedCounts(counts);
       setReceipts(data || []);
     } catch (error) {
       logError("Error loading receipts", error);
@@ -70,7 +83,7 @@ const Documents = () => {
       setLoading(false);
     }
   };
-  const filterReceipts = () => {
+  const filterReceipts = useCallback(() => {
     let filtered = receipts;
     if (searchQuery) {
       filtered = filtered.filter(
@@ -81,15 +94,23 @@ const Documents = () => {
     }
     if (selectedType !== "all") {
       if (selectedType === "unattached") {
-        filtered = filtered.filter((r) => !r.invoice_id);
+        filtered = filtered.filter((r) => !attachedCounts.get(r.id));
       } else if (selectedType === "attached") {
-        filtered = filtered.filter((r) => r.invoice_id);
+        filtered = filtered.filter((r) => attachedCounts.get(r.id));
       } else {
         filtered = filtered.filter((r) => r.document_type === selectedType);
       }
     }
     setFilteredReceipts(filtered);
-  };
+  }, [receipts, attachedCounts, searchQuery, selectedType]);
+
+  useEffect(() => {
+    loadReceipts();
+  }, []);
+  useEffect(() => {
+    filterReceipts();
+  }, [filterReceipts]);
+
   const handleUpload = async () => {
     if (newFiles.length === 0) return;
     try {
@@ -259,6 +280,7 @@ const Documents = () => {
               <DocumentCard
                 key={receipt.id}
                 receipt={receipt}
+                attachedCount={attachedCounts.get(receipt.id) ?? 0}
                 onEdit={() => setEditingReceipt(receipt)}
                 onDelete={handleDelete}
               />
