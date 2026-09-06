@@ -386,6 +386,25 @@ UPDATE public.transactions t
   FROM inserted i
  WHERE t.id = i.source_transaction_id;
 
+-- ── 6. Repair the back-link on expenses that already exist ──────────────────
+--
+-- Found on the founder's own account 2026-09-06: six transactions carried a
+-- valid invoice_id, and the matching expense existed, but reconciliation_status
+-- still read 'unlinked' — so every one of them displayed "Needs Linking" while
+-- being fully linked. autoCaptureExpenses wrote both fields in a single update,
+-- so the likely cause is a later write that reset the status without clearing
+-- the id (handleIgnore and handleAddToReviewQueue both wrote
+-- reconciliation_status on its own, which this change also stops).
+--
+-- 'ignored' is left alone: that is an explicit decision by the user, not drift.
+UPDATE public.transactions t
+   SET reconciliation_status = 'linked_to_invoice',
+       updated_at            = now()
+ WHERE t.invoice_id IS NOT NULL
+   AND COALESCE(t.reconciliation_status, '') NOT IN ('linked_to_invoice', 'ignored')
+   AND COALESCE(t.is_transfer, false) IS FALSE
+   AND EXISTS (SELECT 1 FROM public.invoices i WHERE i.id = t.invoice_id);
+
 DO $$
 DECLARE v_remaining INTEGER;
 BEGIN
