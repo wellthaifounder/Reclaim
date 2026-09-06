@@ -46,6 +46,7 @@ const HistoricalImport = lazy(() => import("./pages/HistoricalImport"));
 const Welcome = lazy(() => import("./pages/Welcome"));
 const ExpenseEntry = lazy(() => import("./pages/ExpenseEntry"));
 const Substantiate = lazy(() => import("./pages/Substantiate"));
+const AllExpenses = lazy(() => import("./pages/AllExpenses"));
 const Substantiation = lazy(() => import("./pages/Substantiation"));
 const Documents = lazy(() => import("./pages/Documents"));
 const Settings = lazy(() => import("./pages/Settings"));
@@ -310,6 +311,22 @@ const App = () => (
                           <ProtectedRoute>
                             <ErrorBoundary>
                               <ExpenseEntry />
+                            </ErrorBoundary>
+                          </ProtectedRoute>
+                        }
+                      />
+                      {/* The expense ledger: every expense at every stage,
+                          including ones already claimed. /substantiate is a
+                          queue that empties; this is the record that does not.
+                          Sits under /expenses/* alongside /expenses/new -- the
+                          bare /expenses root redirects for bookmark reasons
+                          only, its children are expense pages. */}
+                      <Route
+                        path="/expenses/all"
+                        element={
+                          <ProtectedRoute>
+                            <ErrorBoundary>
+                              <AllExpenses />
                             </ErrorBoundary>
                           </ProtectedRoute>
                         }
