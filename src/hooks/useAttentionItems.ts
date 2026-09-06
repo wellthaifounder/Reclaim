@@ -9,6 +9,8 @@ export interface AttentionSummary {
   unreviewedTransactions: number;
   unlinkedMedical: number;
   hsaClaimable: number;
+  /** Expenses eligible and unclaimed -- ready for a reimbursement request. */
+  readyToClaim: number;
   isShoebox: boolean;
   isLoading: boolean;
 }
@@ -25,49 +27,51 @@ export function useAttentionItems(): AttentionSummary {
       // Run all counts in parallel
       const [unreviewedResult, unlinkedMedicalResult, hsaClaimableResult] =
         await Promise.all([
-        // 1. Unreviewed transactions (needs_review = true)
-        supabase
-          .from("transactions")
-          .select("id", { count: "exact", head: true })
-          .eq("user_id", userId!)
-          .eq("needs_review", true),
+          // 1. Unreviewed transactions (needs_review = true)
+          supabase
+            .from("transactions")
+            .select("id", { count: "exact", head: true })
+            .eq("user_id", userId!)
+            .eq("needs_review", true),
 
-        // "Unpaid bills older than 30 days" removed 2026-08-21.
-        //
-        // It counted invoices.status = 'unpaid'. That column was maintained by
-        // a trigger on the payments table, which is gone -- so the column now
-        // sits at its default of 'unpaid' for every expense forever, and this
-        // counter would have put the user's entire expense history in the
-        // nav badge as overdue work. The idea was wrong here anyway: an
-        // expense exists because the bank recorded the money leaving, so
-        // "unpaid" describes none of them.
+          // "Unpaid bills older than 30 days" removed 2026-08-21.
+          //
+          // It counted invoices.status = 'unpaid'. That column was maintained by
+          // a trigger on the payments table, which is gone -- so the column now
+          // sits at its default of 'unpaid' for every expense forever, and this
+          // counter would have put the user's entire expense history in the
+          // nav badge as overdue work. The idea was wrong here anyway: an
+          // expense exists because the bank recorded the money leaving, so
+          // "unpaid" describes none of them.
 
-        // 2. Unlinked medical transactions
-        supabase
-          .from("transactions")
-          .select("id", { count: "exact", head: true })
-          .eq("user_id", userId!)
-          .eq("is_medical", true)
-          .eq("reconciliation_status", "unlinked"),
+          // 2. Unlinked medical transactions
+          supabase
+            .from("transactions")
+            .select("id", { count: "exact", head: true })
+            .eq("user_id", userId!)
+            .eq("is_medical", true)
+            .eq("reconciliation_status", "unlinked"),
 
-
-        // 4. HSA-claimable amount.
-        //
-        // Reads the facets directly rather than the derived is_hsa_eligible /
-        // is_reimbursed booleans, which were wrong here. is_reimbursed is only
-        // true for claim_state 'reimbursed'/'reimbursed_externally', so
-        // `is_reimbursed = false` also matched two kinds of money that can
-        // never be claimed: 'not_reimbursable' (already paid with the HSA card
-        // -- the double-count the brief calls out as the most important guard)
-        // and 'locked_in_request' (already committed to an open request).
-        // Claimable is exactly eligible + unclaimed.
-        supabase
-          .from("invoices")
-          .select("amount")
-          .eq("user_id", userId!)
-          .eq("eligibility_state", "eligible")
-          .eq("claim_state", "unclaimed"),
-      ]);
+          // 4. HSA-claimable amount.
+          //
+          // Reads the facets directly rather than the derived is_hsa_eligible /
+          // is_reimbursed booleans, which were wrong here. is_reimbursed is only
+          // true for claim_state 'reimbursed'/'reimbursed_externally', so
+          // `is_reimbursed = false` also matched two kinds of money that can
+          // never be claimed: 'not_reimbursable' (already paid with the HSA card
+          // -- the double-count the brief calls out as the most important guard)
+          // and 'locked_in_request' (already committed to an open request).
+          // Claimable is exactly eligible + unclaimed. `count: "exact"`
+          // alongside the row select gets both the dollar total (below) and a
+          // ready-to-claim count in one query -- the count is what the nav
+          // badge needs; see readyToClaim.
+          supabase
+            .from("invoices")
+            .select("amount", { count: "exact" })
+            .eq("user_id", userId!)
+            .eq("eligibility_state", "eligible")
+            .eq("claim_state", "unclaimed"),
+        ]);
 
       if (unreviewedResult.error)
         logError("Attention: unreviewed query", unreviewedResult.error);
@@ -85,6 +89,7 @@ export function useAttentionItems(): AttentionSummary {
         unreviewedTransactions: unreviewedResult.count ?? 0,
         unlinkedMedical: unlinkedMedicalResult.count ?? 0,
         hsaClaimable,
+        readyToClaim: hsaClaimableResult.count ?? 0,
       };
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
@@ -104,12 +109,17 @@ export function useAttentionItems(): AttentionSummary {
   // the entire point of the strategy, and letting it rot is the one thing that
   // actually costs them the deduction decades later.
   const hsaClaimable = isShoebox ? 0 : (data?.hsaClaimable ?? 0);
+  // Same suppression, same reason: a shoebox user has chosen not to claim, so
+  // a "ready to claim" badge is the app flagging their completed work as
+  // unfinished.
+  const readyToClaim = isShoebox ? 0 : (data?.readyToClaim ?? 0);
 
   return {
     totalCount: unreviewedTransactions + unlinkedMedical,
     unreviewedTransactions,
     unlinkedMedical,
     hsaClaimable,
+    readyToClaim,
     isShoebox,
     isLoading: isLoading || strategyLoading,
   };

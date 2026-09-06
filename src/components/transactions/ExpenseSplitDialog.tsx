@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2, AlertCircle, Split } from "lucide-react";
 import {
   ResponsiveDialog,
@@ -71,6 +72,7 @@ export function ExpenseSplitDialog({
   userId,
   onSplit,
 }: ExpenseSplitDialogProps) {
+  const queryClient = useQueryClient();
   const [rows, setRows] = useState<ExpenseSplitDraft[]>([
     blankRow(transaction, transaction.amount),
   ]);
@@ -151,6 +153,11 @@ export function ExpenseSplitDialog({
           ? "Expense created."
           : `${rows.length} expenses created from this transaction.`,
       );
+      // This transaction just went from needs_review to decided, from either
+      // the "All transactions" list or the review feed's OTC lane -- neither
+      // caller's own refresh touches the shared nav-badge query, so it has to
+      // be invalidated here, at the one place both paths actually mutate.
+      queryClient.invalidateQueries({ queryKey: ["attention-items"] });
       onSplit?.();
       onOpenChange(false);
     } catch (err) {

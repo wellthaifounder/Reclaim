@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useAttentionItems } from "@/hooks/useAttentionItems";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -50,6 +52,26 @@ type Transaction = Database["public"]["Tables"]["transactions"]["Row"] & {
 };
 
 export default function Transactions() {
+  const queryClient = useQueryClient();
+  // The one source of truth for "how many need review", read by the tab
+  // badge, the stat card, and (via AuthenticatedLayout) the sidebar/top-nav
+  // badge. Every mutation below that can change needs_review invalidates
+  // this query, so all three stay in sync with each other and with the
+  // review feed's own bulk-decide actions -- which this page's local
+  // `transactions` state never learns about on its own.
+  //
+  // This used to be `spending.filter(t => t.needs_review).length`, computed
+  // from that same local state and read by all three of the badges above --
+  // which is exactly why deciding a merchant through the review feed left
+  // them all stale, since that RPC never touches this page's own fetch.
+  // (Do not reach for `reconciliation_status === "unlinked"` as a substitute
+  // count either: plaidSync.ts stamps that on every row at ingest, so it
+  // always equals total volume and means "no expense attached yet," not "a
+  // human still has to decide" -- which is how a fully-sorted account once
+  // reported "48 need review" directly above "Nothing to review".)
+  const { unreviewedTransactions: liveNeedsReview } = useAttentionItems();
+  const invalidateAttentionItems = () =>
+    queryClient.invalidateQueries({ queryKey: ["attention-items"] });
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [filteredTransactions, setFilteredTransactions] = useState<
     Transaction[]
@@ -310,6 +332,7 @@ export default function Transactions() {
         newIsMedical ? "Marked as medical expense" : "Marked as non-medical",
       );
       fetchTransactions();
+      invalidateAttentionItems();
       // Workstream C4: rules are reachable from any transaction, including
       // ones already filed in the archive -- that is how a user corrects a
       // vendor they disagree with rather than fixing rows one by one.
@@ -337,6 +360,7 @@ export default function Transactions() {
       if (error) throw error;
       toast.success("Marked as medical expense");
       fetchTransactions();
+      invalidateAttentionItems();
       setRuleCandidate({ ...transaction, isMedical: true });
     } catch (error) {
       logError("Error updating transaction:", error);
@@ -429,6 +453,7 @@ export default function Transactions() {
       // reappear in the review queue.
       toast.success("Transfer undone. Both transactions are back for review.");
       fetchTransactions();
+      invalidateAttentionItems();
     } catch (error) {
       logError("Error unlinking transfer:", error);
       toast.error("Failed to undo the transfer");
@@ -468,15 +493,6 @@ export default function Transactions() {
   const stats = {
     total: spending.length,
     medical: confirmedMedical.length,
-    // The one true review count. Do not reach for `reconciliation_status ===
-    // "unlinked"` here: plaidSync.ts stamps that on every row at ingest, so it
-    // always equals `total` and means "no expense attached yet", not "a human
-    // still has to decide". Both the "Needs Review" card and the sidebar badge
-    // read it by mistake, which is how a fully-sorted account reported "48
-    // need review" directly above "Nothing to review". The unlinked-medical
-    // figure that IS worth showing already reaches the dashboard through
-    // useAttentionItems, correctly filtered by is_medical.
-    needsReview: spending.filter((t) => t.needs_review).length,
     totalAmount: spending.reduce((sum, t) => sum + Number(t.amount), 0),
     medicalAmount: confirmedMedical.reduce(
       (sum, t) => sum + Number(t.amount),
@@ -491,7 +507,7 @@ export default function Transactions() {
 
   if (loading) {
     return (
-      <AuthenticatedLayout unreviewedTransactions={0}>
+      <AuthenticatedLayout>
         <TransactionsSkeleton />
       </AuthenticatedLayout>
     );
@@ -506,7 +522,7 @@ export default function Transactions() {
         fetchTransactions();
       }}
     >
-      <AuthenticatedLayout unreviewedTransactions={stats.needsReview}>
+      <AuthenticatedLayout>
         <div className="container mx-auto px-4 py-8 max-w-6xl">
           {!hsaOpenedDate && <MissingHSADateBanner onDateSet={fetchHSADate} />}
 
@@ -569,7 +585,7 @@ export default function Transactions() {
             <Card className="p-4">
               <p className="text-sm text-muted-foreground">Needs Review</p>
               <p className="text-2xl font-bold text-yellow-600 tabular-nums">
-                {stats.needsReview}
+                {liveNeedsReview}
               </p>
             </Card>
             <Card className="p-4">
@@ -613,12 +629,12 @@ export default function Transactions() {
                   when eligibility moved to substantiation. */}
               <TabsTrigger value="review" className="relative">
                 Review
-                {stats.needsReview > 0 && (
+                {liveNeedsReview > 0 && (
                   <Badge
                     variant="destructive"
                     className="ml-1.5 px-1.5 py-0 text-xs"
                   >
-                    {stats.needsReview}
+                    {liveNeedsReview}
                   </Badge>
                 )}
               </TabsTrigger>
