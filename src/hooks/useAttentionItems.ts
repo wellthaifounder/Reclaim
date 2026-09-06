@@ -27,12 +27,27 @@ export function useAttentionItems(): AttentionSummary {
       // Run all counts in parallel
       const [unreviewedResult, unlinkedMedicalResult, hsaClaimableResult] =
         await Promise.all([
-          // 1. Unreviewed transactions (needs_review = true)
+          // 1. Unreviewed transactions.
+          //
+          // These filters exist to match review_feed_groups() exactly. The
+          // badge counted plain needs_review while the queue additionally
+          // dropped ignored rows and split children, so any transaction that
+          // satisfied one and not the other produced a badge advertising work
+          // the queue could not show -- "Review 3" over "Nothing to review",
+          // with no way to clear it. If you change the queue's WHERE clause,
+          // change this too; they are one definition in two places.
           supabase
             .from("transactions")
             .select("id", { count: "exact", head: true })
             .eq("user_id", userId!)
-            .eq("needs_review", true),
+            .eq("needs_review", true)
+            // `.neq` alone would also drop rows whose status is NULL, because
+            // NULL != 'ignored' is NULL, not true. The queue keeps those (it
+            // uses COALESCE), so this has to keep them as well.
+            .or(
+              "reconciliation_status.is.null,reconciliation_status.neq.ignored",
+            )
+            .is("split_parent_id", null),
 
           // "Unpaid bills older than 30 days" removed 2026-08-21.
           //

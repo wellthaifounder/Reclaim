@@ -34,6 +34,19 @@
 // Scope note: this decides MEDICAL vs NOT MEDICAL only. HSA *eligibility* is
 // resolved later, at substantiation, where date of service, patient and Pub 502
 // category are known. See .claude/plans/bank-sync-workflow-spec.md.
+//
+// The classifier proposes; only the user disposes (2026-09-06). Every tier that
+// finds a medical signal now sets needsReview, however confident it is. Tier 1
+// is the sole exception, and only because a rule IS the user's decision, made
+// once and applied standing — that is the whole point of the rules screen.
+//
+// Why: an expense is created the moment a transaction is confirmed medical
+// (trigger `trg_transactions_confirm_medical`), and an expense is a claim
+// against an HSA. Nothing should become a claim on the strength of a merchant
+// category code alone. The old behavior auto-confirmed MCC, brand and
+// high-confidence category matches, which meant the app filed claims the user
+// had never seen, while anything it was UNsure about waited for approval —
+// exactly backwards from a defensibility standpoint.
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
@@ -446,7 +459,7 @@ export async function classifyTransaction(
     if (hit) {
       return {
         isMedical: true,
-        needsReview: false,
+        needsReview: true,
         reason: "mcc",
         mccCode: txn.mcc,
         irsCategory: hit.irsCategory ?? undefined,
@@ -466,14 +479,14 @@ export async function classifyTransaction(
     const label = detailed.toLowerCase().replace(/_/g, " ");
     return {
       isMedical: true,
-      needsReview: !trusted,
+      needsReview: true,
       reason: "personal_finance_category",
       confidence: trusted ? 0.9 : 0.65,
       explanation: trusted
         ? `Plaid categorized this as ${label}.`
         : `Plaid categorized this as ${label}, but with ${
             conf.toLowerCase() || "unknown"
-          } confidence — worth a look.`,
+          } confidence.`,
     };
   }
 
@@ -482,7 +495,7 @@ export async function classifyTransaction(
   if (brand) {
     return {
       isMedical: true,
-      needsReview: false,
+      needsReview: true,
       reason: "keyword",
       confidence: 0.85,
       explanation: `"${brand}" is a known healthcare merchant.`,

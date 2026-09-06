@@ -66,8 +66,27 @@ import {
 import { toast } from "sonner";
 import { logError } from "@/utils/errorHandler";
 
-/** The two lifecycle states that mean "step two is not done yet". */
-const SUBSTANTIATE_STATES = ["needs_receipt", "pending_review"] as const;
+/**
+ * The lifecycle states that mean "step two is not done yet".
+ *
+ * `captured` joined them on 2026-09-06, when confirming a transaction as
+ * medical became the thing that creates its expense. A brand-new expense has
+ * eligibility 'unknown' and documentation 'none', which the lifecycle trigger
+ * maps to `captured` — no document, no eligibility decision, which is the
+ * definition of needing step two.
+ *
+ * It was excluded before for a reason that no longer holds: expenses used to be
+ * created by the sync without anyone approving them, so `captured` was a pile
+ * of the app's own guesses and would have buried the real queue. An expense now
+ * exists only because the user approved it, so every one of them belongs here.
+ * Leaving it out was what made six confirmed expenses worth $2,642.13 land in a
+ * queue that said "you're all caught up".
+ */
+const SUBSTANTIATE_STATES = [
+  "captured",
+  "needs_receipt",
+  "pending_review",
+] as const;
 type Lifecycle = (typeof SUBSTANTIATE_STATES)[number];
 
 interface QueueExpense {
@@ -201,8 +220,14 @@ export default function Substantiate() {
   });
 
   const totals = useMemo(() => {
+    // `captured` counts as needing a document: it means no document and no
+    // eligibility decision yet, which is the same work the header is
+    // summarising. Counting only needs_receipt would show "0 needs a document"
+    // above a list full of expenses that need exactly that.
     const needsReceipt = expenses.filter(
-      (e) => e.lifecycle_status === "needs_receipt",
+      (e) =>
+        e.lifecycle_status === "needs_receipt" ||
+        e.lifecycle_status === "captured",
     );
     const pending = expenses.filter(
       (e) => e.lifecycle_status === "pending_review",

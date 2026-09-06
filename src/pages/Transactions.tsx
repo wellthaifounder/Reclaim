@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAttentionItems } from "@/hooks/useAttentionItems";
+import { BulkDecideBar } from "@/components/transactions/BulkDecideBar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -94,6 +95,17 @@ export default function Transactions() {
   // Workstream C3: set after a categorization decision, to offer a rule.
   const [ruleCandidate, setRuleCandidate] = useState<RuleCandidate | null>(
     null,
+  );
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [deciding, setDeciding] = useState(false);
+  // Transfers and split parents have no medical decision to make, so "select
+  // all" must not sweep them in and then fail on them one row at a time.
+  const selectableIds = useMemo(
+    () =>
+      filteredTransactions
+        .filter((t) => !t.is_transfer && !t.is_split)
+        .map((t) => t.id),
+    [filteredTransactions],
   );
   // ?tab= opens a specific tab. The dashboard has linked to
   // /transactions?tab=review for a while, but nothing here ever read the
@@ -304,42 +316,51 @@ export default function Transactions() {
     }
   };
 
-  const handleToggleMedical = async (transaction: Transaction) => {
+  /**
+   * The one decision path, used by a row's Actions buttons and by the bulk bar.
+   *
+   * Goes through decide_transactions rather than a plain table update so both
+   * routes stamp identical provenance, and so the expense-creating trigger sees
+   * exactly one shape of write. Confirming does NOT create the expense here --
+   * the database does that, which is what stops a new call site quietly
+   * stranding someone's money the way the old design did.
+   */
+  const decide = async (ids: string[], isMedical: boolean) => {
+    if (ids.length === 0) return;
+    setDeciding(true);
     try {
-      const newIsMedical = !transaction.is_medical;
-
-      // Workstream C2: no is_hsa_eligible here, and no HSA-establishment-date
-      // warning. Both decided eligibility at categorization, which is the
-      // wrong step -- eligibility needs date of service, patient and Pub 502
-      // category, none of which are known from a bank transaction. The
-      // establishment-date gate is reported during substantiation instead.
-      const { error } = await supabase
-        .from("transactions")
-        .update({
-          is_medical: newIsMedical,
-          needs_review: false,
-          category: newIsMedical ? "medical" : transaction.category,
-          reconciliation_status: newIsMedical ? "unlinked" : "ignored",
-          classification_reason: "user",
-          classification_explanation: newIsMedical
-            ? "You confirmed this as a medical expense."
-            : "You marked this as not medical.",
-        })
-        .eq("id", transaction.id);
-
+      const { error } = await supabase.rpc("decide_transactions", {
+        p_transaction_ids: ids,
+        p_is_medical: isMedical,
+      });
       if (error) throw error;
+
       toast.success(
-        newIsMedical ? "Marked as medical expense" : "Marked as non-medical",
+        ids.length === 1
+          ? isMedical
+            ? "Marked as medical — it's now waiting in Substantiate"
+            : "Marked as not medical"
+          : `${ids.length} transactions marked as ${
+              isMedical ? "medical" : "not medical"
+            }`,
       );
+      setSelectedIds([]);
       fetchTransactions();
       invalidateAttentionItems();
-      // Workstream C4: rules are reachable from any transaction, including
-      // ones already filed in the archive -- that is how a user corrects a
-      // vendor they disagree with rather than fixing rows one by one.
-      setRuleCandidate({ ...transaction, isMedical: newIsMedical });
+      queryClient.invalidateQueries({ queryKey: ["review-feed"] });
+      queryClient.invalidateQueries({ queryKey: ["substantiate-queue"] });
+
+      // Offer a rule only for a single row: a rule keys on one merchant, and a
+      // mixed bulk selection has no single merchant to offer.
+      if (ids.length === 1) {
+        const txn = transactions.find((t) => t.id === ids[0]);
+        if (txn) setRuleCandidate({ ...txn, isMedical });
+      }
     } catch (error) {
-      logError("Error toggling medical:", error);
-      toast.error("Failed to update transaction");
+      logError("Error deciding transactions:", error);
+      toast.error("Could not update. Please try again.");
+    } finally {
+      setDeciding(false);
     }
   };
 
@@ -377,61 +398,52 @@ export default function Transactions() {
   // already makes for itself when it turns a medical transaction into an
   // expense. Two links, written by different code, that could disagree.
 
-  const handleIgnore = async (transaction: Transaction) => {
-    try {
-      const { error } = await supabase
-        .from("transactions")
-        .update({
-          reconciliation_status: "ignored",
-          is_medical: false,
-        })
-        .eq("id", transaction.id);
+  // Ignoring IS a decision — "not medical, file it away" — so it runs the same
+  // path as the Not-medical button. It used to set reconciliation_status and
+  // is_medical while leaving needs_review alone, which meant an ignored
+  // transaction stayed in the badge count for ever while the queue (which
+  // excludes ignored rows) could never show it again: a number you could not
+  // clear by any action in the app.
+  const handleIgnore = (transaction: Transaction) =>
+    decide([transaction.id], false);
 
-      if (error) throw error;
-      toast.success("Transaction ignored");
-      fetchTransactions();
-    } catch (error) {
-      logError("Error ignoring transaction:", error);
-      toast.error("Failed to ignore transaction");
-    }
-  };
-
-  const handleUnignore = async (transaction: Transaction) => {
-    try {
-      const { error } = await supabase
-        .from("transactions")
-        .update({
-          reconciliation_status: "unlinked",
-        })
-        .eq("id", transaction.id);
-
-      if (error) throw error;
-      toast.success("Transaction moved back to review queue");
-      fetchTransactions();
-    } catch (error) {
-      logError("Error unignoring transaction:", error);
-      toast.error("Failed to update transaction");
-    }
-  };
-
-  const handleAddToReviewQueue = async (transaction: Transaction) => {
+  /**
+   * Put a decided transaction back in the queue.
+   *
+   * needs_review is the queue, so restoring it is the whole job. Both of these
+   * previously set reconciliation_status only, so "moved back to review queue"
+   * and "added back to review queue" were both untrue — the row went back to
+   * unlinked and the queue never saw it.
+   */
+  const returnToReviewQueue = async (
+    transaction: Transaction,
+    message: string,
+  ) => {
     try {
       const { error } = await supabase
         .from("transactions")
         .update({
           reconciliation_status: "unlinked",
-          is_medical: false,
+          needs_review: true,
         })
         .eq("id", transaction.id);
 
       if (error) throw error;
-      toast.success("Transaction added back to review queue");
+      toast.success(message);
       fetchTransactions();
+      invalidateAttentionItems();
+      queryClient.invalidateQueries({ queryKey: ["review-feed"] });
     } catch (error) {
-      logError("Error adding to review queue:", error);
+      logError("Error returning transaction to review queue:", error);
       toast.error("Failed to update transaction");
     }
   };
+
+  const handleUnignore = (transaction: Transaction) =>
+    returnToReviewQueue(transaction, "Transaction moved back to review queue");
+
+  const handleAddToReviewQueue = (transaction: Transaction) =>
+    returnToReviewQueue(transaction, "Transaction added back to review queue");
 
   const handleSplitTransaction = (transaction: Transaction) => {
     setTransactionToSplit(transaction);
@@ -690,6 +702,20 @@ export default function Transactions() {
                 </Card>
               ) : (
                 <div className="space-y-3">
+                  <BulkDecideBar
+                    visible={filteredTransactions.length > 0}
+                    selectedCount={selectedIds.length}
+                    allSelected={
+                      selectedIds.length > 0 &&
+                      selectedIds.length === selectableIds.length
+                    }
+                    busy={deciding}
+                    onToggleAll={(next) =>
+                      setSelectedIds(next ? selectableIds : [])
+                    }
+                    onDecide={(isMedical) => decide(selectedIds, isMedical)}
+                    onClear={() => setSelectedIds([])}
+                  />
                   {filteredTransactions.map((transaction) => {
                     // Show split transaction card for split transactions
                     if (transaction.is_split) {
@@ -729,11 +755,20 @@ export default function Transactions() {
                           }
                           invoiceId={transaction.invoice_id}
                           splitParentId={transaction.split_parent_id}
+                          needsReview={transaction.needs_review ?? false}
+                          selected={selectedIds.includes(transaction.id)}
+                          onSelectedChange={(next) =>
+                            setSelectedIds((prev) =>
+                              next
+                                ? [...prev, transaction.id]
+                                : prev.filter((id) => id !== transaction.id),
+                            )
+                          }
+                          onDecide={(isMedical) =>
+                            decide([transaction.id], isMedical)
+                          }
                           onViewDetails={() => handleViewDetails(transaction)}
                           onMarkMedical={() => handleMarkMedical(transaction)}
-                          onToggleMedical={() =>
-                            handleToggleMedical(transaction)
-                          }
                           onIgnore={() => handleIgnore(transaction)}
                           onUnignore={() => handleUnignore(transaction)}
                           onAddToReviewQueue={() =>

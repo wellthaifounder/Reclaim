@@ -25,7 +25,6 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { decryptPlaidToken } from "../_shared/encryption.ts";
 import {
-  autoCaptureExpenses,
   detectDuplicates,
   detectTransfers,
   matchDeposits,
@@ -316,17 +315,32 @@ serve(async (req) => {
       lookbackDays: is_initial ? 550 : undefined,
     });
 
-    // ── 4. Auto-capture ───────────────────────────────────────────────────
-    // Shared with plaid-webhook. `classification` now travels with each
-    // ingested row, so the Pub 502 rule id is available — the previous
-    // implementation looked it up in a parallel array whose type omitted the
-    // field, so the manual-sync path never stamped a rule and never routed to
-    // PENDING_REVIEW.
-    capturedCount = await autoCaptureExpenses(supabase, {
-      userId: user.id,
-      ingested,
-      requestId,
-    });
+    // ── 4. Capture ────────────────────────────────────────────────────────
+    // Expenses are no longer created here (2026-09-06). A sync must never file
+    // a claim the user has not approved, and the classifier now leaves every
+    // medical signal in the review queue. Creation moved into the database, on
+    // the transition to confirmed — trigger `trg_transactions_confirm_medical`,
+    // which also catches the rule-confirmed rows this sync just inserted, and
+    // every other route that was previously stranding money.
+    // Counted from the database rather than the `ingested` snapshot, which was
+    // built before the trigger ran and so still shows every row unlinked.
+    if (ingested.length > 0) {
+      const { count, error: capturedErr } = await supabase
+        .from("invoices")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .in(
+          "source_transaction_id",
+          ingested.map((t) => t.id),
+        );
+      if (capturedErr) {
+        console.warn(
+          `[${requestId}] Could not count captured expenses: ${capturedErr.message}`,
+        );
+      } else {
+        capturedCount = count ?? 0;
+      }
+    }
 
     // ── 5. Deposit → Substantiation Record matching ───────────────────────
     const depositCandidates = await matchDeposits(supabase, {
