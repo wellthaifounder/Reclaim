@@ -101,13 +101,15 @@ serve(async (req) => {
     }
 
     // Pull receipt_ocr_data via the receipts join so the classifier has the
-    // best signal available.
+    // best signal available. Attachment lives in receipt_invoices now, not
+    // receipts.invoice_id -- a document shared with another expense still
+    // needs to feed the classifier here.
     const { data: ocrRows } = await supabase
       .from("receipts")
       .select(
-        "id, receipt_ocr_data(extracted_vendor, extracted_date, extracted_service_date, extracted_invoice_number, extracted_insurance, metadata_confidence, extraction_warnings)",
+        "id, receipt_ocr_data(extracted_vendor, extracted_date, extracted_service_date, extracted_invoice_number, extracted_insurance, metadata_confidence, extraction_warnings), receipt_invoices!inner(invoice_id)",
       )
-      .eq("invoice_id", invoice.id)
+      .eq("receipt_invoices.invoice_id", invoice.id)
       .limit(1);
     type OcrRow =
       NonNullable<typeof ocrRows>[number]["receipt_ocr_data"] extends Array<

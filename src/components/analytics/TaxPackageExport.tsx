@@ -50,14 +50,22 @@ export const TaxPackageExport = () => {
         return;
       }
 
-      // Fetch receipts for these invoices
+      // Fetch receipts for these invoices. Attachment lives in
+      // receipt_invoices now, not receipts.invoice_id -- a document shared
+      // with another expense still needs to appear in this export. Joined
+      // through the link table rather than filtered on it, so a document
+      // attached to two of this year's invoices isn't listed twice.
       const invoiceIds = invoices.map((inv) => inv.id);
-      const { data: receipts, error: receiptsError } = await supabase
+      const { data: linkedReceipts, error: receiptsError } = await supabase
         .from("receipts")
-        .select("*")
-        .in("invoice_id", invoiceIds);
+        .select("*, receipt_invoices!inner(invoice_id)")
+        .in("receipt_invoices.invoice_id", invoiceIds);
 
       if (receiptsError) throw receiptsError;
+
+      const receipts = Array.from(
+        new Map((linkedReceipts ?? []).map((r) => [r.id, r])).values(),
+      );
 
       toast.loading("Generating your tax package...");
 
