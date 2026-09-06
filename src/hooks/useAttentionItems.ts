@@ -7,6 +7,8 @@ import { useReimbursementStrategy } from "@/hooks/useReimbursementStrategy";
 export interface AttentionSummary {
   totalCount: number;
   unreviewedTransactions: number;
+  /** Dollar value of those unreviewed transactions, same definition. */
+  unreviewedAmount: number;
   unlinkedMedical: number;
   hsaClaimable: number;
   /** Expenses eligible and unclaimed -- ready for a reimbursement request. */
@@ -29,6 +31,12 @@ export function useAttentionItems(): AttentionSummary {
         await Promise.all([
           // 1. Unreviewed transactions.
           //
+          // Selects `amount` rather than a head-only count so the same query
+          // yields the dollar figure the dashboard's Categorize bucket shows.
+          // Deriving that total from a second query with its own WHERE clause
+          // is how a count and a total that describe the same rows start
+          // disagreeing.
+          //
           // These filters exist to match review_feed_groups() exactly. The
           // badge counted plain needs_review while the queue additionally
           // dropped ignored rows and split children, so any transaction that
@@ -38,7 +46,7 @@ export function useAttentionItems(): AttentionSummary {
           // change this too; they are one definition in two places.
           supabase
             .from("transactions")
-            .select("id", { count: "exact", head: true })
+            .select("amount", { count: "exact" })
             .eq("user_id", userId!)
             .eq("needs_review", true)
             // `.neq` alone would also drop rows whose status is NULL, because
@@ -102,6 +110,10 @@ export function useAttentionItems(): AttentionSummary {
 
       return {
         unreviewedTransactions: unreviewedResult.count ?? 0,
+        unreviewedAmount: (unreviewedResult.data || []).reduce(
+          (sum, t) => sum + Math.abs(Number(t.amount) || 0),
+          0,
+        ),
         unlinkedMedical: unlinkedMedicalResult.count ?? 0,
         hsaClaimable,
         readyToClaim: hsaClaimableResult.count ?? 0,
@@ -132,6 +144,7 @@ export function useAttentionItems(): AttentionSummary {
   return {
     totalCount: unreviewedTransactions + unlinkedMedical,
     unreviewedTransactions,
+    unreviewedAmount: data?.unreviewedAmount ?? 0,
     unlinkedMedical,
     hsaClaimable,
     readyToClaim,

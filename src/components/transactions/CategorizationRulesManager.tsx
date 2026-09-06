@@ -38,6 +38,15 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Loader2, Trash2, Undo2, RefreshCw, ScrollText } from "lucide-react";
 
+/**
+ * One sentence of explanation, exported so the Rules dialog on the transaction
+ * list and the Settings section describe rules identically. Two hand-written
+ * copies is how the same feature ends up with two different promises about
+ * whether Apply can be undone.
+ */
+export const RULES_BLURB =
+  "Rules decide medical vs. non-medical automatically for new transactions. They never change transactions you have already categorized unless you press Apply — and Apply can always be undone, which puts every transaction back exactly as it was.";
+
 function RuleRow({
   rule,
   onToggle,
@@ -131,7 +140,18 @@ function RuleRow({
   );
 }
 
-export function CategorizationRulesManager() {
+interface CategorizationRulesManagerProps {
+  /**
+   * Drop the outer Card and its heading. Set when the caller already supplies
+   * a titled container -- the Rules dialog on the transaction list -- so the
+   * user does not get a card inside a card with the title written twice.
+   */
+  embedded?: boolean;
+}
+
+export function CategorizationRulesManager({
+  embedded = false,
+}: CategorizationRulesManagerProps = {}) {
   const { rules, isLoading, applyRule, revertRule, updateRule, deleteRule } =
     useCategorizationRules();
   const [pendingDelete, setPendingDelete] =
@@ -192,54 +212,40 @@ export function CategorizationRulesManager() {
     });
   };
 
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <ScrollText className="h-5 w-5" />
-          Categorization rules
-        </CardTitle>
-        <CardDescription>
-          Rules decide medical vs. non-medical automatically for new
-          transactions. They never change transactions you have already
-          categorized unless you press Apply — and Apply can always be undone,
-          which puts every transaction back exactly as it was.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {isLoading ? (
-          <>
-            <Skeleton className="h-20 w-full" />
-            <Skeleton className="h-20 w-full" />
-          </>
-        ) : rules.length === 0 ? (
-          <div className="rounded-lg border border-dashed p-8 text-center">
-            <p className="font-medium">No rules yet</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              When you categorize a transaction, we&rsquo;ll offer to make it a
-              rule so you never have to decide about that merchant again.
-            </p>
-          </div>
-        ) : (
-          rules.map((rule) => (
-            <RuleRow
-              key={rule.id}
-              rule={rule}
-              busy={busy}
-              onToggle={(next) => handleToggle(rule, next)}
-              onRevert={() => handleRevert(rule)}
-              onApply={() => handleApply(rule)}
-              onDelete={() => setPendingDelete(rule)}
-            />
-          ))
-        )}
-        {busy && (
-          <p className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Updating transactions&hellip;
+  const body = (
+    <>
+      {isLoading ? (
+        <>
+          <Skeleton className="h-20 w-full" />
+          <Skeleton className="h-20 w-full" />
+        </>
+      ) : rules.length === 0 ? (
+        <div className="rounded-lg border border-dashed p-8 text-center">
+          <p className="font-medium">No rules yet</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            When you categorize a transaction, we&rsquo;ll offer to make it a
+            rule so you never have to decide about that merchant again.
           </p>
-        )}
-      </CardContent>
+        </div>
+      ) : (
+        rules.map((rule) => (
+          <RuleRow
+            key={rule.id}
+            rule={rule}
+            busy={busy}
+            onToggle={(next) => handleToggle(rule, next)}
+            onRevert={() => handleRevert(rule)}
+            onApply={() => handleApply(rule)}
+            onDelete={() => setPendingDelete(rule)}
+          />
+        ))
+      )}
+      {busy && (
+        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Updating transactions&hellip;
+        </p>
+      )}
 
       <AlertDialog
         open={!!pendingDelete}
@@ -266,6 +272,21 @@ export function CategorizationRulesManager() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </>
+  );
+
+  if (embedded) return <div className="space-y-3">{body}</div>;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <ScrollText className="h-5 w-5" />
+          Categorization rules
+        </CardTitle>
+        <CardDescription>{RULES_BLURB}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">{body}</CardContent>
     </Card>
   );
 }

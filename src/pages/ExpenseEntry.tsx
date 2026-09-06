@@ -365,12 +365,17 @@ export default function ExpenseEntry() {
           "Expense saved. It looks like one you already have — check Possible duplicates under Transactions → Review.",
           { duration: 8000 },
         );
-        navigate("/expenses?tab=to-claim");
+        navigate("/substantiate");
         return;
       }
 
       toast.success("Expense saved.");
-      navigate("/expenses?tab=to-claim");
+      // Lands on Expenses, where the expense just created is waiting for its
+      // document and its eligibility call. This used to go to the transaction
+      // list's "To claim" tab, which no longer exists -- and which was the
+      // wrong destination anyway: a manually entered expense has no
+      // transaction behind it at all.
+      navigate("/substantiate");
     } catch (error) {
       logError("ExpenseEntry submit", error);
       toast.error("Failed to save expense. Please try again.");

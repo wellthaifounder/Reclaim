@@ -36,9 +36,10 @@ import Dashboard from "./pages/Dashboard";
 
 // Lazy load non-critical pages for better performance
 const BillDetail = lazy(() => import("./pages/BillDetail"));
-// Serves /expenses. Named for the transactions it categorises; it also hosts
-// the expense list as its "To claim" tab, so Bills is no longer routed
-// directly -- Transactions imports it.
+// Step one: the bank transactions waiting for a medical / not-medical call.
+// Bills, the old expense list, was archived on 2026-09-06 along with the
+// "To claim" tab that embedded it -- expenses live on /substantiate and
+// /substantiation now, which are nav destinations in their own right.
 const Transactions = lazy(() => import("./pages/Transactions"));
 const BankAccounts = lazy(() => import("./pages/BankAccounts"));
 const HistoricalImport = lazy(() => import("./pages/HistoricalImport"));
@@ -169,12 +170,9 @@ const App = () => (
                             different objects -- one transaction can become
                             several expenses -- but to the person looking at
                             them both are "money I spent", and three URLs for
-                            that was the confusion. They are now tabs on one
-                            page: Review / All / Medical / Non-Medical read
-                            transactions, "To claim" renders the expense list
-                            embedded.
+                            that was the confusion.
 
-                            /bills and /transactions redirect rather than 404:
+                            /bills and /expenses redirect rather than 404:
                             both have been live long enough to be bookmarked
                             and to sit in the installed app's history. */}
                       {/* Renamed 2026-09-06: this page lists TRANSACTIONS, and
