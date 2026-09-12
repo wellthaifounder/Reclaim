@@ -6,7 +6,7 @@
 ## What Reclaim is
 
 Reclaim (`reclaim.health`) is a custodian-agnostic HSA tool that **finds unclaimed healthcare
-reimbursements** and generates **IRS-ready Substantiation Records** — a confirmation-timestamp audit
+reimbursements** and generates **IRS-ready Medical Expense Records** — a confirmation-timestamp audit
 trail that is the product's defensible moat. Public launch: Sept 1 2026. (Rebrand from "Wellth.ai".)
 
 ## The core tension the mark must hold
@@ -25,7 +25,7 @@ The logo has to carry two feelings at once. A concept that only does one is inco
 ## Hard constraints
 
 - Must read at **16px** (favicon).
-- Must work in **single color** (it gets stamped onto the Substantiation Record PDF).
+- Must work in **single color** (it gets stamped onto the Medical Expense Record PDF).
 - Needs a horizontal **wordmark lockup** and a standalone **icon**.
 - Pairs with the `.health` TLD — consider a `Reclaim.health` lockup.
 

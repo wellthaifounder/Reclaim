@@ -15,7 +15,7 @@
 > was missing from the tree. It is preserved so those citations resolve, not because its plan
 > is still being followed.
 >
-> **What still holds:** the Reclaim brand and positioning (§1–2), the Substantiation Record as the
+> **What still holds:** the Reclaim brand and positioning (§1–2), the Medical Expense Record as the
 > primary deliverable and paywall (§7, §11), shoebox as a first-class strategy (§4), patient tagging
 > on every expense (§4), the Sep 1 2026 launch target (§18), and the v1 deferrals of Wellbie chat
 > and FSA-specific UX (§4, §20).
@@ -41,14 +41,14 @@
 
 ## 1. Brand
 
-|                   |                                                                                                                                                                         |
-| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Name**          | Reclaim                                                                                                                                                                 |
-| **Domain**        | `reclaim.health`                                                                                                                                                        |
-| **Tagline**       | "Reclaim your HSA money."                                                                                                                                               |
-| **Support email** | `support@reclaim.health`                                                                                                                                                |
-| **Positioning**   | Custodian-agnostic HSA expense tracking that finds your unclaimed reimbursements and generates the IRS-ready Substantiation Record that protects you in an audit.       |
-| **Kill shot**     | "Reclaim works with any HSA. Scan a receipt, we tell you if it's IRS-eligible, and we generate the Substantiation Record that protects you in an audit. In 60 seconds." |
+|                   |                                                                                                                                                                          |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Name**          | Reclaim                                                                                                                                                                  |
+| **Domain**        | `reclaim.health`                                                                                                                                                         |
+| **Tagline**       | "Reclaim your HSA money."                                                                                                                                                |
+| **Support email** | `support@reclaim.health`                                                                                                                                                 |
+| **Positioning**   | Custodian-agnostic HSA expense tracking that finds your unclaimed reimbursements and generates the IRS-ready Medical Expense Record that protects you in an audit.       |
+| **Kill shot**     | "Reclaim works with any HSA. Scan a receipt, we tell you if it's IRS-eligible, and we generate the Medical Expense Record that protects you in an audit. In 60 seconds." |
 
 ---
 
@@ -78,7 +78,7 @@ The user wants to:
 
 ### Reimbursement Flow
 
-**Option 1 — Reclaim prepares, user executes.** The app aggregates eligible expenses, generates the Substantiation Record, and the user logs into their HSA custodian to initiate the transfer. When the corresponding deposit hits their bank account (detected via Plaid), Reclaim automatically prompts to close the loop.
+**Option 1 — Reclaim prepares, user executes.** The app aggregates eligible expenses, generates the Medical Expense Record, and the user logs into their HSA custodian to initiate the transfer. When the corresponding deposit hits their bank account (detected via Plaid), Reclaim automatically prompts to close the loop.
 
 ### Primary Expense Capture
 
@@ -108,7 +108,7 @@ AI proposes, Pub 502 database validates, user explicitly confirms. The user's co
 
 ### Patient/Dependent Tagging
 
-**`patient_name` field on all expenses** (Self / Spouse / Dependent). Required for IRS-compliant Substantiation Record. The patient name field is legally required per IRS documentation standards.
+**`patient_name` field on all expenses** (Self / Spouse / Dependent). Required for IRS-compliant Medical Expense Record. The patient name field is legally required per IRS documentation standards.
 
 ### Platform
 
@@ -141,7 +141,7 @@ User confirms eligibility (explicit tap = audit trail)
         ↓
 Expense marked ELIGIBLE, receipt attached
         ↓
-User generates Substantiation Record (IRS-style PDF)
+User generates Medical Expense Record (IRS-style PDF)
         ↓
 Expense marked SUBMITTED
         ↓
@@ -160,21 +160,42 @@ CAPTURED → PENDING REVIEW → ELIGIBLE    → SUBMITTED → REIMBURSED
                           ↘ NEEDS RECEIPT
 ```
 
-| State              | Meaning                                                                      | User action required                |
-| ------------------ | ---------------------------------------------------------------------------- | ----------------------------------- |
-| **CAPTURED**       | Imported from Plaid or receipt scanned. Raw, unreviewed.                     | None                                |
-| **PENDING REVIEW** | AI has classified it. Awaiting user eligibility confirmation.                | Confirm eligible or mark ineligible |
-| **NEEDS RECEIPT**  | Likely eligible but no receipt attached.                                     | Attach receipt                      |
-| **ELIGIBLE**       | User confirmed eligible. Receipt attached. Ready for Substantiation Record.  | None — or generate record           |
-| **INELIGIBLE**     | User confirmed not eligible. Dismissed.                                      | None                                |
-| **SUBMITTED**      | Included in a generated Substantiation Record. Waiting for HSA distribution. | None — reassurance state            |
-| **REIMBURSED**     | Loop closed. Plaid detected deposit, user confirmed.                         | None — celebrate                    |
+| State              | Meaning                                                                       | User action required                |
+| ------------------ | ----------------------------------------------------------------------------- | ----------------------------------- |
+| **CAPTURED**       | Imported from Plaid or receipt scanned. Raw, unreviewed.                      | None                                |
+| **PENDING REVIEW** | AI has classified it. Awaiting user eligibility confirmation.                 | Confirm eligible or mark ineligible |
+| **NEEDS RECEIPT**  | Likely eligible but no receipt attached.                                      | Attach receipt                      |
+| **ELIGIBLE**       | User confirmed eligible. Receipt attached. Ready for Medical Expense Record.  | None — or generate record           |
+| **INELIGIBLE**     | User confirmed not eligible. Dismissed.                                       | None                                |
+| **SUBMITTED**      | Included in a generated Medical Expense Record. Waiting for HSA distribution. | None — reassurance state            |
+| **REIMBURSED**     | Loop closed. Plaid detected deposit, user confirmed.                          | None — celebrate                    |
 
 ---
 
-## 7. Primary Deliverable — The Substantiation Record
+## 7. Primary Deliverable — The Medical Expense Record
 
-**This is the product's most valuable and defensible output.** Do not call it a "reimbursement PDF." Call it the **Substantiation Record**.
+**This is the product's most valuable and defensible output.** Do not call it a "reimbursement PDF." Call it the **Medical Expense Record**.
+
+> **Renamed 2026-09-06.** This document was called the _Substantiation Record_ until then, and
+> that name still appears in older commits, in migration comments, and in the two source files
+> that carry a note explaining the change. The rename was to what the document **proves**
+> rather than to the jargon of proving it, and it stays true at every stage: nothing has been
+> reimbursed at the moment it is generated, and a shoebox holder may not reimburse for twenty
+> years — but they need the document every one of those years. The cover page carries the
+> reasoning in full (`src/lib/substantiationRecord.ts`, `drawCover`).
+>
+> **Three things deliberately keep the old name** and must not be "fixed": the table
+> `substantiation_records`, the module `substantiationRecord.ts`, and the record number prefix
+> `RCM-YYYY-NNNN`. The number is printed on every copy a user has already downloaded; the
+> other two are internal.
+>
+> **It has two purposes** since 2026-09-08, carried on the row as
+> `substantiation_records.purpose`. A **record** is kept as evidence and claims nothing — it
+> closes with how long to keep it, and leaves its expenses as claimable as they were. A
+> **claim** is filed with a custodian for reimbursement — it closes with how to submit it, and
+> locks its expenses so they cannot be claimed twice. A record may also cover spend the HSA
+> has already paid for (card spend, and expenses already reimbursed); a claim may not, and the
+> database refuses it.
 
 **IRS-style format (primary)** includes per expense:
 
@@ -209,7 +230,7 @@ The dashboard renders the state machine directly. One primary number, four actio
 │  "Confirm these are HSA-eligible"    [Review →]  │
 ├──────────────────────────────────────────────────┤
 │  ✅ READY TO SUBMIT       4 expenses  |  $691     │
-│  "Generate your Substantiation Record" [Submit →]│
+│  "Generate your Medical Expense Record" [Submit →]│
 ├──────────────────────────────────────────────────┤
 │  ⏳ SUBMITTED             2 expenses  |  $347     │
 │  "Waiting for HSA deposit"           [Track →]   │
@@ -252,14 +273,14 @@ No streak notifications. No generic nudges. No contribution limit reminders.
 
 ## 11. Pricing
 
-| Tier        | Price            | Key Gate                                                                                                                           |
-| ----------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| **Free**    | $0               | Manual entry, receipt scanning (5/mo), 1 Plaid account, basic tracking                                                             |
-| **Plus**    | $12.99–$14.99/mo | Unlimited scanning, unlimited Plaid, AI eligibility, **Substantiation Record**, historical import, Expense Groups, patient tagging |
-| **Premium** | $19.99/mo        | All Plus + HSA investment optimization, priority support, custom reports                                                           |
-| **Annual**  | $99/yr           | Plus features at ~$8.25/mo — **primary CTA on pricing page**                                                                       |
+| Tier        | Price            | Key Gate                                                                                                                            |
+| ----------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| **Free**    | $0               | Manual entry, receipt scanning (5/mo), 1 Plaid account, basic tracking                                                              |
+| **Plus**    | $12.99–$14.99/mo | Unlimited scanning, unlimited Plaid, AI eligibility, **Medical Expense Record**, historical import, Expense Groups, patient tagging |
+| **Premium** | $19.99/mo        | All Plus + HSA investment optimization, priority support, custom reports                                                            |
+| **Annual**  | $99/yr           | Plus features at ~$8.25/mo — **primary CTA on pricing page**                                                                        |
 
-The Substantiation Record is the paywall. Free users can track and scan; they cannot generate the document that protects them in an audit.
+The Medical Expense Record is the paywall. Free users can track and scan; they cannot generate the document that protects them in an audit.
 
 ---
 
@@ -269,14 +290,14 @@ The Substantiation Record is the paywall. Free users can track and scan; they ca
 | -------------------------------- | --------------------------------------------------------------- |
 | Lively, HealthEquity, Optum apps | Only works with their own HSA custodian                         |
 | Bend                             | Forces custodian switch                                         |
-| Expensify / Wave                 | Not HSA-aware, no eligibility engine, no Substantiation Record  |
+| Expensify / Wave                 | Not HSA-aware, no eligibility engine, no Medical Expense Record |
 | Spreadsheets + shoebox           | The real competition — Reclaim is the tool they should be using |
 
 **Three differentiators:**
 
 1. Custodian-agnostic — works with any HSA
 2. IRS eligibility determination — not just categorization
-3. Substantiation Record — a document no competitor produces
+3. Medical Expense Record — a document no competitor produces
 
 ---
 
@@ -288,7 +309,7 @@ The Substantiation Record is the paywall. Free users can track and scan; they ca
 
 **Public Launch (September 1, 2026):** All 6 phases complete. Plaid production access live. Supabase BAA signed.
 
-**Success Metric:** 10 users have generated at least one Substantiation Record.
+**Success Metric:** 10 users have generated at least one Medical Expense Record.
 
 ---
 
@@ -299,7 +320,7 @@ Tooling: **PostHog** (free tier, session recordings, funnel analysis).
 | Metric                                                         | Signal                                |
 | -------------------------------------------------------------- | ------------------------------------- |
 | % new users who review ≥1 historical transaction within 7 days | Onboarding activation                 |
-| Substantiation Records generated per week                      | **North star — core loop completion** |
+| Medical Expense Records generated per week                     | **North star — core loop completion** |
 | Expenses in NEEDS RECEIPT >14 days                             | Capture friction                      |
 | Plaid connection rate (% of signups)                           | Capture adoption                      |
 | Week 4 retention                                               | Habit formation                       |
@@ -308,11 +329,11 @@ Tooling: **PostHog** (free tier, session recordings, funnel analysis).
 
 ## 15. Email (3 Transactional, via Resend)
 
-| Trigger                               | Email                                                                                   |
-| ------------------------------------- | --------------------------------------------------------------------------------------- |
-| Signup                                | Welcome — "Here's how to get your first Substantiation Record." One CTA: connect Plaid. |
-| Plaid connected + transactions found  | "We found X transactions that may be HSA-eligible — review them now."                   |
-| First Substantiation Record generated | "Your first Substantiation Record is ready 🎉 — here's what to do with it."             |
+| Trigger                                | Email                                                                                    |
+| -------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Signup                                 | Welcome — "Here's how to get your first Medical Expense Record." One CTA: connect Plaid. |
+| Plaid connected + transactions found   | "We found X transactions that may be HSA-eligible — review them now."                    |
+| First Medical Expense Record generated | "Your first Medical Expense Record is ready 🎉 — here's what to do with it."             |
 
 ---
 
@@ -355,8 +376,8 @@ Tooling: **PostHog** (free tier, session recordings, funnel analysis).
 
 ### Phase 4 — Output (Weeks 9–10)
 
-12. Substantiation Record — IRS-style as primary (patient name, date of service, provider, amount, Pub 502 basis, receipt image, Reclaim confirmation timestamp). Also: per-expense packet PDF, simple PDF, CSV
-13. SUBMITTED state — set when user generates a Substantiation Record
+12. Medical Expense Record — IRS-style as primary (patient name, date of service, provider, amount, Pub 502 basis, receipt image, Reclaim confirmation timestamp). Also: per-expense packet PDF, simple PDF, CSV
+13. SUBMITTED state — set when user generates a Medical Expense Record
 14. Plaid deposit detection → prompt user → REIMBURSED state close
 
 ### Phase 5 — Surface (Weeks 11–12)
@@ -372,7 +393,7 @@ Tooling: **PostHog** (free tier, session recordings, funnel analysis).
 20. Onboarding wizard — signup → dependents → Plaid connection → wow moment → paywall. Paywall appears _after_ wow moment.
 21. Supabase BAA — sign before any real user health data is stored
 22. Pricing update — add annual plan ($99/yr) as primary CTA; update Plus to $12.99–$14.99/mo
-23. Landing page complete rewrite — Reclaim positioning, Substantiation Record as hero feature, remove fake testimonials, remove HIPAA compliance claim, remove non-functional feature claims, embed Shoebox Calculator as free tool
+23. Landing page complete rewrite — Reclaim positioning, Medical Expense Record as hero feature, remove fake testimonials, remove HIPAA compliance claim, remove non-functional feature claims, embed Shoebox Calculator as free tool
 24. Support infrastructure — `support@reclaim.health`, in-app feedback widget
 25. Analytics setup — PostHog, instrument 5 key events
 26. Remove tripwire flow — archive TripwireOffer, TripwireSuccess, create-tripwire-checkout
@@ -400,7 +421,7 @@ Tooling: **PostHog** (free tier, session recordings, funnel analysis).
 - Year-end FSA spending alerts
 - HSA investment optimization (Premium tier)
 - Care event / Expense Group auto-suggestions on steroids
-- IRS Audit Support Package — premium one-time upsell (~$49) triggered after first Substantiation Record generated
+- IRS Audit Support Package — premium one-time upsell (~$49) triggered after first Medical Expense Record generated
 - Multi-HSA household accounts (two spouses each with their own HSA)
 
 ---

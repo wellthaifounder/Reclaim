@@ -982,7 +982,7 @@ export default function Substantiation() {
       const chosenCustodian = custodian || null;
 
       // 1. Insert record
-      setProgress("Writing substantiation record…");
+      setProgress("Writing the record…");
       const { data: recordRow, error: recordErr } = await supabase
         .from("substantiation_records")
         .insert({

@@ -20,7 +20,7 @@ Reclaim turns medical spending into **IRS-defensible HSA reimbursement records**
 primary user job: _"prove to the IRS that my HSA withdrawals were for qualified medical
 expenses — and capture every dollar I'm owed."_ The flow is: capture an expense → AI
 classifies it against IRS Pub 502 → the user **explicitly confirms** eligibility → the app
-generates an audit-ready **Substantiation Record** with contemporaneous confirmation
+generates an audit-ready **Medical Expense Record** with contemporaneous confirmation
 timestamps → Plaid detects the matching reimbursement deposit and closes the loop. It
 explicitly supports the **"shoebox strategy"** (leave the HSA invested, reimburse yourself
 years later) via a `reimbursement_strategy_preference` on the profile and a dashboard
@@ -42,7 +42,7 @@ years later) via a `reimbursement_strategy_preference` on the profile and a dash
 - **Lifecycle state machine** (`captured → pending_review → eligible/ineligible/needs_receipt
 → submitted → reimbursed`) where the transition to `eligible` **requires explicit user
   confirmation** — the deliberate "audit-trail moat."
-- **Substantiation Record generation** — client-side PDF/CSV with embedded receipts and a
+- **Medical Expense Record generation** — client-side PDF/CSV with embedded receipts and a
   defensibility statement citing IRC §213(d) / IRS Pub 969 — `src/lib/substantiationRecord.ts`,
   `src/pages/Substantiation.tsx`, `substantiation_records` / `substantiation_record_items` tables.
 - **Closed-loop reimbursement** — Plaid-detected deposits matched to record totals (exact
@@ -134,7 +134,7 @@ Reclaim lacks. **HSA Store's ExpenseTracker** is a distribution threat (free, ri
 retail customer base). Adjacent players (Truemed, Reclaim Health, Shoeboxed) overlap on
 mechanics but serve different jobs. **Reclaim's clearest opening is defensibility, not
 organization:** no competitor combines (a) explicit user-confirmed, timestamped
-**Substantiation Records** built for IRS audit survival with (b) **closed-loop reimbursement**
+**Medical Expense Records** built for IRS audit survival with (b) **closed-loop reimbursement**
 that detects the deposit and marks the expense reclaimed. That pairing is unique in the set
 and is exactly what Reclaim has already shipped — the wedge to lead with.
 
@@ -447,7 +447,7 @@ than with the $19/yr DIY floor.
 
 1. **Position #1: "The only HSA app built to survive an audit — and to confirm you got paid
    back."** Both halves are already shipped and **unique in this competitive set**
-   (Substantiation Records + Plaid deposit matching). This is the message no competitor can copy
+   (Medical Expense Records + Plaid deposit matching). This is the message no competitor can copy
    quickly. Make it the homepage headline and the demo.
 2. **Close the two visible capture gaps fast (PARTIAL/PLANNED → SHIPPED).** Prioritize
    **email-forward receipt capture** first (Shoebox and Shoeboxed already have it; it's table
@@ -516,7 +516,7 @@ Why long-shot, plainly:
   options: spreadsheets, Notion templates, and free custodian apps. White Coat Investor — an
   authoritative personal-finance voice — recommends **provider tools or a spreadsheet**, not a
   dedicated app ([WCI](https://www.whitecoatinvestor.com/the-best-way-to-track-your-hsa-receipts/)).
-- **Our genuinely unique features (Substantiation Record + closed-loop deposit match) are not
+- **Our genuinely unique features (Medical Expense Record + closed-loop deposit match) are not
   yet proven to be things people will pay for** — they're things _we_ believe matter. That's a
   hypothesis, not traction.
 
@@ -544,7 +544,7 @@ Conditions #2 and #3 are the ones likely to sink it. #1 you can build.
 
 | "Moat"                            | Reality                                                                                                                                                                     | Time to copy |
 | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
-| Substantiation Record             | A templated PDF/CSV with timestamps + IRS citations. The _logic_ (confirm → snapshot → cite §213(d)/Pub 969) is fully described in our own docs and trivially reproducible. | ~a quarter   |
+| Medical Expense Record             | A templated PDF/CSV with timestamps + IRS citations. The _logic_ (confirm → snapshot → cite §213(d)/Pub 969) is fully described in our own docs and trivially reproducible. | ~a quarter   |
 | Closed-loop deposit match         | Plaid + amount-matching (±$0.01, 90-day window). **Reimbursable already runs on Plaid** — this is the single most copyable "unique" feature we have.                        | ~a quarter   |
 | Pub 502 AI classifier (~80 rules) | Public IRS data + a Gemini prompt. No proprietary data, no network effect.                                                                                                  | weeks        |
 
@@ -609,7 +609,7 @@ Competitor pain points found this date, with how widespread each appears and our
 | **Medical-receipt OCR broken** — "the AI… failed 100% of the times I tried it"; "only seems to be able to find expenses… purchased online" (HSA Store, [App Store](https://apps.apple.com/us/app/expensetracker-by-hsa-store/id6528121942)) | Single detailed review but matches the app's whole design (retail-purchase-centric); **medium confidence it's structural** | Lead with **reliable doctor/EOB/cash-receipt OCR** — the use case incumbents fumble. Make the demo a crumpled doctor's-office receipt. |
 | **Crash-on-setup** bugs (HSA Store, Google Play reports)                                                                                                                                                                                    | Low n; **low confidence** on prevalence                                                                                    | Table-stakes reliability; cheap to beat.                                                                                               |
 | **Inflated traction claims** ("2,000+ users" vs 1 rating, HSA Tracker Pro)                                                                                                                                                                  | Verified discrepancy; **high confidence**                                                                                  | Don't compete on vanity metrics; the field is wide open on _real_ trust.                                                               |
-| **LMN denials / repeated revisions / missed deadlines** (Truemed, [Trustpilot/search](https://www.trustpilot.com/review/truemed.com))                                                                                                       | Recurring theme; **medium confidence**                                                                                     | Position the Substantiation Record as **"the record custodians actually accept"** — get the documentation right the first time.        |
+| **LMN denials / repeated revisions / missed deadlines** (Truemed, [Trustpilot/search](https://www.trustpilot.com/review/truemed.com))                                                                                                       | Recurring theme; **medium confidence**                                                                                     | Position the Medical Expense Record as **"the record custodians actually accept"** — get the documentation right the first time.        |
 | **Friction kills logging** — "if logging a receipt takes more than 30 seconds, you'll skip it" ([HSA Trackr](https://www.hsatrackr.com/guides/hsa-shoebox-strategy))                                                                        | Stated as the category truth; **high confidence**                                                                          | One-tap capture; auto-capture via Plaid; never make the user type.                                                                     |
 | **Distrust of apps for a decades-long strategy → spreadsheets preferred** ([WCI](https://www.whitecoatinvestor.com/the-best-way-to-track-your-hsa-receipts/))                                                                               | Authoritative source + recurring ethos; **medium-high confidence**                                                         | Portable export + self-owned backup (see §3) so choosing us isn't a decades-long bet on our survival.                                  |
 
