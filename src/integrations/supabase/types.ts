@@ -1661,6 +1661,7 @@ export type Database = {
       normalize_merchant_name: { Args: { p_name: string }; Returns: string };
       preview_categorization_rule: {
         Args: {
+          p_is_medical?: boolean;
           p_match_type: Database["public"]["Enums"]["rule_match_type"];
           p_match_value: string;
         };
