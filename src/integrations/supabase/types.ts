@@ -1705,6 +1705,18 @@ export type Database = {
         Args: { p_rule_id: string };
         Returns: number;
       };
+      review_feed_group_transactions: {
+        Args: { p_lane?: string; p_limit?: number; p_merchant_key: string };
+        Returns: {
+          amount: number;
+          category: string;
+          classification_explanation: string;
+          description: string;
+          id: string;
+          transaction_date: string;
+          vendor: string;
+        }[];
+      };
       review_feed_groups: {
         Args: { p_limit?: number };
         Returns: {
