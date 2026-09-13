@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Money } from "@/components/ui/money";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { format } from "date-fns";
+import { formatDateOnly } from "@/lib/dates";
 import {
   Save,
   X,
@@ -138,7 +138,11 @@ export function TransactionInlineDetail({
               <span>Date</span>
             </div>
             <p className="font-medium">
-              {format(new Date(transaction.transaction_date), "MMM d, yyyy")}
+              {formatDateOnly(transaction.transaction_date, {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              })}
             </p>
           </div>
 

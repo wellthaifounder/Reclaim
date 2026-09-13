@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Money } from "@/components/ui/money";
 import { Copy, FileText, Landmark, PencilLine, Check } from "lucide-react";
-import { format } from "date-fns";
+import { formatDateOnly } from "@/lib/dates";
 import {
   useDuplicateCandidates,
   explainDuplicate,
@@ -76,7 +76,11 @@ function SideCard({
         className="block text-lg font-semibold text-foreground"
       />
       <p className="text-sm text-muted-foreground">
-        {format(new Date(side.date), "MMM d, yyyy")}
+        {formatDateOnly(side.date, {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        })}
         {side.patient_name ? ` · ${side.patient_name}` : ""}
       </p>
 
