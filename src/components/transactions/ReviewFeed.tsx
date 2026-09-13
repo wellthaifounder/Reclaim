@@ -14,9 +14,13 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import {
   useReviewFeed,
+  useReviewGroupTransactions,
   groupRuleKey,
   type ReviewGroup,
+  type ReviewGroupTransaction,
 } from "@/hooks/useReviewFeed";
+import { cn } from "@/lib/utils";
+import { parseDateOnly } from "@/lib/dates";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -37,12 +41,26 @@ import {
   Loader2,
   Store,
   Split,
+  ChevronDown,
 } from "lucide-react";
 import {
   CreateRulePrompt,
   type RuleCandidate,
 } from "@/components/transactions/CreateRulePrompt";
 import { ExpenseSplitDialog } from "@/components/transactions/ExpenseSplitDialog";
+
+/**
+ * transaction_date, earliest_date and latest_date are Postgres `date` columns:
+ * calendar days with no time and no zone. `new Date("2026-09-02")` parses that
+ * as UTC midnight, which is the evening of Sep 1 anywhere west of Greenwich —
+ * so every date in this feed rendered a day early for users in the Americas.
+ * src/lib/dates.ts exists for exactly this and the rest of the app already uses
+ * it; the review feed had simply never been switched over.
+ */
+function formatFeedDate(value: string, pattern: string): string {
+  const parsed = parseDateOnly(value);
+  return parsed ? format(parsed, pattern) : value;
+}
 
 function GroupRow({
   group,
@@ -56,9 +74,9 @@ function GroupRow({
   const many = group.txn_count > 1;
   const dateRange =
     group.earliest_date === group.latest_date
-      ? format(new Date(group.latest_date), "MMM d, yyyy")
-      : `${format(new Date(group.earliest_date), "MMM yyyy")} – ${format(
-          new Date(group.latest_date),
+      ? formatFeedDate(group.latest_date, "MMM d, yyyy")
+      : `${formatFeedDate(group.earliest_date, "MMM yyyy")} – ${formatFeedDate(
+          group.latest_date,
           "MMM yyyy",
         )}`;
 
@@ -120,27 +138,43 @@ function GroupRow({
 /**
  * A grocery/general-merchandise/warehouse-club group. is_medical is false on
  * every row here — nothing in this lane ever moves a total or creates an
- * expense on its own. The only actions are dismissing the whole group as
- * having had nothing medical in it, or, when the group is exactly one
- * transaction, splitting the medical portion out of that one basket.
+ * expense on its own.
+ *
+ * Splitting needs one specific basket, so a multi-transaction group used to
+ * offer only a bulk dismissal plus a sentence telling the user to go find a
+ * transaction under All transactions. That was an instruction standing in for
+ * a control: the one action this lane exists for was unreachable from the lane
+ * itself. The group now opens to list its own transactions, each with its own
+ * split button.
  */
 function OtcGroupRow({
   group,
   onDismiss,
-  onSplit,
+  onSplitTransaction,
   busy,
 }: {
   group: ReviewGroup;
   onDismiss: () => void;
-  onSplit: () => void;
+  onSplitTransaction: (txn: ReviewGroupTransaction) => void;
   busy: boolean;
 }) {
   const many = group.txn_count > 1;
+  const [expanded, setExpanded] = useState(false);
+  // Only fetches once opened.
+  const {
+    data: transactions,
+    isLoading: loadingTransactions,
+    error: transactionsError,
+  } = useReviewGroupTransactions(
+    expanded ? group.merchant_key : null,
+    group.lane,
+  );
+  const listId = `otc-group-${group.merchant_key}`;
   const dateRange =
     group.earliest_date === group.latest_date
-      ? format(new Date(group.latest_date), "MMM d, yyyy")
-      : `${format(new Date(group.earliest_date), "MMM yyyy")} – ${format(
-          new Date(group.latest_date),
+      ? formatFeedDate(group.latest_date, "MMM d, yyyy")
+      : `${formatFeedDate(group.earliest_date, "MMM yyyy")} – ${formatFeedDate(
+          group.latest_date,
           "MMM yyyy",
         )}`;
 
@@ -175,23 +209,52 @@ function OtcGroupRow({
 
           {many && (
             <p className="mt-2 text-xs text-muted-foreground">
-              These vary trip to trip — open one under All transactions to split
-              out anything medical from it.
+              These vary trip to trip, so there is one answer per trip — open
+              the list to split anything medical out of a particular one.
             </p>
           )}
         </div>
 
         <div className="flex flex-wrap items-center gap-2 sm:shrink-0 sm:flex-nowrap">
-          {group.single_transaction_id && (
+          {many ? (
             <Button
               size="sm"
               variant="outline"
-              disabled={busy}
-              onClick={onSplit}
+              onClick={() => setExpanded((v) => !v)}
+              aria-expanded={expanded}
+              aria-controls={listId}
             >
-              <Split className="mr-1 h-4 w-4" />
-              Split out medical items
+              <ChevronDown
+                className={cn(
+                  "mr-1 h-4 w-4 transition-transform",
+                  expanded && "rotate-180",
+                )}
+                aria-hidden="true"
+              />
+              {expanded ? "Hide" : `Show ${group.txn_count}`}
             </Button>
+          ) : (
+            group.single_transaction_id && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busy}
+                onClick={() =>
+                  onSplitTransaction({
+                    id: group.single_transaction_id as string,
+                    transaction_date: group.latest_date,
+                    amount: group.total_amount,
+                    vendor: group.display_name,
+                    description: group.display_name,
+                    category: null,
+                    classification_explanation: group.explanation,
+                  })
+                }
+              >
+                <Split className="mr-1 h-4 w-4" />
+                Split out medical items
+              </Button>
+            )
           )}
           <Button size="sm" variant="ghost" disabled={busy} onClick={onDismiss}>
             <XCircle className="mr-1 h-4 w-4" />
@@ -199,6 +262,56 @@ function OtcGroupRow({
           </Button>
         </div>
       </div>
+
+      {expanded && (
+        <div id={listId} className="mt-3 space-y-2 border-t pt-3">
+          {loadingTransactions && (
+            <>
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-12 w-full" />
+            </>
+          )}
+
+          {transactionsError && (
+            <p className="text-sm text-destructive">
+              Could not load these transactions. Try again in a moment.
+            </p>
+          )}
+
+          {transactions?.map((txn) => (
+            <div
+              key={txn.id}
+              className="flex flex-col gap-2 rounded-md border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium">
+                  {txn.vendor || txn.description}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {formatFeedDate(txn.transaction_date, "MMM d, yyyy")} &middot;{" "}
+                  <Money value={txn.amount} />
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busy}
+                className="sm:shrink-0"
+                onClick={() => onSplitTransaction(txn)}
+              >
+                <Split className="mr-1 h-4 w-4" />
+                Split out medical items
+              </Button>
+            </div>
+          ))}
+
+          {transactions?.length === 0 && !loadingTransactions && (
+            <p className="text-sm text-muted-foreground">
+              These have already been decided.
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -210,7 +323,11 @@ export function ReviewFeed() {
     null,
   );
   const [userId, setUserId] = useState<string | null>(null);
-  const [splitGroup, setSplitGroup] = useState<ReviewGroup | null>(null);
+  // One specific basket to split, not a group: an opened group can name any of
+  // its transactions, and a single-transaction group names its only one.
+  const [splitTarget, setSplitTarget] = useState<ReviewGroupTransaction | null>(
+    null,
+  );
 
   useEffect(() => {
     supabase.auth
@@ -292,16 +409,6 @@ export function ReviewFeed() {
     );
   }
 
-  const splitTransaction = splitGroup?.single_transaction_id
-    ? {
-        id: splitGroup.single_transaction_id,
-        amount: splitGroup.total_amount,
-        vendor: splitGroup.display_name,
-        description: splitGroup.display_name,
-        transaction_date: splitGroup.latest_date,
-      }
-    : null;
-
   return (
     <>
       {medicalGroups.length > 0 && (
@@ -352,7 +459,7 @@ export function ReviewFeed() {
                 group={group}
                 busy={decideGroup.isPending}
                 onDismiss={() => handleDecide(group, false, "possible_otc")}
-                onSplit={() => setSplitGroup(group)}
+                onSplitTransaction={setSplitTarget}
               />
             ))}
           </CardContent>
@@ -371,11 +478,18 @@ export function ReviewFeed() {
         onOpenChange={(open) => !open && setRuleCandidate(null)}
       />
 
-      {splitTransaction && userId && (
+      {splitTarget && userId && (
         <ExpenseSplitDialog
-          open={!!splitGroup}
-          onOpenChange={(open) => !open && setSplitGroup(null)}
-          transaction={splitTransaction}
+          open={!!splitTarget}
+          onOpenChange={(open) => !open && setSplitTarget(null)}
+          transaction={{
+            id: splitTarget.id,
+            amount: splitTarget.amount,
+            vendor: splitTarget.vendor,
+            description: splitTarget.description ?? "",
+            transaction_date: splitTarget.transaction_date,
+            category: splitTarget.category,
+          }}
           userId={userId}
           onSplit={invalidate}
         />

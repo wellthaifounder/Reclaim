@@ -46,8 +46,21 @@ export interface ReviewGroup {
   /**
    * Populated only when txn_count is 1 — the only case ExpenseSplitDialog can
    * act on unambiguously, since splitting means picking one specific basket.
+   * For a larger group, useReviewGroupTransactions supplies the individual
+   * baskets instead.
    */
   single_transaction_id: string | null;
+}
+
+/** One transaction inside a group, once the user opens the group up. */
+export interface ReviewGroupTransaction {
+  id: string;
+  transaction_date: string;
+  amount: number;
+  vendor: string | null;
+  description: string | null;
+  category: string | null;
+  classification_explanation: string | null;
 }
 
 /**
@@ -74,6 +87,45 @@ export function groupRuleKey(
     return { matchType: "mcc", matchValue: group.mcc };
   }
   return null;
+}
+
+/**
+ * The transactions behind one group row, fetched only once the user opens it.
+ *
+ * A group of five Costco trips has no single basket to split, so the row used
+ * to offer nothing but a sentence pointing at another page. This is what lets
+ * it offer the actual transactions instead.
+ *
+ * Deliberately lazy: `enabled` is false until a merchant key is passed, so
+ * collapsed groups cost nothing. Keyed by user as well as group for the same
+ * reason the feed query is — see the comment on that query.
+ */
+export function useReviewGroupTransactions(
+  merchantKey: string | null,
+  lane: ReviewGroup["lane"] | null,
+) {
+  const { user } = useAuthUser();
+  const userId = user?.id;
+
+  return useQuery({
+    queryKey: ["review-group-transactions", userId, merchantKey, lane],
+    enabled: !!userId && !!merchantKey,
+    staleTime: 60 * 1000,
+    queryFn: async (): Promise<ReviewGroupTransaction[]> => {
+      const { data, error } = await supabase.rpc(
+        "review_feed_group_transactions",
+        {
+          p_merchant_key: merchantKey as string,
+          ...(lane ? { p_lane: lane } : {}),
+        },
+      );
+      if (error) throw error;
+      return (data ?? []).map((t) => ({
+        ...t,
+        amount: Number(t.amount),
+      })) as ReviewGroupTransaction[];
+    },
+  });
 }
 
 export function useReviewFeed() {
@@ -108,6 +160,11 @@ export function useReviewFeed() {
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["review-feed"] });
+    // An opened group holds its own copy of the rows. Splitting one of them
+    // decides it, so without this the transaction stays listed inside the open
+    // group until something else refetches -- offering to split a basket that
+    // has already been split.
+    queryClient.invalidateQueries({ queryKey: ["review-group-transactions"] });
     queryClient.invalidateQueries({ queryKey: ["transactions"] });
     queryClient.invalidateQueries({ queryKey: ["inbox-items"] });
     // The nav badge (sidebar + top nav) reads this query, via
