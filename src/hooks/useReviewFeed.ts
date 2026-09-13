@@ -199,6 +199,53 @@ export function useReviewFeed() {
     onError: (error) => logError("Bulk merchant review failed", error),
   });
 
+  /**
+   * Decide ONE transaction inside an opened group.
+   *
+   * A merchant whose baskets vary needs an answer per basket, not per merchant:
+   * one Walmart trip really was the pharmacy, the next four were groceries.
+   * The group-level buttons cannot express that.
+   *
+   * Goes through decide_transactions -- the same RPC the Transactions page uses
+   * -- rather than a plain table update, so every route stamps identical
+   * provenance and the expense-creating trigger sees one shape of write. That
+   * trigger is also why this returns the expense id: confirming a transaction
+   * as medical CREATES the expense and writes it back to transactions.invoice_id
+   * (20260906120000), and the caller needs that id to offer the receipt step
+   * before the row leaves the queue.
+   */
+  const decideTransaction = useMutation({
+    mutationFn: async (input: {
+      transactionId: string;
+      isMedical: boolean;
+    }): Promise<{ expenseId: string | null }> => {
+      const { error } = await supabase.rpc("decide_transactions", {
+        p_transaction_ids: [input.transactionId],
+        p_is_medical: input.isMedical,
+      });
+      if (error) throw error;
+
+      // Nothing to substantiate when it is not medical -- no expense exists.
+      if (!input.isMedical) return { expenseId: null };
+
+      const { data, error: readError } = await supabase
+        .from("transactions")
+        .select("invoice_id")
+        .eq("id", input.transactionId)
+        .single();
+      // A failed read must not fail the decision: the expense exists either
+      // way, and it is waiting under Expenses. Only the offer to attach a
+      // receipt right now is lost.
+      if (readError) {
+        logError("Could not read back the new expense id", readError);
+        return { expenseId: null };
+      }
+      return { expenseId: data?.invoice_id ?? null };
+    },
+    onSuccess: invalidate,
+    onError: (error) => logError("Single transaction decision failed", error),
+  });
+
   const allGroups = feedQuery.data ?? [];
   const medicalGroups = allGroups.filter((g) => g.lane === "medical");
   const otcGroups = allGroups.filter((g) => g.lane === "possible_otc");
@@ -212,6 +259,7 @@ export function useReviewFeed() {
     isLoading: feedQuery.isLoading,
     error: feedQuery.error,
     decideGroup,
+    decideTransaction,
     invalidate,
     refetch: feedQuery.refetch,
   };

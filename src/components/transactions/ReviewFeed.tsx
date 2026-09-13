@@ -48,6 +48,7 @@ import {
   type RuleCandidate,
 } from "@/components/transactions/CreateRulePrompt";
 import { ExpenseSplitDialog } from "@/components/transactions/ExpenseSplitDialog";
+import { SubstantiateDialog } from "@/components/expense/SubstantiateDialog";
 
 /**
  * transaction_date, earliest_date and latest_date are Postgres `date` columns:
@@ -151,11 +152,16 @@ function OtcGroupRow({
   group,
   onDismiss,
   onSplitTransaction,
+  onDecideTransaction,
   busy,
 }: {
   group: ReviewGroup;
   onDismiss: () => void;
   onSplitTransaction: (txn: ReviewGroupTransaction) => void;
+  onDecideTransaction: (
+    txn: ReviewGroupTransaction,
+    isMedical: boolean,
+  ) => void;
   busy: boolean;
 }) {
   const many = group.txn_count > 1;
@@ -292,16 +298,40 @@ function OtcGroupRow({
                   <Money value={txn.amount} />
                 </p>
               </div>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={busy}
-                className="sm:shrink-0"
-                onClick={() => onSplitTransaction(txn)}
-              >
-                <Split className="mr-1 h-4 w-4" />
-                Split out medical items
-              </Button>
+              {/* Three answers, because a basket has three honest outcomes:
+                  all of it counted, none of it did, or only part did. Until
+                  now this row offered only the third, so a Walmart pharmacy
+                  run had to be split into a single line against itself to be
+                  claimed at all. */}
+              <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => onDecideTransaction(txn, true)}
+                >
+                  <CheckCircle2 className="mr-1 h-4 w-4" />
+                  Medical
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={busy}
+                  onClick={() => onDecideTransaction(txn, false)}
+                >
+                  <XCircle className="mr-1 h-4 w-4" />
+                  Not medical
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => onSplitTransaction(txn)}
+                >
+                  <Split className="mr-1 h-4 w-4" />
+                  Split
+                </Button>
+              </div>
             </div>
           ))}
 
@@ -317,8 +347,14 @@ function OtcGroupRow({
 }
 
 export function ReviewFeed() {
-  const { medicalGroups, otcGroups, isLoading, decideGroup, invalidate } =
-    useReviewFeed();
+  const {
+    medicalGroups,
+    otcGroups,
+    isLoading,
+    decideGroup,
+    decideTransaction,
+    invalidate,
+  } = useReviewFeed();
   const [ruleCandidate, setRuleCandidate] = useState<RuleCandidate | null>(
     null,
   );
@@ -328,12 +364,49 @@ export function ReviewFeed() {
   const [splitTarget, setSplitTarget] = useState<ReviewGroupTransaction | null>(
     null,
   );
+  // The expense a just-confirmed transaction became, held so the receipt step
+  // can open on it straight away.
+  const [substantiateId, setSubstantiateId] = useState<string | null>(null);
 
   useEffect(() => {
     supabase.auth
       .getUser()
       .then(({ data }) => setUserId(data.user?.id ?? null));
   }, []);
+
+  /**
+   * Decide one basket inside an opened group.
+   *
+   * Confirming it as medical creates the expense, and deciding it also removes
+   * it from the review feed — so this is the last moment the transaction is in
+   * front of the user. That is why the receipt step opens here rather than
+   * leaving a trail to follow on another page: by the time they got there, the
+   * row they were looking at would be gone.
+   */
+  const handleDecideTransaction = (
+    txn: ReviewGroupTransaction,
+    isMedical: boolean,
+  ) => {
+    decideTransaction.mutate(
+      { transactionId: txn.id, isMedical },
+      {
+        onSuccess: ({ expenseId }) => {
+          if (!isMedical) {
+            toast.success("Marked as not medical");
+            return;
+          }
+          if (expenseId) {
+            setSubstantiateId(expenseId);
+            return;
+          }
+          // Confirmed, but we could not name the expense. Say where it went
+          // rather than silently doing nothing visible.
+          toast.success("Marked as medical — it's waiting under Expenses");
+        },
+        onError: () => toast.error("Could not update that transaction"),
+      },
+    );
+  };
 
   const handleDecide = (
     group: ReviewGroup,
@@ -457,16 +530,17 @@ export function ReviewFeed() {
               <OtcGroupRow
                 key={group.merchant_key}
                 group={group}
-                busy={decideGroup.isPending}
+                busy={decideGroup.isPending || decideTransaction.isPending}
                 onDismiss={() => handleDecide(group, false, "possible_otc")}
                 onSplitTransaction={setSplitTarget}
+                onDecideTransaction={handleDecideTransaction}
               />
             ))}
           </CardContent>
         </Card>
       )}
 
-      {decideGroup.isPending && (
+      {(decideGroup.isPending || decideTransaction.isPending) && (
         <p className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
           Updating&hellip;
@@ -494,6 +568,17 @@ export function ReviewFeed() {
           onSplit={invalidate}
         />
       )}
+
+      {/* Opens on the expense the confirmation just created, so the receipt and
+          the service details are captured while the user is still looking at
+          the charge — rather than sending them to Expenses to find a row they
+          have not seen before. Closing it costs nothing: the expense exists and
+          is waiting there either way. */}
+      <SubstantiateDialog
+        expenseId={substantiateId}
+        open={!!substantiateId}
+        onOpenChange={(open) => !open && setSubstantiateId(null)}
+      />
     </>
   );
 }
