@@ -25,7 +25,7 @@ import {
   Check,
   X,
 } from "lucide-react";
-import { format } from "date-fns";
+import { formatDateOnly } from "@/lib/dates";
 
 export interface TransactionCardProps {
   id: string;
@@ -157,7 +157,11 @@ export function TransactionCard({
 
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-sm text-muted-foreground">
-                {format(new Date(date), "MMM d, yyyy")}
+                {formatDateOnly(date, {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                })}
               </p>
               {/* The medical decision moved to the Actions column, where both
                 answers are one press and neither is hidden behind a toggle

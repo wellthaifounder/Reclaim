@@ -1455,7 +1455,7 @@ export default function Substantiation() {
   // submit" would overstate what is actually available by exactly the amount
   // that has already been paid out.
   const claimableNow = eligible.filter(
-    (e) => e.claimable && new Date(e.date).getFullYear() === CURRENT_TAX_YEAR,
+    (e) => e.claimable && taxYearOf(e.date) === CURRENT_TAX_YEAR,
   );
   const claimableNowTotal = claimableNow.reduce(
     (s, e) => s + e.remainingAmount,
@@ -1464,7 +1464,7 @@ export default function Substantiation() {
   // What a record could cover this year — the whole eligible set, which is why
   // "Save the record" stays available after everything has been claimed.
   const recordableNow = eligible.filter(
-    (e) => new Date(e.date).getFullYear() === CURRENT_TAX_YEAR,
+    (e) => taxYearOf(e.date) === CURRENT_TAX_YEAR,
   );
 
   return (
