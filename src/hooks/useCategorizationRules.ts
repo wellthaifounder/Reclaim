@@ -92,13 +92,25 @@ export function useCategorizationRules() {
    * predicate as the apply itself — hence the shared SQL function rather than a
    * client-side count.
    */
+  /**
+   * How many existing transactions this rule would actually re-label.
+   *
+   * `isMedical` is the rule's verdict, and it is what makes the number
+   * truthful: rows already carrying that verdict are excluded. Without it the
+   * count answered "how many transactions does this merchant have", which
+   * included the transaction the user had just categorized — so deciding a
+   * merchant's only charge offered to "re-label 1 past transaction", meaning
+   * that same one, to the label it already had.
+   */
   const previewImpact = async (
     matchType: RuleMatchType,
     matchValue: string,
+    isMedical: boolean,
   ): Promise<number> => {
     const { data, error } = await supabase.rpc("preview_categorization_rule", {
       p_match_type: matchType,
       p_match_value: matchValue,
+      p_is_medical: isMedical,
     });
     if (error) throw error;
     return data ?? 0;

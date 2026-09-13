@@ -70,7 +70,7 @@ export function CreateRulePrompt({
     let cancelled = false;
     setCounting(true);
     setApplyRetroactively(false);
-    previewImpact(key.matchType, key.matchValue)
+    previewImpact(key.matchType, key.matchValue, candidate.isMedical)
       .then((n) => {
         if (!cancelled) setPastCount(n);
       })
@@ -168,7 +168,12 @@ export function CreateRulePrompt({
                 ) : pastCount === null ? (
                   "Also re-label past transactions from this merchant"
                 ) : pastCount === 0 ? (
-                  "No past transactions from this merchant to re-label"
+                  // True whether the merchant has no other transactions or
+                  // several that already carry this verdict. The old copy said
+                  // "no past transactions from this merchant", which was a
+                  // claim about the merchant rather than about the rule, and
+                  // was simply false in the second case.
+                  "No past transactions need re-labelling"
                 ) : (
                   `Also re-label ${pastCount} past transaction${
                     pastCount === 1 ? "" : "s"
@@ -178,7 +183,9 @@ export function CreateRulePrompt({
               <p className="text-xs text-muted-foreground">
                 {pastCount && pastCount > 0
                   ? "This changes transactions you have already categorized. You can undo it at any time from Settings → Categorization rules."
-                  : "Leave this unticked and the rule only affects transactions from here on."}
+                  : pastCount === 0
+                    ? "The rule still applies to everything from here on."
+                    : "Leave this unticked and the rule only affects transactions from here on."}
               </p>
             </div>
           </div>

@@ -267,17 +267,28 @@ export function ReviewFeed() {
 
   if (medicalGroups.length === 0 && otcGroups.length === 0) {
     return (
-      <Card>
-        <CardContent className="flex flex-col items-center gap-2 py-12 text-center">
-          <PartyPopper className="h-8 w-8 text-primary" />
-          <p className="font-medium">Nothing to review</p>
-          <p className="max-w-sm text-sm text-muted-foreground">
-            Everything that looked medical has been sorted. Transactions that
-            clearly aren&rsquo;t medical are filed automatically — you can find
-            them under All transactions.
-          </p>
-        </CardContent>
-      </Card>
+      <>
+        <Card>
+          <CardContent className="flex flex-col items-center gap-2 py-12 text-center">
+            <PartyPopper className="h-8 w-8 text-primary" />
+            <p className="font-medium">Nothing to review</p>
+            <p className="max-w-sm text-sm text-muted-foreground">
+              Everything that looked medical has been sorted. Transactions that
+              clearly aren&rsquo;t medical are filed automatically — you can
+              find them under All transactions.
+            </p>
+          </CardContent>
+        </Card>
+        {/* The rule prompt has to survive the queue emptying.
+            Deciding the LAST group in the feed is what triggers this branch,
+            and the prompt used to live only in the main return below — so the
+            one decision most likely to be worth remembering was the one
+            decision never offered a rule. */}
+        <CreateRulePrompt
+          candidate={ruleCandidate}
+          onOpenChange={(open) => !open && setRuleCandidate(null)}
+        />
+      </>
     );
   }
 
