@@ -66,3 +66,17 @@ tests/ux-review/_artifacts/
 .claude/.done-checks-pending
 .claude/.done-checks-state.json
 .claude/.done-checks-off
+
+# Skill links, not skills. `npx skills add` writes the real skill files to
+# .agents/skills/ (tracked, shared) and then points each agent tool at them.
+# On Windows those pointers are directory junctions, which git cannot store —
+# it follows them and commits a second copy of all 37 skills. The pointers are
+# also absolute local paths, so they mean nothing on another machine. A fresh
+# clone rebuilds them from skills-lock.json:
+#   npx skills@latest add mattpocock/skills
+.claude/skills/
+
+# Playwright MCP scratch: page snapshots and PDFs captured while walking the
+# running app. Generated evidence, not source — and it renders real app screens,
+# so it does not belong in a repo that touches health and financial data.
+.playwright-mcp/
