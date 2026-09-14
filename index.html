@@ -30,8 +30,8 @@
       painted a white page, and a dark-mode user sees a flash of white before
       it corrects itself. This reads the same localStorage key as
       ThemeContext and sets the class up front. Kept deliberately tiny and
-      dependency-free -- it runs on every page load, including the offline
-      shell. Wrapped in try/catch because localStorage throws in private
+      dependency-free -- it runs on every page load. Wrapped in try/catch
+      because localStorage throws in private
       browsing on some platforms, and a theme is not worth a blank page.
     -->
     <script>
@@ -66,7 +66,11 @@
     <!-- Canonical URL -->
     <link rel="canonical" href="https://reclaim.health" />
 
-    <!-- PWA Meta Tags -->
+    <!-- Home-screen install.
+         A static manifest, not a generated one: there is no service worker in
+         this app any more (see vite.config.ts), and since Chrome 108/112
+         installability needs only a manifest over HTTPS. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="theme-color" content="#14b8a6" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />

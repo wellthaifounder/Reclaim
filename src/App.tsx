@@ -23,7 +23,9 @@ import { HSAProvider } from "@/contexts/HSAContext";
 // profile row — see useOnboardingStatus.
 import { DashboardLayoutProvider } from "@/contexts/DashboardLayoutContext";
 import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
-import { PWAUpdatePrompt } from "@/components/PWAUpdatePrompt";
+// PWAUpdatePrompt removed 2026-09-14 with the service worker. It existed only
+// to tell a user that a cached bundle was out of date; without a cache there is
+// nothing to be out of date, and a reload always gets the current app.
 import { CookieConsent } from "@/components/CookieConsent";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -139,7 +141,6 @@ const App = () => (
               <Sonner />
               <BrowserRouter>
                 <PWAInstallPrompt />
-                <PWAUpdatePrompt />
                 <CookieConsent />
                 <ErrorBoundary>
                   <Suspense fallback={<PageLoader />}>

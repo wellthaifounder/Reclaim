@@ -499,6 +499,27 @@ Check subscription with `useSubscription()` hook from `src/contexts/Subscription
 **Fix:** Renamed only those four to a 14-digit prefix ending `000000`, which preserves their existing position (they already sorted first on their day) and leaves file contents untouched; verified no cross-dependency with the same-day siblings. Then repaired the remote history in this order — `migration repair --status applied` for the four new versions **first**, `--status reverted` for the four old versions **second**. That order matters: reverting first would leave a window in which `db push` believes four applied migrations are pending and tries to re-run them, and two of the four (`CREATE POLICY`, `ALTER TABLE ... ADD COLUMN` without `IF NOT EXISTS`) would fail partway through.
 **Rule:** **every migration filename must use the full 14-digit `YYYYMMDDHHMMSS` prefix.** An 8-digit prefix is a latent landmine that detonates the day someone adds a second migration on that date — and it detonates as a total deploy block, not as a localized error. Do not rename the fourteen remaining 8-digit files: they currently match the remote history, and renaming them would make `db push` try to re-run them against production.
 
+### 2026-09-14
+
+**Issue:** The offline cache was removed. `vite-plugin-pwa` precached the entire app shell and put a
+`NetworkFirst` cache in front of Supabase. On a product where every screen needs a live session and
+live bank data, that bought nothing a user could actually use offline, and it caused the 2026-03-24
+blank-page incident above — a cached shell kept serving the previous bundle after a deploy, and the
+only remedy was talking users through unregistering a service worker by hand.
+**Fix:** Removed the plugin. The web app manifest is now a plain static file
+(`public/manifest.webmanifest`) linked from `index.html`; the app stays installable to the home
+screen because Chrome dropped the service-worker requirement for installability in 108 (mobile) /
+112 (desktop). Copy claiming "Works offline" (and "Push Notifications", which was never implemented
+at all) was removed from `PWAInstallPrompt.tsx`, `Install.tsx` and `Settings.tsx`.
+**Rule:** **`public/sw.js` must keep existing and must keep its URL.** A browser only replaces a
+registered service worker by re-fetching the _same_ script URL and finding different bytes. Deleting
+the file does not uninstall anything — `/sw.js` would fall through to the SPA rewrite in
+`vercel.json`, which answers with `index.html` as `text/html`, the update fails, and the old caching
+worker keeps serving a stale bundle on that device **forever**. So `public/sw.js` is now a kill
+switch: it claims control, deletes every cache, unregisters itself, and reloads open tabs.
+`src/main.tsx` does the same from the page side as a second path. Do not reintroduce a service worker
+without a deliberate decision, and never remove the kill switch to "clean up".
+
 ---
 
-_Last updated: 2026-08-31_
+_Last updated: 2026-09-14_

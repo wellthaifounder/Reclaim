@@ -11,8 +11,7 @@ import {
   Download,
   Smartphone,
   Zap,
-  Wifi,
-  Bell,
+  Maximize2,
   Shield,
   CheckCircle2,
 } from "lucide-react";
@@ -22,12 +21,20 @@ import { Navigation } from "@/components/Navigation";
 import { AuthenticatedNav } from "@/components/AuthenticatedNav";
 import { supabase } from "@/integrations/supabase/client";
 
+// Chrome's install event. Not in lib.dom, so it is declared here the same way
+// PWAInstallPrompt.tsx declares it.
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+}
+
 const Install = () => {
   const navigate = useNavigate();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [deferredPrompt, setDeferredPrompt] =
+    useState<BeforeInstallPromptEvent | null>(null);
 
   useEffect(() => {
     // Check authentication status
@@ -46,7 +53,7 @@ const Install = () => {
     // Listen for install prompt
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
-      setDeferredPrompt(e);
+      setDeferredPrompt(e as BeforeInstallPromptEvent);
     };
 
     window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
@@ -78,30 +85,34 @@ const Install = () => {
     }
   };
 
+  // Every claim here has to be true of an installed web app with no service
+  // worker. "Offline Support" and "Push Notifications" used to sit in this list
+  // and neither was ever real: offline caching was removed on 2026-09-14 (see
+  // vite.config.ts) and push was never implemented at all.
   const benefits = [
     {
       icon: Zap,
-      title: "Instant Access",
+      title: "One Tap to Open",
       description:
-        "Launch the app instantly from your home screen without opening a browser",
+        "Launch Reclaim straight from your home screen instead of finding it in a browser tab",
     },
     {
-      icon: Wifi,
-      title: "Offline Support",
+      icon: Maximize2,
+      title: "Full Screen",
       description:
-        "View your expenses and track your HSA even without an internet connection",
+        "Runs without the address bar and toolbars, so more of the screen is the app",
     },
     {
-      icon: Bell,
-      title: "Push Notifications",
+      icon: Smartphone,
+      title: "Its Own App Icon",
       description:
-        "Get timely reminders about reimbursements and important updates",
+        "Shows up alongside your other apps, in your app switcher and app drawer",
     },
     {
       icon: Shield,
-      title: "Secure & Private",
+      title: "Same Security",
       description:
-        "Your data stays safe with app-level security and encrypted storage",
+        "The installed app is the same site with the same protections — your session still times out",
     },
   ];
 
@@ -126,8 +137,8 @@ const Install = () => {
           </div>
           <h1 className="text-4xl font-bold mb-4">Install Reclaim</h1>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-            Get the full app experience with instant access, offline support,
-            and push notifications
+            Put Reclaim on your home screen so it opens in one tap, full screen,
+            like any other app
           </p>
         </div>
 

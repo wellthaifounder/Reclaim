@@ -139,17 +139,20 @@ export const PWAInstallPrompt = () => {
         </CardHeader>
         <CardContent className="space-y-3">
           <ul className="text-sm space-y-1 text-muted-foreground">
+            {/* Only claims that are true without a service worker. "Works
+                offline" and "Faster load times" came from precaching, which
+                was removed on 2026-09-14 -- see vite.config.ts. */}
             <li className="flex items-center gap-2">
               <span className="text-primary">✓</span>
-              <span>Works offline</span>
+              <span>One tap from your home screen</span>
             </li>
             <li className="flex items-center gap-2">
               <span className="text-primary">✓</span>
-              <span>Faster load times</span>
+              <span>Full screen, no address bar</span>
             </li>
             <li className="flex items-center gap-2">
               <span className="text-primary">✓</span>
-              <span>Native app experience</span>
+              <span>Stays signed in between visits</span>
             </li>
           </ul>
 

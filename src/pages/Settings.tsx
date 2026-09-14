@@ -367,8 +367,8 @@ const Settings = () => {
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Get instant access, offline support, and push notifications by
-                installing Reclaim as an app on your device.
+                Add Reclaim to your home screen to open it in one tap, full
+                screen, without going through your browser.
               </p>
               <Button onClick={() => navigate("/install")} variant="outline">
                 View Installation Guide
