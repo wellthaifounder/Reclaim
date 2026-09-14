@@ -8,6 +8,15 @@
 // Replaces the one-at-a-time queue. Deciding a merchant clears every pending
 // transaction from it in a single action, and offers a rule so the question
 // never comes back.
+//
+// 2026-09 (docs/TRANSACTION_REVIEW_SPEC.md, B1): the medical lane and the
+// possible-OTC lane used to be two different components with two different
+// capabilities — a medical-lane group could not be opened at all, and only
+// the OTC lane could split a row. That asymmetry was the drift the spec was
+// called to fix. One GroupRow now serves both lanes; the only remaining
+// difference is that the OTC lane never offers a bulk "all of these are
+// healthcare" button (see the comment on that button below — it's a
+// deliberate rule-safety property, not a leftover).
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -63,100 +72,44 @@ function formatFeedDate(value: string, pattern: string): string {
   return parsed ? format(parsed, pattern) : value;
 }
 
-function GroupRow({
-  group,
-  onDecide,
-  busy,
-}: {
-  group: ReviewGroup;
-  onDecide: (isMedical: boolean) => void;
-  busy: boolean;
-}) {
-  const many = group.txn_count > 1;
-  const dateRange =
-    group.earliest_date === group.latest_date
-      ? formatFeedDate(group.latest_date, "MMM d, yyyy")
-      : `${formatFeedDate(group.earliest_date, "MMM yyyy")} – ${formatFeedDate(
-          group.latest_date,
-          "MMM yyyy",
-        )}`;
+/**
+ * Spec D11: a decided row fades over ~200ms rather than vanishing the instant
+ * its mutation resolves — snapping away shifts whatever was next under a
+ * cursor that is still there, mid-click, working through the list. The
+ * mechanism is deliberately simple: mark the target as "leaving" so its CSS
+ * transition starts immediately, then hold the real mutation for exactly this
+ * long before firing it. That guarantees the fade always plays in full — a
+ * fast network response can't cut it short — without needing to reconcile a
+ * locally-held row against query data that has already moved on.
+ */
+const FADE_MS = 200;
 
-  return (
-    <div className="rounded-lg border p-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <Store className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <p className="font-medium truncate">{group.display_name}</p>
-            {many && (
-              <Badge variant="secondary" className="text-xs">
-                {group.txn_count} transactions
-              </Badge>
-            )}
-          </div>
-
-          <p className="mt-1 text-sm text-muted-foreground">
-            <Money value={group.total_amount} />
-            {many ? " total" : ""} &middot; {dateRange}
-          </p>
-
-          {group.explanation && (
-            <p className="mt-2 flex items-start gap-1.5 text-xs text-muted-foreground">
-              <HelpCircle
-                className="mt-0.5 h-3 w-3 shrink-0"
-                aria-hidden="true"
-              />
-              <span>{group.explanation}</span>
-            </p>
-          )}
-        </div>
-
-        <div className="flex shrink-0 items-center gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={busy}
-            onClick={() => onDecide(true)}
-          >
-            <CheckCircle2 className="mr-1 h-4 w-4" />
-            {many ? "All medical" : "Medical"}
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={busy}
-            onClick={() => onDecide(false)}
-          >
-            <XCircle className="mr-1 h-4 w-4" />
-            Not medical
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
+/** The shape ExpenseSplitDialog needs, built from a single-transaction group
+ *  that has no expanded row of its own to read it from. */
+function soloTransactionOf(group: ReviewGroup): ReviewGroupTransaction | null {
+  if (!group.single_transaction_id) return null;
+  return {
+    id: group.single_transaction_id,
+    transaction_date: group.latest_date,
+    amount: group.total_amount,
+    vendor: group.display_name,
+    description: group.display_name,
+    category: null,
+    classification_explanation: group.explanation,
+  };
 }
 
-/**
- * A grocery/general-merchandise/warehouse-club group. is_medical is false on
- * every row here — nothing in this lane ever moves a total or creates an
- * expense on its own.
- *
- * Splitting needs one specific basket, so a multi-transaction group used to
- * offer only a bulk dismissal plus a sentence telling the user to go find a
- * transaction under All transactions. That was an instruction standing in for
- * a control: the one action this lane exists for was unreachable from the lane
- * itself. The group now opens to list its own transactions, each with its own
- * split button.
- */
-function OtcGroupRow({
+function GroupRow({
   group,
-  onDismiss,
+  onDecideGroup,
   onSplitTransaction,
   onDecideTransaction,
   busy,
 }: {
   group: ReviewGroup;
-  onDismiss: () => void;
+  /** Bulk-decide the whole merchant. The OTC lane only ever calls this with
+   *  `false` — see the button below. */
+  onDecideGroup: (isMedical: boolean) => void;
   onSplitTransaction: (txn: ReviewGroupTransaction) => void;
   onDecideTransaction: (
     txn: ReviewGroupTransaction,
@@ -165,17 +118,33 @@ function OtcGroupRow({
   busy: boolean;
 }) {
   const many = group.txn_count > 1;
+  const isOtc = group.lane === "possible_otc";
   const [expanded, setExpanded] = useState(false);
-  // Only fetches once opened.
+  // Fades the whole card: used for a bulk decision on a multi-transaction
+  // group, and for any decision on a single-transaction group, since there
+  // the card IS the row — there's nothing separate underneath to reveal.
+  const [leavingGroup, setLeavingGroup] = useState(false);
+  // Fades one row inside the expanded list, independent of the card itself.
+  const [leavingTxnIds, setLeavingTxnIds] = useState<Set<string>>(new Set());
+
+  // Only fetches once opened, and only while there's a list to open: a group
+  // that has just been whittled down to one row (a sibling was just decided)
+  // renders that row at the header instead, the same as a group that only
+  // ever had one — `many` gone false is what turns that switch, and the old
+  // `expanded` state from before the last row left would otherwise still be
+  // true, fetching and rendering a now-redundant list underneath it.
   const {
     data: transactions,
     isLoading: loadingTransactions,
     error: transactionsError,
   } = useReviewGroupTransactions(
-    expanded ? group.merchant_key : null,
+    expanded && many ? group.merchant_key : null,
     group.lane,
   );
-  const listId = `otc-group-${group.merchant_key}`;
+  // Lane is part of the id: the same merchant name can in principle produce a
+  // 'medical' group and a 'possible_otc' group at once (some of its charges
+  // matched, some didn't), and each needs its own DOM id.
+  const listId = `review-group-${group.merchant_key}-${group.lane}`;
   const dateRange =
     group.earliest_date === group.latest_date
       ? formatFeedDate(group.latest_date, "MMM d, yyyy")
@@ -184,8 +153,29 @@ function OtcGroupRow({
           "MMM yyyy",
         )}`;
 
+  const fadeThenDecideGroup = (isMedical: boolean) => {
+    setLeavingGroup(true);
+    window.setTimeout(() => onDecideGroup(isMedical), FADE_MS);
+  };
+
+  const fadeThenDecideTransaction = (
+    txn: ReviewGroupTransaction,
+    isMedical: boolean,
+  ) => {
+    setLeavingTxnIds((prev) => new Set(prev).add(txn.id));
+    window.setTimeout(() => onDecideTransaction(txn, isMedical), FADE_MS);
+  };
+
+  const solo = !many ? soloTransactionOf(group) : null;
+
   return (
-    <div className="rounded-lg border p-4">
+    <div
+      className={cn(
+        "rounded-lg border p-4 transition-all duration-200",
+        leavingGroup &&
+          "pointer-events-none max-h-0 overflow-hidden p-0 opacity-0",
+      )}
+    >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -213,7 +203,7 @@ function OtcGroupRow({
             </p>
           )}
 
-          {many && (
+          {isOtc && many && (
             <p className="mt-2 text-xs text-muted-foreground">
               These vary trip to trip, so there is one answer per trip — open
               the list to split anything medical out of a particular one.
@@ -223,53 +213,89 @@ function OtcGroupRow({
 
         <div className="flex flex-wrap items-center gap-2 sm:shrink-0 sm:flex-nowrap">
           {many ? (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setExpanded((v) => !v)}
-              aria-expanded={expanded}
-              aria-controls={listId}
-            >
-              <ChevronDown
-                className={cn(
-                  "mr-1 h-4 w-4 transition-transform",
-                  expanded && "rotate-180",
-                )}
-                aria-hidden="true"
-              />
-              {expanded ? "Hide" : `Show ${group.txn_count}`}
-            </Button>
-          ) : (
-            group.single_transaction_id && (
+            <>
+              {/* The OTC lane never gets this button. A bulk "all of these
+                  are healthcare" here would mean "every Costco trip is
+                  healthcare" — the one dangerous rule this app can offer —
+                  and it stays unreachable by never rendering the control
+                  that would create it, rather than by a check somewhere
+                  else. See docs/TRANSACTION_REVIEW_SPEC.md D17. */}
+              {!isOtc && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy || leavingGroup}
+                  onClick={() => fadeThenDecideGroup(true)}
+                >
+                  <CheckCircle2 className="mr-1 h-4 w-4" />
+                  All medical
+                </Button>
+              )}
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={busy || leavingGroup}
+                onClick={() => fadeThenDecideGroup(false)}
+              >
+                <XCircle className="mr-1 h-4 w-4" />
+                {isOtc ? "None had medical items" : "Not medical"}
+              </Button>
               <Button
                 size="sm"
                 variant="outline"
-                disabled={busy}
-                onClick={() =>
-                  onSplitTransaction({
-                    id: group.single_transaction_id as string,
-                    transaction_date: group.latest_date,
-                    amount: group.total_amount,
-                    vendor: group.display_name,
-                    description: group.display_name,
-                    category: null,
-                    classification_explanation: group.explanation,
-                  })
-                }
+                onClick={() => setExpanded((v) => !v)}
+                aria-expanded={expanded}
+                aria-controls={listId}
               >
-                <Split className="mr-1 h-4 w-4" />
-                Split out medical items
+                <ChevronDown
+                  className={cn(
+                    "mr-1 h-4 w-4 transition-transform",
+                    expanded && "rotate-180",
+                  )}
+                  aria-hidden="true"
+                />
+                {expanded ? "Hide" : `Show ${group.txn_count}`}
               </Button>
-            )
+            </>
+          ) : (
+            <>
+              {!isOtc && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy || leavingGroup}
+                  onClick={() => fadeThenDecideGroup(true)}
+                >
+                  <CheckCircle2 className="mr-1 h-4 w-4" />
+                  Medical
+                </Button>
+              )}
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={busy || leavingGroup}
+                onClick={() => fadeThenDecideGroup(false)}
+              >
+                <XCircle className="mr-1 h-4 w-4" />
+                {isOtc ? "No medical items here" : "Not medical"}
+              </Button>
+              {solo && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy || leavingGroup}
+                  onClick={() => onSplitTransaction(solo)}
+                >
+                  <Split className="mr-1 h-4 w-4" />
+                  {isOtc ? "Split out medical items" : "Split"}
+                </Button>
+              )}
+            </>
           )}
-          <Button size="sm" variant="ghost" disabled={busy} onClick={onDismiss}>
-            <XCircle className="mr-1 h-4 w-4" />
-            {many ? "None had medical items" : "No medical items here"}
-          </Button>
         </div>
       </div>
 
-      {expanded && (
+      {expanded && many && (
         <div id={listId} className="mt-3 space-y-2 border-t pt-3">
           {loadingTransactions && (
             <>
@@ -287,7 +313,11 @@ function OtcGroupRow({
           {transactions?.map((txn) => (
             <div
               key={txn.id}
-              className="flex flex-col gap-2 rounded-md border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between"
+              className={cn(
+                "flex flex-col gap-2 rounded-md border bg-muted/30 p-3 transition-all duration-200 sm:flex-row sm:items-center sm:justify-between",
+                leavingTxnIds.has(txn.id) &&
+                  "pointer-events-none max-h-0 overflow-hidden border-0 p-0 opacity-0",
+              )}
             >
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">
@@ -299,16 +329,13 @@ function OtcGroupRow({
                 </p>
               </div>
               {/* Three answers, because a basket has three honest outcomes:
-                  all of it counted, none of it did, or only part did. Until
-                  now this row offered only the third, so a Walmart pharmacy
-                  run had to be split into a single line against itself to be
-                  claimed at all. */}
+                  all of it counted, none of it did, or only part did. */}
               <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
                 <Button
                   size="sm"
                   variant="outline"
-                  disabled={busy}
-                  onClick={() => onDecideTransaction(txn, true)}
+                  disabled={busy || leavingTxnIds.has(txn.id)}
+                  onClick={() => fadeThenDecideTransaction(txn, true)}
                 >
                   <CheckCircle2 className="mr-1 h-4 w-4" />
                   Medical
@@ -316,8 +343,8 @@ function OtcGroupRow({
                 <Button
                   size="sm"
                   variant="ghost"
-                  disabled={busy}
-                  onClick={() => onDecideTransaction(txn, false)}
+                  disabled={busy || leavingTxnIds.has(txn.id)}
+                  onClick={() => fadeThenDecideTransaction(txn, false)}
                 >
                   <XCircle className="mr-1 h-4 w-4" />
                   Not medical
@@ -325,7 +352,7 @@ function OtcGroupRow({
                 <Button
                   size="sm"
                   variant="outline"
-                  disabled={busy}
+                  disabled={busy || leavingTxnIds.has(txn.id)}
                   onClick={() => onSplitTransaction(txn)}
                 >
                   <Split className="mr-1 h-4 w-4" />
@@ -408,13 +435,9 @@ export function ReviewFeed() {
     );
   };
 
-  const handleDecide = (
-    group: ReviewGroup,
-    isMedical: boolean,
-    lane?: ReviewGroup["lane"],
-  ) => {
+  const handleDecide = (group: ReviewGroup, isMedical: boolean) => {
     decideGroup.mutate(
-      { merchantKey: group.merchant_key, isMedical, lane },
+      { merchantKey: group.merchant_key, isMedical, lane: group.lane },
       {
         onSuccess: (count) => {
           toast.success(
@@ -430,7 +453,7 @@ export function ReviewFeed() {
           // there would mean "never review this merchant again", which is
           // the wrong promise for a merchant whose basket contents vary.
           const key = groupRuleKey(group);
-          if (key && lane !== "possible_otc") {
+          if (key && group.lane !== "possible_otc") {
             setRuleCandidate({
               merchant_entity_id: group.merchant_entity_id,
               merchant_category_code: group.mcc,
@@ -482,6 +505,8 @@ export function ReviewFeed() {
     );
   }
 
+  const busy = decideGroup.isPending || decideTransaction.isPending;
+
   return (
     <>
       {medicalGroups.length > 0 && (
@@ -505,10 +530,10 @@ export function ReviewFeed() {
               <GroupRow
                 key={group.merchant_key}
                 group={group}
-                busy={decideGroup.isPending}
-                onDecide={(isMedical) =>
-                  handleDecide(group, isMedical, "medical")
-                }
+                busy={busy}
+                onDecideGroup={(isMedical) => handleDecide(group, isMedical)}
+                onSplitTransaction={setSplitTarget}
+                onDecideTransaction={handleDecideTransaction}
               />
             ))}
           </CardContent>
@@ -527,11 +552,11 @@ export function ReviewFeed() {
           </CardHeader>
           <CardContent className="space-y-3">
             {otcGroups.map((group) => (
-              <OtcGroupRow
+              <GroupRow
                 key={group.merchant_key}
                 group={group}
-                busy={decideGroup.isPending || decideTransaction.isPending}
-                onDismiss={() => handleDecide(group, false, "possible_otc")}
+                busy={busy}
+                onDecideGroup={(isMedical) => handleDecide(group, isMedical)}
                 onSplitTransaction={setSplitTarget}
                 onDecideTransaction={handleDecideTransaction}
               />
@@ -540,7 +565,7 @@ export function ReviewFeed() {
         </Card>
       )}
 
-      {(decideGroup.isPending || decideTransaction.isPending) && (
+      {busy && (
         <p className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
           Updating&hellip;
@@ -565,7 +590,12 @@ export function ReviewFeed() {
             category: splitTarget.category,
           }}
           userId={userId}
-          onSplit={invalidate}
+          // A split fires its own database write the instant it saves, so
+          // unlike the two decide paths above there's no "before" moment left
+          // to fade from — the dialog itself closing is the visual event.
+          // Held for FADE_MS anyway so this doesn't refetch and pull the row
+          // out from under the dialog's own closing animation.
+          onSplit={() => window.setTimeout(invalidate, FADE_MS)}
         />
       )}
 
