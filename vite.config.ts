@@ -2,115 +2,32 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
-import { VitePWA } from "vite-plugin-pwa";
 
 // https://vitejs.dev/config/
+//
+// There is deliberately no service worker here. This app was built with
+// vite-plugin-pwa precaching the whole app shell plus a NetworkFirst cache in
+// front of Supabase. That bought nothing a signed-in, bank-synced app can
+// actually use -- every screen needs a live session and live account data --
+// and it cost real breakage: a cached shell served the previous bundle after a
+// deploy, which is exactly the failure recorded in CLAUDE.md on 2026-03-24.
+//
+// The app stays installable to the home screen: since Chrome 108 (mobile) /
+// 112 (desktop) installability needs only a manifest over HTTPS, no service
+// worker. The manifest is a plain static file at public/manifest.webmanifest.
+//
+// public/sw.js is a one-line kill switch that unregisters itself. Do not delete
+// it and do not replace it with a 404 -- browsers only ever update a service
+// worker by re-fetching the same URL, so removing the file leaves the old
+// caching worker installed forever on every device that already has it.
 export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 8080,
   },
-  plugins: [
-    react(),
-    mode === "development" && componentTagger(),
-    VitePWA({
-      registerType: "autoUpdate",
-      includeAssets: ["reclaim-icon.png", "robots.txt"],
-      manifest: {
-        name: "Reclaim - Unclaimed HSA Reimbursements & IRS-Ready Records",
-        short_name: "Reclaim",
-        description:
-          "Find healthcare expenses you can still reimburse from your HSA and generate IRS-ready Medical Expense Records.",
-        theme_color: "#14b8a6",
-        background_color: "#ffffff",
-        display: "standalone",
-        orientation: "portrait",
-        scope: "/",
-        start_url: "/",
-        icons: [
-          {
-            src: "/reclaim-icon.png",
-            sizes: "192x192",
-            type: "image/png",
-            purpose: "any maskable",
-          },
-          {
-            src: "/reclaim-icon.png",
-            sizes: "512x512",
-            type: "image/png",
-            purpose: "any maskable",
-          },
-        ],
-        categories: ["finance", "health", "productivity"],
-        screenshots: [
-          {
-            src: "/reclaim-icon.png",
-            sizes: "540x720",
-            type: "image/png",
-            form_factor: "narrow",
-          },
-        ],
-      },
-      workbox: {
-        skipWaiting: true,
-        clientsClaim: true,
-        globPatterns: ["**/*.{js,css,html,ico,png,svg,woff,woff2}"],
-        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5 MB limit
-        runtimeCaching: [
-          {
-            urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
-            handler: "CacheFirst",
-            options: {
-              cacheName: "google-fonts-cache",
-              expiration: {
-                maxEntries: 10,
-                maxAgeSeconds: 60 * 60 * 24 * 365, // 1 year
-              },
-              cacheableResponse: {
-                statuses: [0, 200],
-              },
-            },
-          },
-          {
-            urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
-            handler: "CacheFirst",
-            options: {
-              cacheName: "gstatic-fonts-cache",
-              expiration: {
-                maxEntries: 10,
-                maxAgeSeconds: 60 * 60 * 24 * 365, // 1 year
-              },
-              cacheableResponse: {
-                statuses: [0, 200],
-              },
-            },
-          },
-          {
-            urlPattern: /^https:\/\/.*\.supabase\.co\/.*/i,
-            handler: "NetworkFirst",
-            options: {
-              cacheName: "supabase-api-cache",
-              // 10s was too long: a stalled Supabase response left users on a
-              // skeleton screen for the full duration. 3s falls through to
-              // cached data (or our in-page error boundary) much sooner.
-              networkTimeoutSeconds: 3,
-              expiration: {
-                maxEntries: 50,
-                maxAgeSeconds: 60 * 5, // 5 minutes
-              },
-              cacheableResponse: {
-                statuses: [0, 200],
-              },
-            },
-          },
-        ],
-      },
-      devOptions: {
-        enabled: true,
-        type: "module",
-      },
-    }),
-  ].filter(Boolean),
+  plugins: [react(), mode === "development" && componentTagger()].filter(
+    Boolean,
+  ),
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
