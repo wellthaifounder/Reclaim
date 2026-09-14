@@ -355,15 +355,30 @@ export default function Transactions() {
       });
       if (error) throw error;
 
-      toast.success(
-        ids.length === 1
-          ? isMedical
-            ? "Marked as medical — it's now waiting in Substantiate"
-            : "Marked as not medical"
-          : `${ids.length} transactions marked as ${
-              isMedical ? "medical" : "not medical"
-            }`,
-      );
+      // The negative is a dismissal, not a verdict (spec D9): nothing was
+      // created, so undoing it is just re-opening the question — a plain
+      // update, using the exact ids this call touched, same as
+      // returnToReviewQueue below uses for a single row.
+      if (isMedical) {
+        toast.success(
+          ids.length === 1
+            ? "Marked as healthcare — it's now waiting in Substantiate"
+            : `${ids.length} transactions marked as healthcare`,
+        );
+      } else {
+        toast.success(
+          ids.length === 1
+            ? "Dismissed — we won't ask again"
+            : `${ids.length} dismissed — we won't ask again`,
+          {
+            duration: 6000,
+            action: {
+              label: "Undo",
+              onClick: () => undoDismissals(ids),
+            },
+          },
+        );
+      }
       setSelectedIds([]);
       fetchTransactions();
       invalidateAttentionItems();
@@ -394,12 +409,12 @@ export default function Transactions() {
           category: "medical",
           classification_reason: "user",
           classification_explanation:
-            "You confirmed this as a medical expense.",
+            "You confirmed this as a healthcare expense.",
         })
         .eq("id", transaction.id);
 
       if (error) throw error;
-      toast.success("Marked as medical expense");
+      toast.success("Marked as healthcare expense");
       fetchTransactions();
       invalidateAttentionItems();
       setRuleCandidate({ ...transaction, isMedical: true });
@@ -464,6 +479,34 @@ export default function Transactions() {
 
   const handleAddToReviewQueue = (transaction: Transaction) =>
     returnToReviewQueue(transaction, "Transaction added back to review queue");
+
+  /**
+   * The Undo action on a dismissal toast (spec D9). Same shape as
+   * returnToReviewQueue just above, for a set of ids instead of one
+   * transaction — decide() already has exactly the ids it touched, so unlike
+   * the review feed's bulk case there's no ambiguity here to guard against.
+   */
+  const undoDismissals = async (ids: string[]) => {
+    try {
+      const { error } = await supabase
+        .from("transactions")
+        .update({ reconciliation_status: "unlinked", needs_review: true })
+        .in("id", ids);
+
+      if (error) throw error;
+      toast.success(
+        ids.length === 1
+          ? "Brought back for review"
+          : `${ids.length} brought back for review`,
+      );
+      fetchTransactions();
+      invalidateAttentionItems();
+      queryClient.invalidateQueries({ queryKey: ["review-feed"] });
+    } catch (error) {
+      logError("Error undoing dismissal:", error);
+      toast.error("Could not undo that — dismiss it again if it comes back");
+    }
+  };
 
   const handleSplitTransaction = (transaction: Transaction) => {
     setTransactionToSplit(transaction);
@@ -564,7 +607,7 @@ export default function Transactions() {
                 Transactions
               </h1>
               <p className="text-muted-foreground text-sm mt-1">
-                Decide which of these were medical
+                Decide which of these were healthcare
               </p>
             </div>
             {/* "Add manually" moved to the Expenses page (2026-09-06). It
@@ -611,7 +654,7 @@ export default function Transactions() {
                       &mdash; the pharmacy, the doctor &mdash; not the payment
                       that settles the balance. Claiming the payment would
                       either double up on those charges or claim something that
-                      was never a medical purchase.
+                      was never a healthcare purchase.
                     </p>
                   </PopoverContent>
                 </Popover>
@@ -649,7 +692,7 @@ export default function Transactions() {
             </div>
             <div className="bg-card px-3 py-2">
               <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                Medical, confirmed
+                Healthcare, confirmed
               </p>
               <p className="text-lg font-semibold text-primary tabular-nums">
                 {stats.medical}
@@ -700,7 +743,7 @@ export default function Transactions() {
           {/* Tabs */}
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             {/* Wraps rather than clips: at 390px the four tabs are a little
-                wider than the screen, and "Non-Medical" lost its tail. */}
+                wider than the screen, and "Non-Healthcare" lost its tail. */}
             <TabsList className="mb-6 flex h-auto max-w-full flex-wrap justify-start">
               {/* One review tab, not two. "Review Queue" (one-at-a-time
                   swipe) and "Needs Review" (flat list) were two routes to the
@@ -719,8 +762,8 @@ export default function Transactions() {
                 )}
               </TabsTrigger>
               <TabsTrigger value="all">All</TabsTrigger>
-              <TabsTrigger value="medical">Medical</TabsTrigger>
-              <TabsTrigger value="non-medical">Non-Medical</TabsTrigger>
+              <TabsTrigger value="medical">Healthcare</TabsTrigger>
+              <TabsTrigger value="non-medical">Non-Healthcare</TabsTrigger>
             </TabsList>
 
             <TabsContent value="review" className="space-y-4">
@@ -731,7 +774,7 @@ export default function Transactions() {
               <ReviewFeed />
             </TabsContent>
 
-            {/* One content block serves All / Medical / Non-Medical, keyed to
+            {/* One content block serves All / Healthcare / Non-Healthcare, keyed to
                 whichever is active. "review" has its own block above, so it is
                 excluded here -- without this guard a `value={activeTab}` block
                 also matches it and the page renders two lists at once. */}

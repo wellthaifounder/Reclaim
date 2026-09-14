@@ -60,7 +60,7 @@ export function CreateRulePrompt({
 
   const key = candidate ? suggestRuleKey(candidate) : null;
   const label = candidate?.vendor || candidate?.description || "this merchant";
-  const verdict = candidate?.isMedical ? "medical" : "not medical";
+  const verdict = candidate?.isMedical ? "healthcare" : "not healthcare";
 
   useEffect(() => {
     if (!candidate || !key) {

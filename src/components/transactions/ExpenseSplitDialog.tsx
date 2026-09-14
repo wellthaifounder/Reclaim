@@ -177,8 +177,8 @@ export function ExpenseSplitDialog({
         </ResponsiveDialogTitle>
         <ResponsiveDialogDescription>
           {transaction.vendor || transaction.description} ·{" "}
-          {formatUsd(transaction.amount)}. Only the medical part needs to become
-          an expense — anything left over stays unclaimed.
+          {formatUsd(transaction.amount)}. Only the healthcare part needs to
+          become an expense — anything left over stays unclaimed.
         </ResponsiveDialogDescription>
       </ResponsiveDialogHeader>
 
