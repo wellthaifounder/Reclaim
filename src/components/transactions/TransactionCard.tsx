@@ -130,8 +130,8 @@ export function TransactionCard({
   };
 
   // A transfer is money moved between the user's own accounts, so neither
-  // decision applies to it — offering "Medical" on a credit-card payment is how
-  // a double-count gets created.
+  // decision applies to it — offering "Healthcare" on a credit-card payment
+  // is how a double-count gets created.
   const canDecide = !!onDecide && !isTransfer && !isSplit;
 
   return (
@@ -163,11 +163,11 @@ export function TransactionCard({
                   year: "numeric",
                 })}
               </p>
-              {/* The medical decision moved to the Actions column, where both
-                answers are one press and neither is hidden behind a toggle
-                whose current state you have to infer. */}
+              {/* The healthcare decision moved to the Actions column, where
+                both answers are one press and neither is hidden behind a
+                toggle whose current state you have to infer. */}
               {isMedical && !needsReview && (
-                <Badge variant="secondary">Medical</Badge>
+                <Badge variant="secondary">Healthcare</Badge>
               )}
               {getStatusBadge()}
               {isFromHsaAccount && (
@@ -241,7 +241,7 @@ export function TransactionCard({
                 aria-pressed={isMedical && !needsReview}
               >
                 <Check className="h-3.5 w-3.5 mr-1" aria-hidden="true" />
-                Medical
+                Healthcare
               </Button>
               <Button
                 size="sm"
@@ -261,7 +261,7 @@ export function TransactionCard({
                 }
               >
                 <X className="h-3.5 w-3.5 mr-1" aria-hidden="true" />
-                Not medical
+                Not healthcare
               </Button>
             </div>
           )}
@@ -296,7 +296,7 @@ export function TransactionCard({
               {onMarkMedical && !isMedical && (
                 <DropdownMenuItem onClick={onMarkMedical}>
                   <Tag className="h-4 w-4 mr-2" />
-                  Mark as Medical
+                  Mark as Healthcare
                 </DropdownMenuItem>
               )}
 

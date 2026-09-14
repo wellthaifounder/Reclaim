@@ -55,7 +55,7 @@ export function BulkDecideBar({
             ) : (
               <Check className="h-4 w-4 mr-1" aria-hidden="true" />
             )}
-            Medical
+            Healthcare
           </Button>
           <Button
             size="sm"
@@ -65,7 +65,7 @@ export function BulkDecideBar({
             onClick={() => onDecide(false)}
           >
             <X className="h-4 w-4 mr-1" aria-hidden="true" />
-            Not medical
+            Not healthcare
           </Button>
           <Button
             size="sm"

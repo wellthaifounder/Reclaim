@@ -17,6 +17,19 @@
 // difference is that the OTC lane never offers a bulk "all of these are
 // healthcare" button (see the comment on that button below — it's a
 // deliberate rule-safety property, not a leftover).
+//
+// 2026-09 (B2): "medical" is retired from what the user reads. The word
+// sounded like a clinical judgement the user isn't qualified to make;
+// "healthcare" is the same idea in a word nobody thinks they can get wrong.
+// Everywhere this file still says `isMedical`, `medicalGroups`, `is_medical`
+// and so on, that is naming the underlying data (a database column, a prop)
+// rather than copy a user reads — those stay as they are. Also: the negative
+// answer is a dismissal, not a verdict, and says so — "Dismissed — we won't
+// ask again" — with a real Undo for a few seconds, wherever this component
+// still has the transaction id(s) on hand to reverse it. A bulk dismissal
+// clicked on a COLLAPSED group has no such list client-side without a
+// backend change this pass didn't make, so that one case gets the wording
+// without the undo button — noted at the toast call site below.
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -31,6 +44,7 @@ import {
 import { cn } from "@/lib/utils";
 import { parseDateOnly } from "@/lib/dates";
 import { supabase } from "@/integrations/supabase/client";
+import { logError } from "@/utils/errorHandler";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Money } from "@/components/ui/money";
@@ -107,13 +121,29 @@ function GroupRow({
   busy,
 }: {
   group: ReviewGroup;
-  /** Bulk-decide the whole merchant. The OTC lane only ever calls this with
-   *  `false` — see the button below. */
-  onDecideGroup: (isMedical: boolean) => void;
+  /**
+   * Bulk-decide the whole merchant. The OTC lane only ever calls this with
+   * `false` — see the button below.
+   *
+   * `knownTxnIds`, when present, is exactly the set of transaction ids this
+   * click is about to touch — known only when the group is a single row, or
+   * is expanded with its list already loaded. It lets the caller offer a real
+   * Undo on a dismissal; its absence (a bulk click on a collapsed group) is
+   * why that one case can't.
+   */
+  onDecideGroup: (isMedical: boolean, knownTxnIds?: string[]) => void;
   onSplitTransaction: (txn: ReviewGroupTransaction) => void;
+  /**
+   * `lane` rides along so the caller can offer a lane-accurate Undo: the
+   * decide RPCs always stamp `classification_reason = 'user'`, and 'user' is
+   * not 'possible_otc', so an undo that only restores `needs_review` would
+   * land an OTC-lane transaction back in the medical lane instead of the one
+   * it actually came from.
+   */
   onDecideTransaction: (
     txn: ReviewGroupTransaction,
     isMedical: boolean,
+    lane: ReviewGroup["lane"],
   ) => void;
   busy: boolean;
 }) {
@@ -153,9 +183,20 @@ function GroupRow({
           "MMM yyyy",
         )}`;
 
+  const solo = !many ? soloTransactionOf(group) : null;
+  // The exact ids a bulk click is about to touch, when known: a solo group's
+  // one row, or an already-loaded expanded list's rows. Undefined when
+  // neither holds — a bulk click on a collapsed multi-row group — which is
+  // exactly when the caller can't offer a real Undo.
+  const knownTxnIds = solo
+    ? [solo.id]
+    : many && transactions
+      ? transactions.map((t) => t.id)
+      : undefined;
+
   const fadeThenDecideGroup = (isMedical: boolean) => {
     setLeavingGroup(true);
-    window.setTimeout(() => onDecideGroup(isMedical), FADE_MS);
+    window.setTimeout(() => onDecideGroup(isMedical, knownTxnIds), FADE_MS);
   };
 
   const fadeThenDecideTransaction = (
@@ -163,10 +204,11 @@ function GroupRow({
     isMedical: boolean,
   ) => {
     setLeavingTxnIds((prev) => new Set(prev).add(txn.id));
-    window.setTimeout(() => onDecideTransaction(txn, isMedical), FADE_MS);
+    window.setTimeout(
+      () => onDecideTransaction(txn, isMedical, group.lane),
+      FADE_MS,
+    );
   };
-
-  const solo = !many ? soloTransactionOf(group) : null;
 
   return (
     <div
@@ -206,7 +248,7 @@ function GroupRow({
           {isOtc && many && (
             <p className="mt-2 text-xs text-muted-foreground">
               These vary trip to trip, so there is one answer per trip — open
-              the list to split anything medical out of a particular one.
+              the list to split any healthcare items out of a particular one.
             </p>
           )}
         </div>
@@ -228,7 +270,7 @@ function GroupRow({
                   onClick={() => fadeThenDecideGroup(true)}
                 >
                   <CheckCircle2 className="mr-1 h-4 w-4" />
-                  All medical
+                  All healthcare
                 </Button>
               )}
               <Button
@@ -238,7 +280,7 @@ function GroupRow({
                 onClick={() => fadeThenDecideGroup(false)}
               >
                 <XCircle className="mr-1 h-4 w-4" />
-                {isOtc ? "None had medical items" : "Not medical"}
+                {isOtc ? "None had healthcare items" : "Not healthcare"}
               </Button>
               <Button
                 size="sm"
@@ -267,7 +309,7 @@ function GroupRow({
                   onClick={() => fadeThenDecideGroup(true)}
                 >
                   <CheckCircle2 className="mr-1 h-4 w-4" />
-                  Medical
+                  Healthcare
                 </Button>
               )}
               <Button
@@ -277,7 +319,7 @@ function GroupRow({
                 onClick={() => fadeThenDecideGroup(false)}
               >
                 <XCircle className="mr-1 h-4 w-4" />
-                {isOtc ? "No medical items here" : "Not medical"}
+                {isOtc ? "No healthcare items here" : "Not healthcare"}
               </Button>
               {solo && (
                 <Button
@@ -287,7 +329,7 @@ function GroupRow({
                   onClick={() => onSplitTransaction(solo)}
                 >
                   <Split className="mr-1 h-4 w-4" />
-                  {isOtc ? "Split out medical items" : "Split"}
+                  {isOtc ? "Split out healthcare items" : "Split"}
                 </Button>
               )}
             </>
@@ -338,7 +380,7 @@ function GroupRow({
                   onClick={() => fadeThenDecideTransaction(txn, true)}
                 >
                   <CheckCircle2 className="mr-1 h-4 w-4" />
-                  Medical
+                  Healthcare
                 </Button>
                 <Button
                   size="sm"
@@ -347,7 +389,7 @@ function GroupRow({
                   onClick={() => fadeThenDecideTransaction(txn, false)}
                 >
                   <XCircle className="mr-1 h-4 w-4" />
-                  Not medical
+                  Not healthcare
                 </Button>
                 <Button
                   size="sm"
@@ -402,24 +444,99 @@ export function ReviewFeed() {
   }, []);
 
   /**
+   * Undo a dismissal. Spec D9: "not healthcare" is a dismissal, not a
+   * verdict — nothing was created, nothing to unwind but the flag itself, so
+   * putting a transaction back is just re-opening the question. Mirrors the
+   * "put it back in the queue" shape `returnToReviewQueue` already uses
+   * elsewhere on this page (Transactions.tsx) — `reconciliation_status`
+   * back to 'unlinked' alongside `needs_review`, not only the review flag,
+   * since 'ignored' is exactly what the dismissal itself set.
+   *
+   * A confirmed-healthcare decision has no equivalent: it already created an
+   * expense, so "undo" would mean deleting that expense too, which is a
+   * heavier, riskier action than a toast button should trigger silently.
+   * The spec only asks for undo on the easy direction, and that's this one.
+   *
+   * `lane` restores which queue it comes back to. Both decide RPCs always
+   * stamp `classification_reason = 'user'` (that IS the record of "a human
+   * decided this"), and a group's lane is derived from that same column
+   * (`classification_reason = 'possible_otc'` vs. anything else) — so without
+   * this, undoing a dismissal from the OTC lane would resurrect the
+   * transaction in the medical lane instead of the one it actually left.
+   * `classification_explanation`, by contrast, cannot be restored this way —
+   * the original classifier sentence was overwritten and never captured
+   * client-side — so the row comes back reading "You said this wasn't
+   * healthcare" rather than its original reasoning. Landing in the right
+   * queue is the part worth getting exactly right; the explanation sentence
+   * is not load-bearing the same way.
+   */
+  const undoDismissals = async (
+    transactionIds: string[],
+    lane: ReviewGroup["lane"],
+  ) => {
+    try {
+      const { error } = await supabase
+        .from("transactions")
+        .update({
+          needs_review: true,
+          reconciliation_status: "unlinked",
+          ...(lane === "possible_otc"
+            ? { classification_reason: "possible_otc" }
+            : {}),
+        })
+        .in("id", transactionIds);
+      if (error) throw error;
+      invalidate();
+    } catch (error) {
+      logError("Undo dismissal failed", error);
+      toast.error("Could not undo that — dismiss it again if it comes back");
+    }
+  };
+
+  /** A dismissal toast, with Undo when the caller can name exactly what to
+   *  put back — see the comment on GroupRow's `knownTxnIds` prop. */
+  const dismissedToast = (
+    count: number,
+    lane: ReviewGroup["lane"],
+    undoIds?: string[],
+  ) => {
+    const message =
+      count === 1
+        ? "Dismissed — we won't ask again"
+        : `${count} dismissed — we won't ask again`;
+    if (undoIds && undoIds.length === count) {
+      toast.success(message, {
+        duration: 6000,
+        action: {
+          label: "Undo",
+          onClick: () => undoDismissals(undoIds, lane),
+        },
+      });
+    } else {
+      toast.success(message);
+    }
+  };
+
+  /**
    * Decide one basket inside an opened group.
    *
-   * Confirming it as medical creates the expense, and deciding it also removes
-   * it from the review feed — so this is the last moment the transaction is in
-   * front of the user. That is why the receipt step opens here rather than
-   * leaving a trail to follow on another page: by the time they got there, the
-   * row they were looking at would be gone.
+   * Confirming it as healthcare creates the expense, and deciding it also
+   * removes it from the review feed — so this is the last moment the
+   * transaction is in front of the user. That is why the receipt step opens
+   * here rather than leaving a trail to follow on another page: by the time
+   * they got there, the row they were looking at would be gone.
    */
   const handleDecideTransaction = (
     txn: ReviewGroupTransaction,
     isMedical: boolean,
+    lane: ReviewGroup["lane"],
   ) => {
     decideTransaction.mutate(
       { transactionId: txn.id, isMedical },
       {
         onSuccess: ({ expenseId }) => {
           if (!isMedical) {
-            toast.success("Marked as not medical");
+            dismissedToast(1, lane, [txn.id]);
             return;
           }
           if (expenseId) {
@@ -428,25 +545,31 @@ export function ReviewFeed() {
           }
           // Confirmed, but we could not name the expense. Say where it went
           // rather than silently doing nothing visible.
-          toast.success("Marked as medical — it's waiting under Expenses");
+          toast.success("Marked as healthcare — it's waiting under Expenses");
         },
         onError: () => toast.error("Could not update that transaction"),
       },
     );
   };
 
-  const handleDecide = (group: ReviewGroup, isMedical: boolean) => {
+  const handleDecide = (
+    group: ReviewGroup,
+    isMedical: boolean,
+    knownTxnIds?: string[],
+  ) => {
     decideGroup.mutate(
       { merchantKey: group.merchant_key, isMedical, lane: group.lane },
       {
         onSuccess: (count) => {
-          toast.success(
-            count === 1
-              ? `Marked as ${isMedical ? "medical" : "not medical"}`
-              : `${count} transactions marked as ${
-                  isMedical ? "medical" : "not medical"
-                }`,
-          );
+          if (isMedical) {
+            toast.success(
+              count === 1
+                ? "Marked as healthcare"
+                : `${count} transactions marked as healthcare`,
+            );
+          } else {
+            dismissedToast(count, group.lane, knownTxnIds);
+          }
           // Offer a rule so this merchant stops appearing. The prompt reads
           // the same fields a transaction would expose, so hand it the
           // group's agreed-on keys. Not offered for the OTC lane: a rule
@@ -486,9 +609,9 @@ export function ReviewFeed() {
             <PartyPopper className="h-8 w-8 text-primary" />
             <p className="font-medium">Nothing to review</p>
             <p className="max-w-sm text-sm text-muted-foreground">
-              Everything that looked medical has been sorted. Transactions that
-              clearly aren&rsquo;t medical are filed automatically — you can
-              find them under All transactions.
+              Everything that looked like healthcare has been sorted.
+              Transactions that clearly aren&rsquo;t healthcare are filed
+              automatically — you can find them under All transactions.
             </p>
           </CardContent>
         </Card>
@@ -522,7 +645,7 @@ export function ReviewFeed() {
             </CardTitle>
             <CardDescription>
               Grouped by merchant so one answer covers all of them. These look
-              medical.
+              like healthcare.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -531,7 +654,9 @@ export function ReviewFeed() {
                 key={group.merchant_key}
                 group={group}
                 busy={busy}
-                onDecideGroup={(isMedical) => handleDecide(group, isMedical)}
+                onDecideGroup={(isMedical, knownTxnIds) =>
+                  handleDecide(group, isMedical, knownTxnIds)
+                }
                 onSplitTransaction={setSplitTarget}
                 onDecideTransaction={handleDecideTransaction}
               />
@@ -545,7 +670,7 @@ export function ReviewFeed() {
           <CardHeader>
             <CardTitle>Might contain over-the-counter items</CardTitle>
             <CardDescription>
-              These merchants aren&rsquo;t medical on their own, but a basket
+              These merchants aren&rsquo;t healthcare on their own, but a basket
               here can still have a qualifying item mixed in — allergy medicine,
               contact lens solution, and the like.
             </CardDescription>
@@ -556,7 +681,9 @@ export function ReviewFeed() {
                 key={group.merchant_key}
                 group={group}
                 busy={busy}
-                onDecideGroup={(isMedical) => handleDecide(group, isMedical)}
+                onDecideGroup={(isMedical, knownTxnIds) =>
+                  handleDecide(group, isMedical, knownTxnIds)
+                }
                 onSplitTransaction={setSplitTarget}
                 onDecideTransaction={handleDecideTransaction}
               />
