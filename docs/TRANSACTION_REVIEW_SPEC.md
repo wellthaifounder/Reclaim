@@ -219,41 +219,115 @@ meantime.
 - Rule preview counts that reflect real changes (PR #30)
 - Claim locking, record states, and release-on-void
 - `SubstantiateDialog`, `ExpenseSplitDialog`, `DuplicateWarnings`
+- A real Substantiate page (`/substantiate`) — step two of the product's spine, separate from
+  this review queue. It is where a document gets attached and where eligibility actually gets
+  confirmed; the review queue only ever says "this is a healthcare purchase," never "this
+  qualifies." See §3.1.
+- One document substantiating several expenses (`receipt_invoices` join table, wired through
+  documentation state, the Pub 502 gate, the packet manifest, and duplicate-expense merging).
+  See §3.1.
 
 ### Gaps, roughly in dependency order
 
-| Decision          | Gap                                                                                                                                                                                                                 |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| D5                | Medical-lane groups cannot be opened at all. Only the OTC lane expands.                                                                                                                                             |
-| D6                | Split is only offered in the OTC lane.                                                                                                                                                                              |
-| D7, D8, D9        | Copy says "Medical / Not medical"; the negative reads as a verdict; no undo on dismiss.                                                                                                                             |
-| D10               | `review_feed_groups` orders by `COUNT(*) DESC, SUM(amount) DESC`. Needs dollars first.                                                                                                                              |
-| D11–D13           | Decided rows, group counts and empty groups behave per-lane and are not specified.                                                                                                                                  |
-| D14               | **Unverified** — whether a split parent leaves the queue cleanly and its children stay out. The group query excludes children (`split_parent_id IS NULL`); the parent's state after a split has not been confirmed. |
-| D15               | `SubstantiateDialog` opens as a modal over the feed. Needs to become a fading bottom prompt.                                                                                                                        |
-| D16               | No receipt offer at all after a bulk decision.                                                                                                                                                                      |
-| D17, D18          | Rule prompt fires only on a bulk decision, and never in the OTC lane.                                                                                                                                               |
-| D19               | Not exercised today — single-transaction merchants get no rule offer.                                                                                                                                               |
-| D20               | Prompt leads with the backfill count, so the most useful rule (a brand-new practice) announces itself as changing nothing.                                                                                          |
-| D21               | Prompts cannot coexist.                                                                                                                                                                                             |
-| D22, D23          | One name operator only. **Cost:** the matcher exists in three copies that must agree byte for byte — database, bank-import code, browser (`src/lib/merchantNormalize.ts:1-14`). A pinned test guards them.          |
-| D24               | `CategorizationRulesManager` is mounted twice (Settings and the Transactions page) and has **no create path**.                                                                                                      |
-| D25               | No indication anywhere that a rule, rather than the user, filed a transaction.                                                                                                                                      |
-| D2, D26, D27, D29 | Three peer tabs instead of one filtered list with named views.                                                                                                                                                      |
-| D28               | No surfacing of the auto-filed pile.                                                                                                                                                                                |
-| D30–D33           | Generating a record locks its expenses immediately. No "sent to custodian" state exists; "void" is the user-facing word.                                                                                            |
-| D34               | Three buttons wrap onto two lines at 390px.                                                                                                                                                                         |
-| D3                | The OTC lane renders fully expanded, below the medical lane.                                                                                                                                                        |
-| D4                | `DuplicateWarnings` is a banner above the feed and is not counted in the queue total.                                                                                                                               |
+| Decision          | Gap                                                                                                                                                                                                                                                                                                                                                                  |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D5                | Medical-lane groups cannot be opened at all. Only the OTC lane expands.                                                                                                                                                                                                                                                                                              |
+| D6                | Split is only offered in the OTC lane.                                                                                                                                                                                                                                                                                                                               |
+| D7, D8, D9        | Copy says "Medical / Not medical"; the negative reads as a verdict; no undo on dismiss.                                                                                                                                                                                                                                                                              |
+| D10               | `review_feed_groups` (`supabase/migrations/20260906120000_approval_creates_expense.sql:182`, the current definition — supersedes the one this spec first cited) orders by `lane DESC, COUNT(*) DESC, SUM(amount) DESC`. Still count-first within a lane; needs dollars first.                                                                                        |
+| D11–D13           | Decided rows, group counts and empty groups behave per-lane and are not specified.                                                                                                                                                                                                                                                                                   |
+| D14               | **Answered, no gap.** Splitting a transaction in this app does not create child transaction rows at all — see §3.1 below. `needs_review` is set straight to `false` on the one row being split, which is the same exit path a plain Healthcare/Not healthcare decision uses. `split_parent_id` belongs to a different, unrelated feature. Nothing to build.          |
+| D15               | `SubstantiateDialog` opens as a modal over the feed. Needs to become a fading bottom prompt.                                                                                                                                                                                                                                                                         |
+| D16               | No receipt offer at all after a bulk decision. The wording this spec already asked for — don't claim one file covers eighteen charges — is now provably the right caution: one document CAN legitimately cover several expenses (confirmed, §3.1), so the prompt's job is to link to Substantiate filtered to that merchant, not to suggest a single upload will do. |
+| D17, D18          | Rule prompt fires only on a bulk decision, and never in the OTC lane.                                                                                                                                                                                                                                                                                                |
+| D19               | Not exercised today — single-transaction merchants get no rule offer.                                                                                                                                                                                                                                                                                                |
+| D20               | Prompt leads with the backfill count, so the most useful rule (a brand-new practice) announces itself as changing nothing.                                                                                                                                                                                                                                           |
+| D21               | Prompts cannot coexist.                                                                                                                                                                                                                                                                                                                                              |
+| D22, D23          | One name operator only. **Cost:** the matcher exists in three copies that must agree byte for byte — database, bank-import code, browser (`src/lib/merchantNormalize.ts:1-14`). A pinned test guards them.                                                                                                                                                           |
+| D24               | `CategorizationRulesManager` is mounted twice (Settings and the Transactions page) and has **no create path**.                                                                                                                                                                                                                                                       |
+| D25               | No indication anywhere that a rule, rather than the user, filed a transaction.                                                                                                                                                                                                                                                                                       |
+| D2, D26, D27, D29 | Three peer tabs instead of one filtered list with named views.                                                                                                                                                                                                                                                                                                       |
+| D28               | No surfacing of the auto-filed pile.                                                                                                                                                                                                                                                                                                                                 |
+| D30–D33           | Generating a record locks its expenses immediately. No "sent to custodian" state exists; "void" is the user-facing word.                                                                                                                                                                                                                                             |
+| D34               | Three buttons wrap onto two lines at 390px.                                                                                                                                                                                                                                                                                                                          |
+| D3                | The OTC lane renders fully expanded, below the medical lane.                                                                                                                                                                                                                                                                                                         |
+| D4                | `DuplicateWarnings` is a banner above the feed and is not counted in the queue total.                                                                                                                                                                                                                                                                                |
 
-### Open questions, to be answered by checking rather than deciding
+### 3.1 The three open questions, answered
 
-1. **Does a split's parent leave the queue, and do its children stay out?** (D14)
-2. **Can one document substantiate several expenses?** This was planned but it is not
-   confirmed as shipped. It changes the wording of D16.
-3. **Does the eligibility engine ever disagree with a user's "healthcare" answer, and what
-   does the user see when it does?** Not raised in the session; the spec assumes the
-   existing behaviour.
+Checked against the code on 2026-09-14 (Phase A1) rather than decided. All three change what
+later sessions need to build.
+
+**1. Does a split's parent leave the queue, and do its children stay out?**
+
+The question was wrongly framed — it assumed splitting creates child transaction rows, and it
+doesn't. **Answered: yes, cleanly, and there was never really a risk here.**
+
+Two unrelated features share the word "split" in this codebase:
+
+- **HSA-account splitting** (`TransactionSplitDialog`, `transaction_splits` table) — divides
+  one transaction's payment across several HSA accounts. This is the feature that owns
+  `transactions.split_parent_id`, and it genuinely does create linked rows. It has nothing to
+  do with the review queue.
+- **Expense splitting** (`ExpenseSplitDialog`, the Split button this spec is about) — pulls a
+  medical part out of a mixed basket, e.g. $12 of Tylenol from an $87 Walmart run. This is what
+  D6/D14 actually mean. It does **not** touch `split_parent_id` at all. It creates one or more
+  rows in `invoices` (one per expense), then updates the **single transaction row** in place:
+  `is_medical = true, needs_review = false, is_split = true`
+  (`src/components/transactions/ExpenseSplitDialog.tsx:139-149`).
+
+Because `needs_review` flips straight to `false`, the row leaves `review_feed_groups` and
+`review_feed_group_transactions` through the exact same door a plain Healthcare/Not healthcare
+decision uses — both already filter on `needs_review IS TRUE`. Verified the group actually
+re-renders without it: inside the review feed, `ExpenseSplitDialog`'s `onSplit` callback is
+wired to the same `invalidate()` used by every other decision
+(`src/components/transactions/ReviewFeed.tsx:568`), which refreshes both the group list and the
+open group's transaction list. The new expenses created by the split go into `invoices`, which
+the transaction review queue never reads — so there is no "child" that could re-enter this
+queue even in principle. **No gap. Nothing to build for D14.**
+
+**2. Can one document substantiate several expenses?**
+
+**Answered: yes, and it already shipped**, in `supabase/migrations/20260905120000_receipt_invoices_join_table.sql`
+(2026-09-05). `receipt_invoices` is a proper many-to-many join table between `receipts` and
+`invoices`, RLS-scoped to the owner. It is the one place documentation state, the Pub 502
+letter-of-medical-necessity gate, the reimbursement packet's document manifest
+(`claimable_expenses()`), and duplicate-expense merging all read from — not a partial feature,
+a fully wired one. `AttachDocumentDialog` (`src/components/documents/AttachDocumentDialog.tsx`)
+already lets a user attach an existing document to a second expense without detaching it from
+the first, and shows "Already attached to N other expenses" as a hint, not a warning.
+
+This doesn't change D16's wording — it confirms the caution in it was correctly placed. See
+the updated D16 row above.
+
+**3. Does the eligibility engine ever disagree with a user's "healthcare" answer, and what does
+the user see when it does?**
+
+**Answered: not at the moment of the review-queue answer itself — that moment makes no
+eligibility claim at all — but yes, later, and it is visibly surfaced.**
+
+The review queue's "Healthcare" button (and the split flow above) only ever creates an expense
+with `eligibility_state = 'unknown'`
+(`supabase/migrations/20260906120000_approval_creates_expense.sql:113`, comment: _"Eligibility
+is NOT decided here... The expense starts 'unknown' and substantiation resolves it"_). So there
+is no instant where a user says "healthcare" and the app immediately contradicts them.
+
+The real disagreement happens **on the Substantiate page**, once a date of service, a patient,
+or a Pub 502 category is on record — via `classify-expense` or the three eligibility gates
+(timing, dependency, Pub 502). At that point `recompute_expense_eligibility` can set
+`eligibility_state = 'ineligible'` even though the transaction was answered "healthcare" back
+in the queue — for example, care that predates the HSA's establishment date, or a patient who
+isn't a tax dependent. **This is visible**, not silent: `EligibilityGates`
+(`src/components/hsa/EligibilityGates.tsx`), shown inside `SubstantiationPanel` from both
+`BillDetail` and `SubstantiateDialog`, renders each of the three gates with its own icon and
+reason — a red alert icon and destructive-colored text for a refusal, amber for "conditional,
+claimable once you attach the letter." Critically, **only Gate 3 (Pub 502 judgment) can be
+overruled by the user's own confirmation** — Gates 1 and 2 are facts (a date, a dependent
+status) and stand regardless of what the user already said. This is a sound design already in
+place, not a gap — it just was not written into this spec's model. **Nothing to build**, but
+worth stating plainly in §1: _"intent, not tax law"_ is true of the review queue's own
+question, and the eligibility engine is where tax law actually gets applied, on its own
+timeline, with its own visible disagreement surface.
 
 ---
 
