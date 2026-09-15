@@ -102,6 +102,94 @@ Deno.test(
   },
 );
 
+Deno.test(
+  "name pattern defaults to starts_with when the field is absent",
+  () => {
+    // A rule row from before this field existed, or a caller that never set
+    // it — ruleMatches must still behave exactly as it always did, since
+    // plaid-webhook and plaid-sync-transactions both select this column
+    // explicitly and a missed one there would silently downgrade every rule
+    // to starts_with with no error anywhere.
+    const r: CategorizationRule = {
+      id: crypto.randomUUID(),
+      match_type: "name_pattern",
+      match_value: "walgreens",
+      is_medical: true,
+    };
+    assertEquals(ruleMatches(r, { merchantName: "Walgreens Store" }), true);
+    assertEquals(ruleMatches(r, { merchantName: "Walgreensxyz Cafe" }), false);
+  },
+);
+
+// ── D22: the three operators ──────────────────────────────────────────────
+
+Deno.test("is_exactly matches only the normalized name itself", () => {
+  const r = rule({
+    match_type: "name_pattern",
+    match_value: "walgreens",
+    match_operator: "is_exactly",
+  });
+  assertEquals(ruleMatches(r, { merchantName: "Walgreens" }), true);
+  assertEquals(ruleMatches(r, { merchantName: "Walgreens Store" }), false);
+});
+
+Deno.test("starts_with is unchanged from the original behaviour", () => {
+  const r = rule({
+    match_type: "name_pattern",
+    match_value: "walgreens",
+    match_operator: "starts_with",
+  });
+  assertEquals(ruleMatches(r, { merchantName: "Walgreens Store" }), true);
+  assertEquals(ruleMatches(r, { merchantName: "Walgreensxyz Cafe" }), false);
+});
+
+Deno.test(
+  "contains reaches a healthcare billing middleman that starts_with cannot (spec D22)",
+  () => {
+    const value = "smith family med";
+    const middleman = "ATHENAHEALTH*SMITH FAMILY MED";
+    const startsWith = rule({
+      match_type: "name_pattern",
+      match_value: value,
+      match_operator: "starts_with",
+    });
+    const contains = rule({
+      match_type: "name_pattern",
+      match_value: value,
+      match_operator: "contains",
+    });
+    assertEquals(ruleMatches(startsWith, { merchantName: middleman }), false);
+    assertEquals(ruleMatches(contains, { merchantName: middleman }), true);
+  },
+);
+
+Deno.test(
+  "contains also catches what it isn't meant to (spec D23's own warning example)",
+  () => {
+    const r = rule({
+      match_type: "name_pattern",
+      match_value: "med",
+      match_operator: "contains",
+    });
+    assertEquals(ruleMatches(r, { merchantName: "Mediterranean Grill" }), true);
+    assertEquals(ruleMatches(r, { merchantName: "Medina Bakery" }), true);
+  },
+);
+
+Deno.test("an unrecognised operator value falls back to starts_with", () => {
+  // Defensive: an enum widened in the database ahead of this module (or a
+  // stale deploy reading a newer row) should degrade to the safest, original
+  // behaviour rather than throw or silently match everything.
+  const r = rule({
+    match_type: "name_pattern",
+    match_value: "walgreens",
+    // deno-lint-ignore no-explicit-any
+    match_operator: "some_future_operator" as any,
+  });
+  assertEquals(ruleMatches(r, { merchantName: "Walgreens Store" }), true);
+  assertEquals(ruleMatches(r, { merchantName: "Walgreensxyz Cafe" }), false);
+});
+
 // ── Entity and MCC matching ───────────────────────────────────────────────
 
 Deno.test("entity and mcc rules require the signal to be present", () => {
@@ -177,3 +265,36 @@ Deno.test("no matching rule yields null rather than a default", () => {
   assertEquals(findGoverningRule([r], { merchantName: "NETFLIX" }), null);
   assertEquals(findGoverningRule([], { merchantName: "WALGREENS" }), null);
 });
+
+Deno.test(
+  "when two name patterns tie on value length, the more specific operator wins (spec D22)",
+  () => {
+    // Same match_value, different operators — a real case now that a value
+    // alone no longer determines how surgical a rule is. An is_exactly rule
+    // for "medina bakery" can only ever have meant that one merchant; a
+    // contains rule for the same string is the one that also reaches, say,
+    // "Medina Bakery & Cafe". The narrower one should govern.
+    const exact = rule({
+      match_type: "name_pattern",
+      match_value: "medina bakery",
+      match_operator: "is_exactly",
+      is_medical: false,
+    });
+    const contains = rule({
+      match_type: "name_pattern",
+      match_value: "medina bakery",
+      match_operator: "contains",
+      is_medical: true,
+    });
+    const found = findGoverningRule([contains, exact], {
+      merchantName: "Medina Bakery",
+    });
+    assertEquals(found?.id, exact.id);
+
+    // Order-independent, same as the match_type precedence check above.
+    const foundReversed = findGoverningRule([exact, contains], {
+      merchantName: "Medina Bakery",
+    });
+    assertEquals(foundReversed?.id, exact.id);
+  },
+);

@@ -207,7 +207,6 @@
         "npm:typescript-eslint@^8.38.0",
         "npm:typescript@^5.8.3",
         "npm:vaul@~0.9.9",
-        "npm:vite-plugin-pwa@^1.1.0",
         "npm:vite@^5.4.19",
         "npm:zod@^3.25.76"
       ]

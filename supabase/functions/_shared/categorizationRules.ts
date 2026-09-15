@@ -8,9 +8,11 @@
 // two other places that MUST agree with it:
 //
 //   - SQL: public.normalize_merchant_name / public.transaction_matches_rule
-//     (20260815120000_categorization_rules.sql). The database does retroactive
-//     apply; this module does apply-at-ingest. If they diverge, the count shown
-//     in "apply to 47 past transactions" stops matching what actually changes.
+//     (20260815120000_categorization_rules.sql, operators added in
+//     20260915210000_rule_name_match_operators.sql). The database does
+//     retroactive apply; this module does apply-at-ingest. If they diverge,
+//     the count shown in "apply to 47 past transactions" stops matching what
+//     actually changes.
 //   - Browser: src/lib/merchantNormalize.ts, which re-exports normalization so
 //     a rule created in the UI is stored in the same shape.
 //
@@ -27,12 +29,30 @@ export const MATCH_TYPE_PRECEDENCE = {
 
 export type RuleMatchType = keyof typeof MATCH_TYPE_PRECEDENCE;
 
+// docs/TRANSACTION_REVIEW_SPEC.md D22. Only name_pattern rules read this —
+// entity and mcc rules always match on exact equality of that one signal, so
+// there is nothing for an operator to choose between. Specificity order
+// (lower wins a tie) mirrors how obviously "on purpose" a rule reads: an
+// exact match can only ever have been meant for the one merchant it names;
+// "contains" is the one capable of catching things nobody meant (D23).
+export const MATCH_OPERATOR_SPECIFICITY = {
+  is_exactly: 1,
+  starts_with: 2,
+  contains: 3,
+} as const;
+
+export type RuleMatchOperator = keyof typeof MATCH_OPERATOR_SPECIFICITY;
+
 export interface CategorizationRule {
   id: string;
   match_type: RuleMatchType;
   match_value: string;
   is_medical: boolean;
   display_label?: string | null;
+  /** Only consulted for match_type 'name_pattern'. Defaults to 'starts_with'
+   *  — today's only behaviour — for callers (older data, tests) that predate
+   *  this field. */
+  match_operator?: RuleMatchOperator;
 }
 
 /** The transaction-side signals a rule can key on. */
@@ -65,9 +85,21 @@ export function normalizeMerchantName(name: string | null): string | null {
 /**
  * Does this rule match this transaction?
  *
- * Name patterns match on a prefix boundary, not a bare substring: a rule for
- * "walgreens" catches "walgreens store" but not "walgreensxyz cafe". That
- * distinction is the whole reason the old substring matcher flagged Dr Pepper.
+ * D22's three operators, for a name_pattern rule:
+ *   - is_exactly:   the normalized names are equal, full stop.
+ *   - starts_with:  a word-boundary prefix match — "walgreens" catches
+ *                   "walgreens store" but not "walgreensxyz cafe". This is
+ *                   the original, and still default, behaviour; it's the
+ *                   whole reason the old bare-substring matcher flagged Dr
+ *                   Pepper as a Pepcid rule.
+ *   - contains:     a raw substring match, no boundary at all. The one
+ *                   operator that can reach a healthcare billing middleman
+ *                   like `ATHENAHEALTH*SMITH FAMILY MED` — and the one that
+ *                   can also catch Mediterranean Grill on a rule meant for
+ *                   "med" (D23's own example). Deliberately not smartened up
+ *                   to avoid that; see preview_categorization_rule_names in
+ *                   the migration for how the UI is meant to warn about it
+ *                   instead.
  */
 export function ruleMatches(
   rule: CategorizationRule,
@@ -86,10 +118,18 @@ export function ruleMatches(
     case "name_pattern": {
       const normalized = normalizeMerchantName(input.merchantName ?? null);
       if (!normalized || !rule.match_value) return false;
-      return (
-        normalized === rule.match_value ||
-        normalized.startsWith(rule.match_value + " ")
-      );
+      switch (rule.match_operator ?? "starts_with") {
+        case "is_exactly":
+          return normalized === rule.match_value;
+        case "contains":
+          return normalized.includes(rule.match_value);
+        case "starts_with":
+        default:
+          return (
+            normalized === rule.match_value ||
+            normalized.startsWith(rule.match_value + " ")
+          );
+      }
     }
     default:
       return false;
@@ -100,8 +140,14 @@ export function ruleMatches(
  * The rule that governs this transaction, or null.
  *
  * Precedence chain: merchant_entity, then mcc, then name_pattern. Within
- * name_pattern the longest match wins, so a specific rule ("cvs pharmacy")
- * beats a generic one ("cvs") rather than whichever was created first.
+ * name_pattern the longest match_value wins, so a specific rule ("cvs
+ * pharmacy") beats a generic one ("cvs") rather than whichever was created
+ * first. When two name_pattern rules tie on value length too — a real case
+ * now that a value can carry three different operators, e.g. an is_exactly
+ * "medina bakery" rule alongside an unrelated contains "medina bakery" rule
+ * — the more specific operator wins, same rationale as the length check:
+ * the rule that could only ever have meant this one merchant governs over
+ * the one that happens to also reach it.
  *
  * Revised from the original plan after the 2026-08-14 sandbox probe measured
  * merchant_entity_id on only ~44% of transactions — precise when present, but
@@ -124,12 +170,20 @@ export function findGoverningRule(
     const bestRank = MATCH_TYPE_PRECEDENCE[best.match_type];
     if (rank < bestRank) {
       best = rule;
-    } else if (
-      rank === bestRank &&
-      rule.match_value.length > best.match_value.length
-    ) {
-      best = rule;
+      continue;
     }
+    if (rank !== bestRank) continue;
+
+    if (rule.match_value.length !== best.match_value.length) {
+      if (rule.match_value.length > best.match_value.length) best = rule;
+      continue;
+    }
+
+    const opRank =
+      MATCH_OPERATOR_SPECIFICITY[rule.match_operator ?? "starts_with"];
+    const bestOpRank =
+      MATCH_OPERATOR_SPECIFICITY[best.match_operator ?? "starts_with"];
+    if (opRank < bestOpRank) best = rule;
   }
 
   return best;
