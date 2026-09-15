@@ -153,6 +153,10 @@ export function useCategorizationRules() {
       matchValue: string;
       isMedical: boolean;
       displayLabel?: string | null;
+      /** Only meaningful for matchType 'name_pattern'; omitted for the
+       *  entity/mcc rules the "remember this?" prompt creates, which leaves
+       *  the column at its DB default ('starts_with'), unused. Spec D22/D24. */
+      matchOperator?: RuleMatchOperator;
       /** Apply to existing transactions as well as future ones. */
       applyRetroactively: boolean;
     }) => {
@@ -170,6 +174,9 @@ export function useCategorizationRules() {
             match_value: input.matchValue,
             is_medical: input.isMedical,
             display_label: input.displayLabel ?? null,
+            ...(input.matchOperator
+              ? { match_operator: input.matchOperator }
+              : {}),
           },
           { onConflict: "user_id,match_type,match_value" },
         )

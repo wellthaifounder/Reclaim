@@ -105,6 +105,15 @@ const Settings = () => {
     loadBankConnections();
   }, []);
 
+  // The rules card mounts only once loading clears (see the `if (loading)`
+  // early return below), so a scroll attempted on the initial render would
+  // find nothing there yet — this waits for that render instead.
+  useEffect(() => {
+    if (loading) return;
+    if (window.location.hash !== "#categorization-rules") return;
+    document.getElementById("categorization-rules")?.scrollIntoView();
+  }, [loading]);
+
   const loadUserData = async () => {
     try {
       const {
@@ -502,8 +511,13 @@ const Settings = () => {
             what makes them real. */}
 
           {/* Workstream C3 — rules were previously written silently with no
-              screen at all, so a mislabelled vendor was permanent. */}
-          <CategorizationRulesManager />
+              screen at all, so a mislabelled vendor was permanent. Spec D24:
+              this is now the only place rules are managed (Transactions used
+              to open a second copy of this same panel as a dialog) — the id
+              is the scroll target for that page's "Rules" button. */}
+          <div id="categorization-rules" className="scroll-mt-20">
+            <CategorizationRulesManager />
+          </div>
 
           <Card>
             <CardHeader>
