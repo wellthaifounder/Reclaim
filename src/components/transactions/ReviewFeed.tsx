@@ -43,6 +43,17 @@
 // touched transaction ids are known (see GroupRow's `knownTxnIds`), and to
 // the plain queue when they aren't (a bulk decide on a group nobody had
 // expanded first).
+//
+// 2026-09 (C2): the "remember this?" rule prompt used to fire only after a
+// bulk decide, and never in the OTC lane — both narrower than spec D17-D19,
+// which asks for it after ANY answer (a bulk click, a solo merchant, or one
+// row inside an expanded group) in EITHER lane, gated only on the merchant
+// being fully decided with no conflicting history (see `maybeOfferRule`
+// below). D20 rewrote the prompt's copy to lead with the forward promise
+// instead of the past-tense fact. D21 turned it from a blocking modal into a
+// non-modal panel (CreateRulePrompt.tsx) so it can sit on screen at the same
+// time as the receipt-offer toast above, instead of one silently pre-empting
+// the other.
 
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -148,16 +159,17 @@ function GroupRow({
   onDecideGroup: (isMedical: boolean, knownTxnIds?: string[]) => void;
   onSplitTransaction: (txn: ReviewGroupTransaction) => void;
   /**
-   * `lane` rides along so the caller can offer a lane-accurate Undo: the
-   * decide RPCs always stamp `classification_reason = 'user'`, and 'user' is
-   * not 'possible_otc', so an undo that only restores `needs_review` would
-   * land an OTC-lane transaction back in the medical lane instead of the one
-   * it actually came from.
+   * The whole group rides along, not just its lane: the caller needs it for
+   * a lane-accurate Undo (the decide RPCs always stamp
+   * `classification_reason = 'user'`, so an undo that only restores
+   * `needs_review` would land an OTC-lane transaction back in the medical
+   * lane) and, per spec D17-D19, to check whether this merchant just became
+   * fully decided and so has a rule to offer.
    */
   onDecideTransaction: (
     txn: ReviewGroupTransaction,
     isMedical: boolean,
-    lane: ReviewGroup["lane"],
+    group: ReviewGroup,
   ) => void;
   busy: boolean;
 }) {
@@ -219,7 +231,7 @@ function GroupRow({
   ) => {
     setLeavingTxnIds((prev) => new Set(prev).add(txn.id));
     window.setTimeout(
-      () => onDecideTransaction(txn, isMedical, group.lane),
+      () => onDecideTransaction(txn, isMedical, group),
       FADE_MS,
     );
   };
@@ -601,22 +613,72 @@ export function ReviewFeed() {
   };
 
   /**
+   * D17-D19: the rule offer follows every answer — a bulk click, a solo
+   * group, or one row inside an expanded list — not only a bulk one, and not
+   * only in the medical lane. D17's own rationale is explicit that the OTC
+   * lane is not a special case: the one dangerous rule ("every Costco trip
+   * is healthcare") is already unreachable because the OTC lane never
+   * renders the bulk "all of these are healthcare" button in the first
+   * place (see that button's own comment below) — nothing here needs to
+   * re-guard against it.
+   *
+   * D18 is the real constraint: a rule is only offered once the merchant is
+   * *fully* decided, and only if every one of its decided transactions
+   * agrees. A bulk click decides everything pending for that merchant in one
+   * shot, so it trivially agrees with itself — but it can still collide with
+   * an older, different verdict on the same merchant from a previous visit,
+   * and a per-row click inside an expanded group almost always leaves
+   * siblings still pending. Both cases go through this one check rather than
+   * two separate ones, so "fully decided and consistent" means the same
+   * thing everywhere it's asked.
+   *
+   * Split rows are excluded: a split answers "part of this basket", not
+   * "this merchant", and folding it into the count would make a merchant
+   * that still has an honest mixed history read as unanimous.
+   */
+  const maybeOfferRule = async (group: ReviewGroup, isMedical: boolean) => {
+    const key = groupRuleKey(group);
+    if (!key) return;
+    const { data, error } = await supabase
+      .from("transactions")
+      .select("is_medical, needs_review")
+      .eq("merchant_normalized", group.merchant_key)
+      .is("split_parent_id", null);
+    if (error) {
+      logError("Could not check whether this merchant is fully decided", error);
+      return;
+    }
+    const rows = data ?? [];
+    if (rows.some((r) => r.needs_review)) return;
+    const decided = rows.filter((r) => !r.needs_review);
+    if (!decided.every((r) => r.is_medical === isMedical)) return;
+    setRuleCandidate({
+      merchant_entity_id: group.merchant_entity_id,
+      merchant_category_code: group.mcc,
+      vendor: group.display_name,
+      description: group.display_name,
+      isMedical,
+    });
+  };
+
+  /**
    * Decide one basket inside an opened group.
    */
   const handleDecideTransaction = (
     txn: ReviewGroupTransaction,
     isMedical: boolean,
-    lane: ReviewGroup["lane"],
+    group: ReviewGroup,
   ) => {
     decideTransaction.mutate(
       { transactionId: txn.id, isMedical },
       {
-        onSuccess: ({ expenseId }) => {
+        onSuccess: async ({ expenseId }) => {
           if (!isMedical) {
-            dismissedToast(1, lane, [txn.id]);
-            return;
+            dismissedToast(1, group.lane, [txn.id]);
+          } else {
+            offerReceiptForOne(expenseId);
           }
-          offerReceiptForOne(expenseId);
+          await maybeOfferRule(group, isMedical);
         },
         onError: () => toast.error("Could not update that transaction"),
       },
@@ -645,21 +707,7 @@ export function ReviewFeed() {
               : [];
             offerReceiptsForMany(count, invoiceIds);
           }
-          // Offer a rule so this merchant stops appearing. The prompt reads
-          // the same fields a transaction would expose, so hand it the
-          // group's agreed-on keys. Not offered for the OTC lane: a rule
-          // there would mean "never review this merchant again", which is
-          // the wrong promise for a merchant whose basket contents vary.
-          const key = groupRuleKey(group);
-          if (key && group.lane !== "possible_otc") {
-            setRuleCandidate({
-              merchant_entity_id: group.merchant_entity_id,
-              merchant_category_code: group.mcc,
-              vendor: group.display_name,
-              description: group.display_name,
-              isMedical,
-            });
-          }
+          await maybeOfferRule(group, isMedical);
         },
         onError: () => toast.error("Could not update those transactions"),
       },
