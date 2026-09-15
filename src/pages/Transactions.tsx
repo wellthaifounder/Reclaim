@@ -13,13 +13,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Plus, Search, Info, ScrollText } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
@@ -43,10 +36,6 @@ import {
 import { canSplitIntoExpenses } from "@/lib/expenseSplitUtils";
 import { SplitTransactionCard } from "@/components/transactions/SplitTransactionCard";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
-import {
-  CategorizationRulesManager,
-  RULES_BLURB,
-} from "@/components/transactions/CategorizationRulesManager";
 import { MissingHSADateBanner } from "@/components/dashboard/MissingHSADateBanner";
 import { TransactionsSkeleton } from "@/components/skeletons/TransactionsSkeleton";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -112,7 +101,6 @@ export default function Transactions() {
   );
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [deciding, setDeciding] = useState(false);
-  const [rulesOpen, setRulesOpen] = useState(false);
   // Transfers and split parents have no medical decision to make, so "select
   // all" must not sweep them in and then fail on them one row at a time.
   const selectableIds = useMemo(
@@ -659,15 +647,17 @@ export default function Transactions() {
                   </PopoverContent>
                 </Popover>
               )}
-              {/* The rules engine was built in full and then left at the bottom
-                  of Settings, three screens away from the only place anyone
-                  thinks about categorization. Same component, surfaced where
-                  the work happens. */}
+              {/* Spec D24: rules live in one place — Settings — rather than a
+                  second copy of the same panel opened as a dialog here. When
+                  a transaction is filed wrong, people fix the transaction;
+                  the trip to "what have I told this thing to do
+                  automatically" is the rarer, deliberate one, so this button
+                  now just gets you there instead of duplicating it. */}
               <Button
                 variant="outline"
                 size="sm"
                 className="h-8"
-                onClick={() => setRulesOpen(true)}
+                onClick={() => navigate("/settings#categorization-rules")}
               >
                 <ScrollText className="mr-1.5 h-3.5 w-3.5" />
                 Rules
@@ -922,22 +912,6 @@ export default function Transactions() {
             onSplit={fetchTransactions}
           />
         )}
-
-        {/* The same rules screen Settings shows, opened from where the
-            decisions get made. Rendered only while open so its rule-impact
-            queries do not run on every visit to the transaction list. */}
-        <Dialog open={rulesOpen} onOpenChange={setRulesOpen}>
-          <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <ScrollText className="h-5 w-5" />
-                Categorization rules
-              </DialogTitle>
-              <DialogDescription>{RULES_BLURB}</DialogDescription>
-            </DialogHeader>
-            {rulesOpen && <CategorizationRulesManager embedded />}
-          </DialogContent>
-        </Dialog>
 
         {/* Workstream C3 — offer a rule after a categorization decision. */}
         <CreateRulePrompt

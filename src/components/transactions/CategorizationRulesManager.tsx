@@ -17,6 +17,7 @@ import {
 import {
   MATCH_TYPE_LABELS,
   MATCH_OPERATOR_LABELS,
+  normalizeMerchantName,
   type RuleMatchOperator,
 } from "@/lib/merchantNormalize";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,9 @@ import {
 } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -48,7 +52,16 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Loader2,
+  Plus,
   Trash2,
   Undo2,
   RefreshCw,
@@ -197,8 +210,255 @@ function NameOperatorEditor({
 }
 
 /**
- * One sentence of explanation, exported so the Rules dialog on the transaction
- * list and the Settings section describe rules identically. Two hand-written
+ * Spec D24: the panel's own create path, rather than the only way to make a
+ * rule being to categorize a transaction and accept the "remember this?"
+ * offer (CreateRulePrompt.tsx). Scoped to name_pattern rules only — the kind
+ * a person can describe by typing a merchant name. merchant_entity and mcc
+ * rules key off Plaid's own opaque id and a four-digit code respectively;
+ * asking someone to type either by hand isn't a real create path, and the
+ * existing offer-after-deciding flow already produces those correctly from
+ * a real transaction's identifiers.
+ */
+function CreateRuleDialog({
+  open,
+  onOpenChange,
+  onCreate,
+  previewImpact,
+  previewMatchingNames,
+  busy,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onCreate: (input: {
+    matchValue: string;
+    displayLabel: string;
+    matchOperator: RuleMatchOperator;
+    isMedical: boolean;
+    applyRetroactively: boolean;
+  }) => void;
+  previewImpact: (
+    matchType: "name_pattern",
+    matchValue: string,
+    isMedical: boolean,
+    matchOperator: RuleMatchOperator,
+  ) => Promise<number>;
+  previewMatchingNames: (
+    matchType: "name_pattern",
+    matchValue: string,
+    matchOperator: RuleMatchOperator,
+  ) => Promise<string[]>;
+  busy: boolean;
+}) {
+  const [rawName, setRawName] = useState("");
+  const [operator, setOperator] = useState<RuleMatchOperator>("starts_with");
+  const [isMedical, setIsMedical] = useState(true);
+  const [applyRetroactively, setApplyRetroactively] = useState(false);
+  const [impactCount, setImpactCount] = useState<number | null>(null);
+  const [impactLoading, setImpactLoading] = useState(false);
+  const [containsNames, setContainsNames] = useState<string[] | null>(null);
+  const [containsLoading, setContainsLoading] = useState(false);
+
+  const matchValue = normalizeMerchantName(rawName);
+
+  const reset = () => {
+    setRawName("");
+    setOperator("starts_with");
+    setIsMedical(true);
+    setApplyRetroactively(false);
+    setImpactCount(null);
+    setContainsNames(null);
+  };
+
+  // Debounced so a rule preview doesn't fire an RPC on every keystroke.
+  useEffect(() => {
+    if (!matchValue) {
+      setImpactCount(null);
+      return;
+    }
+    let cancelled = false;
+    setImpactLoading(true);
+    const timer = setTimeout(() => {
+      previewImpact("name_pattern", matchValue, isMedical, operator)
+        .then((count) => {
+          if (!cancelled) setImpactCount(count);
+        })
+        .catch(() => {
+          if (!cancelled) setImpactCount(null);
+        })
+        .finally(() => {
+          if (!cancelled) setImpactLoading(false);
+        });
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [matchValue, isMedical, operator, previewImpact]);
+
+  useEffect(() => {
+    if (operator !== "contains" || !matchValue) {
+      setContainsNames(null);
+      return;
+    }
+    let cancelled = false;
+    setContainsLoading(true);
+    previewMatchingNames("name_pattern", matchValue, "contains")
+      .then((names) => {
+        if (!cancelled) setContainsNames(names);
+      })
+      .catch(() => {
+        if (!cancelled) setContainsNames(null);
+      })
+      .finally(() => {
+        if (!cancelled) setContainsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [operator, matchValue, previewMatchingNames]);
+
+  const handleSubmit = () => {
+    if (!matchValue) return;
+    onCreate({
+      matchValue,
+      displayLabel: rawName.trim(),
+      matchOperator: operator,
+      isMedical,
+      applyRetroactively,
+    });
+    reset();
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) reset();
+        onOpenChange(next);
+      }}
+    >
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>New rule</DialogTitle>
+          <DialogDescription>
+            Charges from a merchant matching this get categorized automatically
+            from now on.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="new-rule-name">Merchant name</Label>
+            <Input
+              id="new-rule-name"
+              placeholder="e.g. Walgreens"
+              value={rawName}
+              onChange={(e) => setRawName(e.target.value)}
+              autoFocus
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Matches when the name</Label>
+            <Select
+              value={operator}
+              onValueChange={(v) => setOperator(v as RuleMatchOperator)}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {MATCH_OPERATORS.map((op) => (
+                  <SelectItem key={op} value={op}>
+                    {MATCH_OPERATOR_LABELS[op]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {operator === "contains" && matchValue && (
+            <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
+              <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <div>
+                <p className="font-medium">
+                  Contains matches anywhere in the name, not just the start.
+                </p>
+                {containsLoading ? (
+                  <p className="mt-1 flex items-center gap-1.5 opacity-80">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    Checking what this would catch&hellip;
+                  </p>
+                ) : containsNames && containsNames.length > 0 ? (
+                  <p className="mt-1 opacity-90">
+                    Catches: {containsNames.join(", ")}
+                    {containsNames.length === 5 ? "…" : ""}
+                  </p>
+                ) : containsNames ? (
+                  <p className="mt-1 opacity-90">
+                    Doesn&rsquo;t currently match any of your transactions.
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between rounded-lg border p-3">
+            <div>
+              <Label htmlFor="new-rule-medical">Medical</Label>
+              <p className="text-xs text-muted-foreground">
+                Off marks these as not medical instead.
+              </p>
+            </div>
+            <Switch
+              id="new-rule-medical"
+              checked={isMedical}
+              onCheckedChange={setIsMedical}
+            />
+          </div>
+
+          <label className="flex items-start gap-2 text-sm">
+            <Checkbox
+              className="mt-0.5"
+              checked={applyRetroactively}
+              onCheckedChange={(checked) =>
+                setApplyRetroactively(checked === true)
+              }
+              disabled={!matchValue}
+            />
+            <span>
+              Also apply to past transactions
+              {matchValue &&
+                (impactLoading
+                  ? "…"
+                  : impactCount !== null
+                    ? ` (${impactCount} match${impactCount === 1 ? "" : "es"} now)`
+                    : "")}
+            </span>
+          </label>
+        </div>
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button onClick={handleSubmit} disabled={!matchValue || busy}>
+            {busy ? (
+              <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+            ) : (
+              <Plus className="mr-1.5 h-4 w-4" />
+            )}
+            Create rule
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * One sentence of explanation, exported so the Settings section describes
+ * rules the same way every time it's read. Two hand-written
  * copies is how the same feature ends up with two different promises about
  * whether Apply can be undone.
  */
@@ -314,18 +574,7 @@ function RuleRow({
   );
 }
 
-interface CategorizationRulesManagerProps {
-  /**
-   * Drop the outer Card and its heading. Set when the caller already supplies
-   * a titled container -- the Rules dialog on the transaction list -- so the
-   * user does not get a card inside a card with the title written twice.
-   */
-  embedded?: boolean;
-}
-
-export function CategorizationRulesManager({
-  embedded = false,
-}: CategorizationRulesManagerProps = {}) {
+export function CategorizationRulesManager() {
   const {
     rules,
     isLoading,
@@ -333,10 +582,13 @@ export function CategorizationRulesManager({
     revertRule,
     updateRule,
     deleteRule,
+    createRule,
+    previewImpact,
     previewMatchingNames,
   } = useCategorizationRules();
   const [pendingDelete, setPendingDelete] =
     useState<CategorizationRuleWithImpact | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const busy =
     applyRule.isPending ||
@@ -413,6 +665,36 @@ export function CategorizationRulesManager({
     });
   };
 
+  const handleCreate = (input: {
+    matchValue: string;
+    displayLabel: string;
+    matchOperator: RuleMatchOperator;
+    isMedical: boolean;
+    applyRetroactively: boolean;
+  }) => {
+    createRule.mutate(
+      {
+        matchType: "name_pattern",
+        matchValue: input.matchValue,
+        displayLabel: input.displayLabel,
+        matchOperator: input.matchOperator,
+        isMedical: input.isMedical,
+        applyRetroactively: input.applyRetroactively,
+      },
+      {
+        onSuccess: ({ applied }) => {
+          setCreateOpen(false);
+          toast.success(
+            applied > 0
+              ? `Rule created and applied to ${applied} transaction${applied === 1 ? "" : "s"}`
+              : "Rule created",
+          );
+        },
+        onError: () => toast.error("Could not create the rule"),
+      },
+    );
+  };
+
   const body = (
     <>
       {isLoading ? (
@@ -425,7 +707,8 @@ export function CategorizationRulesManager({
           <p className="font-medium">No rules yet</p>
           <p className="mt-1 text-sm text-muted-foreground">
             When you categorize a transaction, we&rsquo;ll offer to make it a
-            rule so you never have to decide about that merchant again.
+            rule so you never have to decide about that merchant again — or
+            press &ldquo;New rule&rdquo; above to add one yourself.
           </p>
         </div>
       ) : (
@@ -475,19 +758,34 @@ export function CategorizationRulesManager({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <CreateRuleDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onCreate={handleCreate}
+        previewImpact={previewImpact}
+        previewMatchingNames={previewMatchingNames}
+        busy={createRule.isPending}
+      />
     </>
   );
-
-  if (embedded) return <div className="space-y-3">{body}</div>;
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <ScrollText className="h-5 w-5" />
-          Categorization rules
-        </CardTitle>
-        <CardDescription>{RULES_BLURB}</CardDescription>
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <ScrollText className="h-5 w-5" />
+              Categorization rules
+            </CardTitle>
+            <CardDescription>{RULES_BLURB}</CardDescription>
+          </div>
+          <Button size="sm" onClick={() => setCreateOpen(true)}>
+            <Plus className="mr-1.5 h-4 w-4" />
+            New rule
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="space-y-3">{body}</CardContent>
     </Card>
