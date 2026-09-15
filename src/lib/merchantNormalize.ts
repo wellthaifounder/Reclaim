@@ -2,7 +2,9 @@
 //
 // This is the third of three copies that MUST agree byte for byte:
 //
-//   1. public.normalize_merchant_name  (SQL) — retroactive apply
+//   1. public.normalize_merchant_name / transaction_matches_rule (SQL) —
+//      retroactive apply (20260815120000_categorization_rules.sql, operators
+//      added in 20260915210000_rule_name_match_operators.sql)
 //   2. supabase/functions/_shared/categorizationRules.ts (Deno) — apply at ingest
 //   3. this file (browser) — rule creation and preview
 //
@@ -26,6 +28,23 @@ export const MATCH_TYPE_LABELS: Record<RuleMatchType, string> = {
   merchant_entity: "Exact merchant",
   mcc: "Merchant category",
   name_pattern: "Merchant name",
+};
+
+// docs/TRANSACTION_REVIEW_SPEC.md D22. Only name_pattern rules read this —
+// entity and mcc rules always match on exact equality of that one signal.
+export type RuleMatchOperator = "is_exactly" | "starts_with" | "contains";
+
+/** Specificity order for findGoverningRule's tie-break. Lower wins. */
+export const MATCH_OPERATOR_SPECIFICITY: Record<RuleMatchOperator, number> = {
+  is_exactly: 1,
+  starts_with: 2,
+  contains: 3,
+};
+
+export const MATCH_OPERATOR_LABELS: Record<RuleMatchOperator, string> = {
+  is_exactly: "Is exactly",
+  starts_with: "Starts with",
+  contains: "Contains",
 };
 
 /**
@@ -52,6 +71,9 @@ export interface MatchableRule {
   match_value: string;
   is_medical: boolean;
   display_label?: string | null;
+  /** Only consulted for match_type 'name_pattern'. Defaults to 'starts_with'
+   *  — today's only behaviour — for callers that predate this field. */
+  match_operator?: RuleMatchOperator;
 }
 
 export interface RuleMatchInput {
@@ -61,7 +83,17 @@ export interface RuleMatchInput {
   description?: string | null;
 }
 
-/** Does this rule match this transaction? Mirrors transaction_matches_rule. */
+/**
+ * Does this rule match this transaction? Mirrors transaction_matches_rule.
+ *
+ * D22's three operators, for a name_pattern rule: is_exactly (equal, full
+ * stop), starts_with (a word-boundary prefix — the original, still default,
+ * behaviour), and contains (a raw substring, no boundary — the one that can
+ * reach a healthcare billing middleman like `ATHENAHEALTH*SMITH FAMILY MED`,
+ * at the cost of also being the one that can catch Mediterranean Grill on a
+ * rule meant for "med" — see suggestRuleKey's caller for the D23 preview
+ * that's meant to warn about exactly that before it's saved).
+ */
 export function ruleMatches(
   rule: MatchableRule,
   input: RuleMatchInput,
@@ -82,10 +114,18 @@ export function ruleMatches(
         input.vendor ?? input.description ?? null,
       );
       if (!normalized || !rule.match_value) return false;
-      return (
-        normalized === rule.match_value ||
-        normalized.startsWith(rule.match_value + " ")
-      );
+      switch (rule.match_operator ?? "starts_with") {
+        case "is_exactly":
+          return normalized === rule.match_value;
+        case "contains":
+          return normalized.includes(rule.match_value);
+        case "starts_with":
+        default:
+          return (
+            normalized === rule.match_value ||
+            normalized.startsWith(rule.match_value + " ")
+          );
+      }
     }
     default:
       return false;
@@ -96,7 +136,13 @@ export function ruleMatches(
  * The rule that governs this transaction, or null.
  *
  * Precedence: merchant_entity, then mcc, then name_pattern; within
- * name_pattern the longest match wins so a specific rule beats a generic one.
+ * name_pattern the longest match_value wins so a specific rule beats a
+ * generic one. When two name_pattern rules tie on value length too — a real
+ * case now that a value can carry three different operators — the more
+ * specific operator wins (is_exactly, then starts_with, then contains): the
+ * rule that could only ever have meant this one merchant governs over the
+ * one that happens to also reach it.
+ *
  * Mirrors findGoverningRule in the Deno copy — the two must agree, or a
  * transaction gets one answer at ingest and a different one on screen.
  */
@@ -113,12 +159,22 @@ export function findGoverningRule<T extends MatchableRule>(
     }
     const rank = MATCH_TYPE_PRECEDENCE[rule.match_type];
     const bestRank = MATCH_TYPE_PRECEDENCE[best.match_type];
-    if (
-      rank < bestRank ||
-      (rank === bestRank && rule.match_value.length > best.match_value.length)
-    ) {
+    if (rank < bestRank) {
       best = rule;
+      continue;
     }
+    if (rank !== bestRank) continue;
+
+    if (rule.match_value.length !== best.match_value.length) {
+      if (rule.match_value.length > best.match_value.length) best = rule;
+      continue;
+    }
+
+    const opRank =
+      MATCH_OPERATOR_SPECIFICITY[rule.match_operator ?? "starts_with"];
+    const bestOpRank =
+      MATCH_OPERATOR_SPECIFICITY[best.match_operator ?? "starts_with"];
+    if (opRank < bestOpRank) best = rule;
   }
   return best;
 }

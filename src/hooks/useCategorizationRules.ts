@@ -12,13 +12,16 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { logError } from "@/utils/errorHandler";
-import type { RuleMatchType } from "@/lib/merchantNormalize";
+import type { RuleMatchType, RuleMatchOperator } from "@/lib/merchantNormalize";
 
 export interface CategorizationRule {
   id: string;
   user_id: string;
   match_type: RuleMatchType;
   match_value: string;
+  /** Only meaningful for match_type 'name_pattern'; every other row carries
+   *  the column's DB default ('starts_with') unused. Spec D22. */
+  match_operator: RuleMatchOperator;
   is_medical: boolean;
   display_label: string | null;
   created_at: string;
@@ -31,7 +34,7 @@ export interface CategorizationRuleWithImpact extends CategorizationRule {
 }
 
 const RULE_COLUMNS =
-  "id, user_id, match_type, match_value, is_medical, display_label, created_at, updated_at";
+  "id, user_id, match_type, match_value, match_operator, is_medical, display_label, created_at, updated_at";
 
 export function useCategorizationRules() {
   const queryClient = useQueryClient();
@@ -106,14 +109,42 @@ export function useCategorizationRules() {
     matchType: RuleMatchType,
     matchValue: string,
     isMedical: boolean,
+    matchOperator: RuleMatchOperator = "starts_with",
   ): Promise<number> => {
     const { data, error } = await supabase.rpc("preview_categorization_rule", {
       p_match_type: matchType,
       p_match_value: matchValue,
       p_is_medical: isMedical,
+      p_match_operator: matchOperator,
     });
     if (error) throw error;
     return data ?? 0;
+  };
+
+  /**
+   * D23: up to `limit` actual merchant names a rule would catch — a count
+   * cannot warn that "contains: med" also catches Mediterranean Grill and
+   * Medina Bakery, but a list of the real names can. Meant for the
+   * 'contains' operator specifically, where a raw substring match is the one
+   * genuinely capable of a surprise.
+   */
+  const previewMatchingNames = async (
+    matchType: RuleMatchType,
+    matchValue: string,
+    matchOperator: RuleMatchOperator,
+    limit = 5,
+  ): Promise<string[]> => {
+    const { data, error } = await supabase.rpc(
+      "preview_categorization_rule_names",
+      {
+        p_match_type: matchType,
+        p_match_value: matchValue,
+        p_match_operator: matchOperator,
+        p_limit: limit,
+      },
+    );
+    if (error) throw error;
+    return data ?? [];
   };
 
   const createRule = useMutation({
@@ -188,14 +219,19 @@ export function useCategorizationRules() {
   const updateRule = useMutation({
     mutationFn: async (input: {
       id: string;
-      isMedical: boolean;
+      isMedical?: boolean;
+      /** Spec D22: changing the operator changes which transactions the
+       *  rule matches, exactly like changing the verdict does — same revert-
+       *  first, don't-auto-reapply treatment below. */
+      matchOperator?: RuleMatchOperator;
     }): Promise<number> => {
-      // Flipping the verdict makes every past application wrong, so revert
-      // first: each affected transaction goes back to exactly what it was
-      // before the rule ran. Leaving them alone would mean the rule says one
-      // thing while the transactions it supposedly governs say another.
+      // Flipping the verdict — or changing which transactions match at all —
+      // makes every past application wrong, so revert first: each affected
+      // transaction goes back to exactly what it was before the rule ran.
+      // Leaving them alone would mean the rule says one thing while the
+      // transactions it supposedly governs say another.
       //
-      // It deliberately does NOT re-apply under the new verdict. Re-labelling
+      // It deliberately does NOT re-apply under the new settings. Re-labelling
       // past transactions is only ever something the user asks for outright,
       // and the rules screen now shows an Apply button (with a count) for
       // exactly that. Auto-applying here would also quietly widen the rule's
@@ -207,9 +243,17 @@ export function useCategorizationRules() {
       );
       if (revertError) throw revertError;
 
+      const patch: {
+        is_medical?: boolean;
+        match_operator?: RuleMatchOperator;
+      } = {};
+      if (input.isMedical !== undefined) patch.is_medical = input.isMedical;
+      if (input.matchOperator !== undefined)
+        patch.match_operator = input.matchOperator;
+
       const { error } = await supabase
         .from("categorization_rules")
-        .update({ is_medical: input.isMedical })
+        .update(patch)
         .eq("id", input.id);
       if (error) throw error;
 
@@ -245,6 +289,7 @@ export function useCategorizationRules() {
     isLoading: rulesQuery.isLoading,
     error: rulesQuery.error,
     previewImpact,
+    previewMatchingNames,
     createRule,
     applyRule,
     revertRule,

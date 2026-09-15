@@ -133,9 +133,15 @@ serve(async (req) => {
 
     // ── 2. Ingest via cursor ──────────────────────────────────────────────
     // Workstream C3: categorization_rules replaces user_vendor_preferences.
+    // match_operator (spec D22) has to be selected explicitly here: omitting
+    // it doesn't error, it silently makes ruleMatches() treat every rule as
+    // starts_with regardless of what the user actually chose, since that's
+    // its default when the field is undefined.
     const { data: rules } = await supabase
       .from("categorization_rules")
-      .select("id, match_type, match_value, is_medical, display_label")
+      .select(
+        "id, match_type, match_value, match_operator, is_medical, display_label",
+      )
       .eq("user_id", user.id);
 
     const { counts, ingested } = await syncTransactions(supabase, {

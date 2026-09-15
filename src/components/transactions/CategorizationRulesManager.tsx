@@ -8,13 +8,17 @@
 // Every destructive action here reverts before it mutates, so a rule can always
 // be taken back off the transactions it touched.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   useCategorizationRules,
   type CategorizationRuleWithImpact,
 } from "@/hooks/useCategorizationRules";
-import { MATCH_TYPE_LABELS } from "@/lib/merchantNormalize";
+import {
+  MATCH_TYPE_LABELS,
+  MATCH_OPERATOR_LABELS,
+  type RuleMatchOperator,
+} from "@/lib/merchantNormalize";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -27,6 +31,13 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -36,7 +47,154 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Loader2, Trash2, Undo2, RefreshCw, ScrollText } from "lucide-react";
+import {
+  Loader2,
+  Trash2,
+  Undo2,
+  RefreshCw,
+  ScrollText,
+  TriangleAlert,
+} from "lucide-react";
+
+const MATCH_OPERATORS: RuleMatchOperator[] = [
+  "is_exactly",
+  "starts_with",
+  "contains",
+];
+
+/**
+ * Spec D22/D23. Only rendered for match_type 'name_pattern' — an
+ * entity or mcc rule always matches on exact equality of that one signal, so
+ * there's no operator to choose. Picking a new operator here is staged
+ * locally first, not applied on every keystroke of the dropdown: switching
+ * to "Contains" fetches and shows up to five real merchant names it would
+ * catch (D23's whole reason for existing — a count can't warn you that
+ * "contains: med" also catches Mediterranean Grill) before the choice is
+ * saved, mirroring the same revert-first treatment as the Medical/Not
+ * medical switch above it.
+ */
+function NameOperatorEditor({
+  rule,
+  onSave,
+  previewMatchingNames,
+  busy,
+}: {
+  rule: CategorizationRuleWithImpact;
+  onSave: (operator: RuleMatchOperator) => void;
+  previewMatchingNames: (
+    matchType: CategorizationRuleWithImpact["match_type"],
+    matchValue: string,
+    matchOperator: RuleMatchOperator,
+  ) => Promise<string[]>;
+  busy: boolean;
+}) {
+  const [pending, setPending] = useState<RuleMatchOperator>(
+    rule.match_operator,
+  );
+  const [previewNames, setPreviewNames] = useState<string[] | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const dirty = pending !== rule.match_operator;
+
+  // A rule saved elsewhere (another tab, the Undo button) should reset any
+  // uncommitted local pick rather than silently keep offering to save a
+  // choice that no longer reflects what's on screen.
+  useEffect(() => {
+    setPending(rule.match_operator);
+  }, [rule.match_operator]);
+
+  useEffect(() => {
+    if (pending !== "contains") {
+      setPreviewNames(null);
+      return;
+    }
+    let cancelled = false;
+    setPreviewLoading(true);
+    previewMatchingNames(rule.match_type, rule.match_value, "contains")
+      .then((names) => {
+        if (!cancelled) setPreviewNames(names);
+      })
+      .catch(() => {
+        if (!cancelled) setPreviewNames(null);
+      })
+      .finally(() => {
+        if (!cancelled) setPreviewLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pending, rule.match_type, rule.match_value, previewMatchingNames]);
+
+  return (
+    <div className="mt-2 flex flex-col gap-2">
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-muted-foreground">Matches when it</span>
+        <Select
+          value={pending}
+          disabled={busy}
+          onValueChange={(v) => setPending(v as RuleMatchOperator)}
+        >
+          <SelectTrigger className="h-7 w-[140px] text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {MATCH_OPERATORS.map((op) => (
+              <SelectItem key={op} value={op} className="text-xs">
+                {MATCH_OPERATOR_LABELS[op]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {dirty && (
+          <>
+            <Button
+              size="sm"
+              className="h-7 text-xs"
+              disabled={busy}
+              onClick={() => onSave(pending)}
+            >
+              Save
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 text-xs"
+              disabled={busy}
+              onClick={() => setPending(rule.match_operator)}
+            >
+              Cancel
+            </Button>
+          </>
+        )}
+      </div>
+
+      {pending === "contains" && (
+        <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
+          <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <div>
+            <p className="font-medium">
+              Contains matches anywhere in the name, not just the start.
+            </p>
+            {previewLoading ? (
+              <p className="mt-1 flex items-center gap-1.5 opacity-80">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Checking what this would catch&hellip;
+              </p>
+            ) : previewNames && previewNames.length > 0 ? (
+              <p className="mt-1 opacity-90">
+                Catches: {previewNames.join(", ")}
+                {previewNames.length === 5 ? "…" : ""}
+              </p>
+            ) : previewNames ? (
+              <p className="mt-1 opacity-90">
+                Doesn&rsquo;t currently match any of your transactions.
+              </p>
+            ) : null}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 /**
  * One sentence of explanation, exported so the Rules dialog on the transaction
@@ -53,6 +211,8 @@ function RuleRow({
   onRevert,
   onApply,
   onDelete,
+  onUpdateOperator,
+  previewMatchingNames,
   busy,
 }: {
   rule: CategorizationRuleWithImpact;
@@ -60,6 +220,12 @@ function RuleRow({
   onRevert: () => void;
   onApply: () => void;
   onDelete: () => void;
+  onUpdateOperator: (operator: RuleMatchOperator) => void;
+  previewMatchingNames: (
+    matchType: CategorizationRuleWithImpact["match_type"],
+    matchValue: string,
+    matchOperator: RuleMatchOperator,
+  ) => Promise<string[]>;
   busy: boolean;
 }) {
   return (
@@ -91,6 +257,14 @@ function RuleRow({
             </span>
           )}
         </p>
+        {rule.match_type === "name_pattern" && (
+          <NameOperatorEditor
+            rule={rule}
+            onSave={onUpdateOperator}
+            previewMatchingNames={previewMatchingNames}
+            busy={busy}
+          />
+        )}
       </div>
 
       <div className="flex items-center gap-2">
@@ -152,8 +326,15 @@ interface CategorizationRulesManagerProps {
 export function CategorizationRulesManager({
   embedded = false,
 }: CategorizationRulesManagerProps = {}) {
-  const { rules, isLoading, applyRule, revertRule, updateRule, deleteRule } =
-    useCategorizationRules();
+  const {
+    rules,
+    isLoading,
+    applyRule,
+    revertRule,
+    updateRule,
+    deleteRule,
+    previewMatchingNames,
+  } = useCategorizationRules();
   const [pendingDelete, setPendingDelete] =
     useState<CategorizationRuleWithImpact | null>(null);
 
@@ -166,6 +347,26 @@ export function CategorizationRulesManager({
   const handleToggle = (rule: CategorizationRuleWithImpact, next: boolean) => {
     updateRule.mutate(
       { id: rule.id, isMedical: next },
+      {
+        onSuccess: (count) =>
+          toast.success(
+            count === 0
+              ? "Rule updated"
+              : `Rule updated. ${count} transaction${
+                  count === 1 ? " was" : "s were"
+                } put back to how it was before — press Apply to use the new setting on them.`,
+          ),
+        onError: () => toast.error("Could not update the rule"),
+      },
+    );
+  };
+
+  const handleUpdateOperator = (
+    rule: CategorizationRuleWithImpact,
+    operator: RuleMatchOperator,
+  ) => {
+    updateRule.mutate(
+      { id: rule.id, matchOperator: operator },
       {
         onSuccess: (count) =>
           toast.success(
@@ -237,6 +438,8 @@ export function CategorizationRulesManager({
             onRevert={() => handleRevert(rule)}
             onApply={() => handleApply(rule)}
             onDelete={() => setPendingDelete(rule)}
+            onUpdateOperator={(op) => handleUpdateOperator(rule, op)}
+            previewMatchingNames={previewMatchingNames}
           />
         ))
       )}
