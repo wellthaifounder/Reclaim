@@ -38,7 +38,7 @@
 // still needs a document" is the honest answer and tells the user what is left.
 
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
@@ -145,9 +145,21 @@ function confidenceTier(c: number | null): {
 export default function Substantiate() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [searchParams] = useSearchParams();
   const [actingId, setActingId] = useState<string | null>(null);
   const [substantiateId, setSubstantiateId] = useState<string | null>(null);
   const [attachToId, setAttachToId] = useState<string | null>(null);
+
+  // Spec D16: a bulk "confirmed as healthcare" toast on the review feed links
+  // here with the exact expense ids it just created, so this page can show
+  // only those rather than the whole backlog. `null` means unfiltered — the
+  // normal way to reach this page. A non-null filter that matches nothing
+  // (stale ids, or everything in it was already substantiated) falls back to
+  // the full queue rather than showing an empty page for a real backlog.
+  const filterIds = useMemo(() => {
+    const raw = searchParams.get("ids");
+    return raw ? new Set(raw.split(",").filter(Boolean)) : null;
+  }, [searchParams]);
 
   const {
     data: expenses = [],
@@ -240,6 +252,15 @@ export default function Substantiate() {
       pendingDollars: pending.reduce((s, e) => s + e.amount, 0),
     };
   }, [expenses]);
+
+  // The filter narrows which rows render; it never narrows the badges above
+  // them, which are always about the whole backlog, not the one merchant
+  // someone just arrived here to finish.
+  const filteredExpenses = filterIds
+    ? expenses.filter((e) => filterIds.has(e.id))
+    : null;
+  const showingFiltered = !!filterIds && filteredExpenses!.length > 0;
+  const visibleExpenses = showingFiltered ? filteredExpenses! : expenses;
 
   /** Everything that has to re-read after a row changes. */
   const refresh = async () => {
@@ -408,8 +429,25 @@ export default function Substantiate() {
           )}
         </div>
 
+        {showingFiltered && (
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-md border bg-muted/30 px-3 py-2 text-sm">
+            <span>
+              Showing {filteredExpenses!.length} you just confirmed as
+              healthcare.
+            </span>
+            <Button
+              variant="link"
+              size="sm"
+              className="h-auto p-0"
+              onClick={() => navigate("/substantiate")}
+            >
+              View all {expenses.length} in queue
+            </Button>
+          </div>
+        )}
+
         <div className="space-y-3">
-          {expenses.map((e) => {
+          {visibleExpenses.map((e) => {
             const tier = confidenceTier(e.classification_confidence);
             const ineligibleByRule =
               e.rule?.eligibility_status === "ineligible";

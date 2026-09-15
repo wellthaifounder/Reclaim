@@ -30,8 +30,22 @@
 // clicked on a COLLAPSED group has no such list client-side without a
 // backend change this pass didn't make, so that one case gets the wording
 // without the undo button — noted at the toast call site below.
+//
+// 2026-09 (C1): confirming a transaction as healthcare no longer forces
+// SubstantiateDialog open. Spec D15/D16 — "offer, don't gate": a modal per
+// confirmation was right for one transaction in isolation and wrong for a
+// queue, where it happens dozens of times in a row and the receipt is
+// almost never to hand anyway. The offer is now a toast with an action
+// button; nothing opens or navigates until the user clicks it. A single
+// decision's toast opens the dialog in place. A bulk decision's toast
+// links to Substantiate instead — stacking N upload dialogs would be worse
+// than the modal it replaces — filtered to exactly those expenses when the
+// touched transaction ids are known (see GroupRow's `knownTxnIds`), and to
+// the plain queue when they aren't (a bulk decide on a group nobody had
+// expanded first).
 
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import {
@@ -416,6 +430,7 @@ function GroupRow({
 }
 
 export function ReviewFeed() {
+  const navigate = useNavigate();
   const {
     medicalGroups,
     otcGroups,
@@ -433,8 +448,8 @@ export function ReviewFeed() {
   const [splitTarget, setSplitTarget] = useState<ReviewGroupTransaction | null>(
     null,
   );
-  // The expense a just-confirmed transaction became, held so the receipt step
-  // can open on it straight away.
+  // The expense a receipt-offer toast's action was clicked for, so the
+  // dialog opens on exactly the one the user just confirmed.
   const [substantiateId, setSubstantiateId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -518,13 +533,75 @@ export function ReviewFeed() {
   };
 
   /**
+   * D15's half of the receipt offer: one transaction just became one
+   * expense. The toast's action opens SubstantiateDialog right here, over
+   * the feed — by the time a click through to another page landed, the row
+   * the user was just looking at would already be gone.
+   */
+  const offerReceiptForOne = (invoiceId: string | null) => {
+    if (!invoiceId) {
+      // Confirmed, but we could not name the expense. Say where it went
+      // rather than silently doing nothing visible.
+      toast.success("Marked as healthcare — it's waiting under Expenses");
+      return;
+    }
+    toast.success("Marked as healthcare", {
+      duration: 8000,
+      action: {
+        label: "Add a receipt",
+        onClick: () => setSubstantiateId(invoiceId),
+      },
+    });
+  };
+
+  /**
+   * D16's half: a bulk decision's offer scales and points at Substantiate
+   * instead of opening in place — stacking N upload dialogs over the feed
+   * would be worse than the automatic modal this whole pass exists to
+   * remove. `invoiceIds` filters that page to exactly these expenses when
+   * it is exactly `count` long; shorter (or empty) means the ids behind this
+   * decision were never known client-side — a bulk decide on a group nobody
+   * expanded first — and the link goes to the plain queue rather than a
+   * filtered view that would silently be missing rows.
+   */
+  const offerReceiptsForMany = (count: number, invoiceIds: string[]) => {
+    const filtered = invoiceIds.length === count;
+    toast.success(`${count} expenses need a receipt`, {
+      duration: 8000,
+      action: {
+        label: "Add receipts",
+        onClick: () =>
+          navigate(
+            filtered
+              ? `/substantiate?ids=${invoiceIds.join(",")}`
+              : "/substantiate",
+          ),
+      },
+    });
+  };
+
+  /** The invoice ids a set of just-decided transactions became, for the
+   *  bulk receipt offer above. Best-effort: a failed read means an empty
+   *  list, which offerReceiptsForMany already treats as "unknown". */
+  const lookupInvoiceIds = async (
+    transactionIds: string[],
+  ): Promise<string[]> => {
+    const { data, error } = await supabase
+      .from("transactions")
+      .select("invoice_id")
+      .in("id", transactionIds)
+      .not("invoice_id", "is", null);
+    if (error) {
+      logError("Could not read back new expense ids", error);
+      return [];
+    }
+    return (data ?? [])
+      .map((r) => r.invoice_id as string | null)
+      .filter((id): id is string => !!id);
+  };
+
+  /**
    * Decide one basket inside an opened group.
-   *
-   * Confirming it as healthcare creates the expense, and deciding it also
-   * removes it from the review feed — so this is the last moment the
-   * transaction is in front of the user. That is why the receipt step opens
-   * here rather than leaving a trail to follow on another page: by the time
-   * they got there, the row they were looking at would be gone.
    */
   const handleDecideTransaction = (
     txn: ReviewGroupTransaction,
@@ -539,13 +616,7 @@ export function ReviewFeed() {
             dismissedToast(1, lane, [txn.id]);
             return;
           }
-          if (expenseId) {
-            setSubstantiateId(expenseId);
-            return;
-          }
-          // Confirmed, but we could not name the expense. Say where it went
-          // rather than silently doing nothing visible.
-          toast.success("Marked as healthcare — it's waiting under Expenses");
+          offerReceiptForOne(expenseId);
         },
         onError: () => toast.error("Could not update that transaction"),
       },
@@ -560,15 +631,19 @@ export function ReviewFeed() {
     decideGroup.mutate(
       { merchantKey: group.merchant_key, isMedical, lane: group.lane },
       {
-        onSuccess: (count) => {
-          if (isMedical) {
-            toast.success(
-              count === 1
-                ? "Marked as healthcare"
-                : `${count} transactions marked as healthcare`,
-            );
-          } else {
+        onSuccess: async (count) => {
+          if (!isMedical) {
             dismissedToast(count, group.lane, knownTxnIds);
+          } else if (count === 1) {
+            const invoiceId = knownTxnIds?.[0]
+              ? (await lookupInvoiceIds([knownTxnIds[0]]))[0]
+              : undefined;
+            offerReceiptForOne(invoiceId ?? null);
+          } else {
+            const invoiceIds = knownTxnIds
+              ? await lookupInvoiceIds(knownTxnIds)
+              : [];
+            offerReceiptsForMany(count, invoiceIds);
           }
           // Offer a rule so this merchant stops appearing. The prompt reads
           // the same fields a transaction would expose, so hand it the
@@ -726,11 +801,12 @@ export function ReviewFeed() {
         />
       )}
 
-      {/* Opens on the expense the confirmation just created, so the receipt and
-          the service details are captured while the user is still looking at
-          the charge — rather than sending them to Expenses to find a row they
-          have not seen before. Closing it costs nothing: the expense exists and
-          is waiting there either way. */}
+      {/* Opens only from the receipt-offer toast's action, never automatically
+          (D15). When it does open, it's on the expense the confirmation just
+          created, so the receipt and service details are captured while the
+          user is still looking at the charge — rather than sending them to
+          Expenses to find a row they have not seen before. Closing it costs
+          nothing: the expense exists and is waiting there either way. */}
       <SubstantiateDialog
         expenseId={substantiateId}
         open={!!substantiateId}
