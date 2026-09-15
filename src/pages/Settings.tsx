@@ -107,11 +107,15 @@ const Settings = () => {
 
   // The rules card mounts only once loading clears (see the `if (loading)`
   // early return below), so a scroll attempted on the initial render would
-  // find nothing there yet — this waits for that render instead.
+  // find nothing there yet — this waits for that render instead. Generic
+  // over any id, not just the card itself: spec D25 links from an overridden
+  // rule-filed decision straight to that one rule (`#rule-<id>`, set on
+  // RuleRow in CategorizationRulesManager.tsx), and this is what lands on it.
   useEffect(() => {
     if (loading) return;
-    if (window.location.hash !== "#categorization-rules") return;
-    document.getElementById("categorization-rules")?.scrollIntoView();
+    const id = window.location.hash.slice(1);
+    if (!id) return;
+    document.getElementById(id)?.scrollIntoView();
   }, [loading]);
 
   const loadUserData = async () => {
