@@ -13,7 +13,14 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Plus, Search, Info, ScrollText } from "lucide-react";
+import { Plus, Search, Info, ScrollText, ListFilter } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import {
@@ -53,7 +60,74 @@ type Transaction = Database["public"]["Tables"]["transactions"]["Row"] & {
   plaid_accounts?: {
     is_hsa: boolean | null;
   } | null;
+  // Spec D27's "Needs a receipt" named view reads this directly rather than
+  // re-deriving it: `documentation_state = 'none'` is the exact column the
+  // Substantiate page's own queue is keyed on (trg_invoices_sync_lifecycle),
+  // so a transaction agrees with its expense about whether it has a receipt.
+  invoices?: {
+    documentation_state: string | null;
+  } | null;
 };
+
+/**
+ * Spec D27: one filtered list replaces the old All / Healthcare /
+ * Non-Healthcare tabs. "Filed automatically" and "Dismissed" both end up
+ * not-healthcare, but split by who decided -- the distinction D28 exists to
+ * surface (a narrow classifier's own misses are invisible unless its pile is
+ * somewhere to look). A transfer was never a healthcare/not-healthcare
+ * judgement at all, so it's excluded from every named view except Everything.
+ */
+const NAMED_VIEWS = [
+  "everything",
+  "healthcare",
+  "auto_filed",
+  "needs_receipt",
+  "dismissed",
+] as const;
+type NamedView = (typeof NAMED_VIEWS)[number];
+
+const NAMED_VIEW_LABELS: Record<NamedView, string> = {
+  everything: "Everything",
+  healthcare: "Healthcare",
+  auto_filed: "Filed automatically",
+  needs_receipt: "Needs a receipt",
+  dismissed: "Dismissed",
+};
+
+const NAMED_VIEW_EMPTY_COPY: Record<NamedView, string> = {
+  everything: "Nothing here yet",
+  healthcare: "Nothing marked healthcare yet",
+  auto_filed: "Nothing filed automatically yet",
+  needs_receipt: "Nothing waiting on a receipt",
+  dismissed: "Nothing dismissed",
+};
+
+/** Mirrors the server-side count ReviewFeed.tsx uses for spec D28's nudge --
+ *  keep the two in agreement or the nudge's number and this view's contents
+ *  will disagree. */
+function matchesNamedView(t: Transaction, view: NamedView): boolean {
+  switch (view) {
+    case "everything":
+      return true;
+    case "healthcare":
+      return t.is_medical === true;
+    case "auto_filed":
+      return (
+        t.is_medical === false &&
+        !t.is_transfer &&
+        !!t.classification_reason &&
+        t.classification_reason !== "user" &&
+        t.classification_reason !== "transfer" &&
+        t.reconciliation_status !== "ignored"
+      );
+    case "needs_receipt":
+      return (
+        t.is_medical === true && t.invoices?.documentation_state === "none"
+      );
+    case "dismissed":
+      return t.reconciliation_status === "ignored";
+  }
+}
 
 export default function Transactions() {
   const queryClient = useQueryClient();
@@ -122,7 +196,15 @@ export default function Transactions() {
   // the confusion the Transactions/Expenses rename set out to end. Expenses
   // that need work are on /substantiate; expenses ready to claim are on
   // /substantiation. Both are nav destinations of their own now.
-  const TABS = ["review", "all", "medical", "non-medical"];
+  //
+  // Spec D26: decided transactions stay a sibling tab on this page, not a
+  // fifth nav destination -- and spec D29 means that tab must be reachable
+  // regardless of the queue's own state, so it is never conditionally
+  // rendered. The old third and fourth tabs (Healthcare / Non-Healthcare)
+  // are gone; that distinction now lives inside "All" as the named-view
+  // control below (spec D27), reachable via ?view= the same way ?tab= always
+  // has been.
+  const TABS = ["review", "all"];
   const requestedTab = searchParams.get("tab");
   const activeTab =
     requestedTab && TABS.includes(requestedTab) ? requestedTab : "all";
@@ -131,6 +213,19 @@ export default function Transactions() {
     const sp = new URLSearchParams(searchParams);
     if (next === "all") sp.delete("tab");
     else sp.set("tab", next);
+    setSearchParams(sp, { replace: true });
+  };
+
+  const requestedView = searchParams.get("view");
+  const namedView: NamedView =
+    requestedView && (NAMED_VIEWS as readonly string[]).includes(requestedView)
+      ? (requestedView as NamedView)
+      : "everything";
+
+  const setNamedView = (next: NamedView) => {
+    const sp = new URLSearchParams(searchParams);
+    if (next === "everything") sp.delete("view");
+    else sp.set("view", next);
     setSearchParams(sp, { replace: true });
   };
   const [advancedFilters, setAdvancedFilters] = useState<FilterCriteria>({});
@@ -165,7 +260,7 @@ export default function Transactions() {
 
   useEffect(() => {
     filterTransactions();
-  }, [transactions, searchQuery, activeTab, advancedFilters]);
+  }, [transactions, searchQuery, activeTab, namedView, advancedFilters]);
 
   // Open on the review queue when there is something waiting -- but only as a
   // first-load default, and only when the URL did not ask for a tab.
@@ -226,6 +321,9 @@ export default function Transactions() {
           *,
           plaid_accounts (
             is_hsa
+          ),
+          invoices!transactions_invoice_id_fkey (
+            documentation_state
           )
         `,
         )
@@ -244,14 +342,9 @@ export default function Transactions() {
   const filterTransactions = () => {
     let filtered = [...transactions];
 
-    // Filter by tab
-    if (activeTab === "medical") {
-      filtered = filtered.filter((t) => t.is_medical);
-    } else if (activeTab === "non-medical") {
-      filtered = filtered.filter((t) => t.is_medical === false);
-    } else if (activeTab === "all") {
-      // Show all transactions including ignored ones
-      // No filtering needed
+    // Spec D27: the named view replaces the old medical/non-medical tabs.
+    if (activeTab === "all") {
+      filtered = filtered.filter((t) => matchesNamedView(t, namedView));
     }
 
     // Filter by search query
@@ -771,8 +864,6 @@ export default function Transactions() {
 
           {/* Tabs */}
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            {/* Wraps rather than clips: at 390px the four tabs are a little
-                wider than the screen, and "Non-Healthcare" lost its tail. */}
             <TabsList className="mb-6 flex h-auto max-w-full flex-wrap justify-start">
               {/* One review tab, not two. "Review Queue" (one-at-a-time
                   swipe) and "Needs Review" (flat list) were two routes to the
@@ -790,9 +881,12 @@ export default function Transactions() {
                   </Badge>
                 )}
               </TabsTrigger>
+              {/* Spec D26/D27: Healthcare and Non-Healthcare used to be their
+                  own tabs here. That distinction, plus two more the tabs never
+                  offered (auto-filed vs. dismissed, and needing a receipt),
+                  now live in the named-view control below -- one control
+                  instead of a growing row of tabs. */}
               <TabsTrigger value="all">All</TabsTrigger>
-              <TabsTrigger value="medical">Healthcare</TabsTrigger>
-              <TabsTrigger value="non-medical">Non-Healthcare</TabsTrigger>
             </TabsList>
 
             <TabsContent value="review" className="space-y-4">
@@ -803,25 +897,57 @@ export default function Transactions() {
               <ReviewFeed />
             </TabsContent>
 
-            {/* One content block serves All / Healthcare / Non-Healthcare, keyed to
-                whichever is active. "review" has its own block above, so it is
-                excluded here -- without this guard a `value={activeTab}` block
-                also matches it and the page renders two lists at once. */}
+            {/* "review" has its own block above, so it is excluded here --
+                without this guard a `value={activeTab}` block also matches it
+                and the page renders two lists at once. */}
             <TabsContent
               value={activeTab === "review" ? "__inactive__" : activeTab}
               className="space-y-4"
             >
+              {/* Spec D27: one control, five named views. Reachable whenever
+                  this tab is (spec D29) -- nothing here is conditioned on the
+                  queue being empty. */}
+              <div className="flex items-center gap-2">
+                <ListFilter
+                  className="h-4 w-4 shrink-0 text-muted-foreground"
+                  aria-hidden="true"
+                />
+                <Select
+                  value={namedView}
+                  onValueChange={(v) => setNamedView(v as NamedView)}
+                >
+                  <SelectTrigger className="h-8 w-[200px] text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {NAMED_VIEWS.map((view) => (
+                      <SelectItem key={view} value={view}>
+                        {NAMED_VIEW_LABELS[view]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
               {filteredTransactions.length === 0 ? (
                 <Card className="p-12 text-center">
-                  <p className="text-muted-foreground">Nothing here yet</p>
-                  <Button
-                    onClick={() => navigate("/expenses/new")}
-                    variant="outline"
-                    className="mt-4"
-                  >
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add one manually
-                  </Button>
+                  <p className="text-muted-foreground">
+                    {NAMED_VIEW_EMPTY_COPY[namedView]}
+                  </p>
+                  {/* "Add one manually" only makes sense on a genuinely empty
+                      account -- offering it under "Dismissed" or "Needs a
+                      receipt" would read as a non sequitur when the view is
+                      simply, correctly, empty. */}
+                  {namedView === "everything" && (
+                    <Button
+                      onClick={() => navigate("/expenses/new")}
+                      variant="outline"
+                      className="mt-4"
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add one manually
+                    </Button>
+                  )}
                 </Card>
               ) : (
                 <div className="space-y-3">
