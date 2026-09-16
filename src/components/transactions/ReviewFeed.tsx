@@ -275,8 +275,8 @@ function GroupRow({
 
         {isOtc && many && (
           <p className="mt-2 text-xs text-muted-foreground">
-            These vary trip to trip, so there is one answer per trip — open the
-            list to split any healthcare items out of a particular one.
+            These vary trip to trip — mark a trip healthcare or not, or open it
+            to split the healthcare items out of a particular one.
           </p>
         )}
       </div>
@@ -284,23 +284,21 @@ function GroupRow({
       <div className="flex flex-wrap items-center gap-2 sm:shrink-0 sm:flex-nowrap">
         {many ? (
           <>
-            {/* The OTC lane never gets this button. A bulk "all of these
-                  are healthcare" here would mean "every Costco trip is
-                  healthcare" — the one dangerous rule this app can offer —
-                  and it stays unreachable by never rendering the control
-                  that would create it, rather than by a check somewhere
-                  else. See docs/TRANSACTION_REVIEW_SPEC.md D17. */}
-            {!isOtc && (
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={busy || leavingGroup}
-                onClick={() => fadeThenDecideGroup(true)}
-              >
-                <CheckCircle2 className="mr-1 h-4 w-4" />
-                All healthcare
-              </Button>
-            )}
+            {/* No special-casing by lane: a basket can be entirely
+                  healthcare items just as easily as entirely groceries, so
+                  this button is offered here exactly like it is in the
+                  medical lane -- see docs/TRANSACTION_REVIEW_SPEC.md D17
+                  (superseded 2026-09-16; that note assumed the wrong thing
+                  about the OTC lane and is kept in the doc only as history). */}
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy || leavingGroup}
+              onClick={() => fadeThenDecideGroup(true)}
+            >
+              <CheckCircle2 className="mr-1 h-4 w-4" />
+              All healthcare
+            </Button>
             <Button
               size="sm"
               variant="ghost"
@@ -341,17 +339,15 @@ function GroupRow({
           </>
         ) : (
           <>
-            {!isOtc && (
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={busy || leavingGroup}
-                onClick={() => fadeThenDecideGroup(true)}
-              >
-                <CheckCircle2 className="mr-1 h-4 w-4" />
-                Healthcare
-              </Button>
-            )}
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy || leavingGroup}
+              onClick={() => fadeThenDecideGroup(true)}
+            >
+              <CheckCircle2 className="mr-1 h-4 w-4" />
+              Healthcare
+            </Button>
             <Button
               size="sm"
               variant="ghost"
@@ -365,44 +361,38 @@ function GroupRow({
               <>
                 {/* Spec D34: at narrow widths a row shows two buttons
                       (Healthcare / Not healthcare) plus an overflow menu,
-                      not three buttons wrapping onto two lines. The OTC
-                      lane never shows the Healthcare button here (see
-                      above), so its row is only ever two buttons and Split
-                      stays inline at every width -- there is nothing to
-                      make room for. */}
+                      not three buttons wrapping onto two lines -- applies
+                      identically in both lanes now that Healthcare is
+                      offered in both. */}
                 <Button
                   size="sm"
                   variant="outline"
                   disabled={busy || leavingGroup}
                   onClick={() => onSplitTransaction(solo)}
-                  className={cn(!isOtc && "hidden sm:inline-flex")}
+                  className="hidden sm:inline-flex"
                 >
                   <Split className="mr-1 h-4 w-4" />
-                  {isOtc ? "Split out healthcare items" : "Split"}
+                  Split
                 </Button>
-                {!isOtc && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        disabled={busy || leavingGroup}
-                        className="h-8 w-8 p-0 text-muted-foreground sm:hidden"
-                      >
-                        <MoreHorizontal className="h-4 w-4" />
-                        <span className="sr-only">More actions</span>
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem
-                        onClick={() => onSplitTransaction(solo)}
-                      >
-                        <Split className="mr-2 h-4 w-4" />
-                        Split
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={busy || leavingGroup}
+                      className="h-8 w-8 p-0 text-muted-foreground sm:hidden"
+                    >
+                      <MoreHorizontal className="h-4 w-4" />
+                      <span className="sr-only">More actions</span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => onSplitTransaction(solo)}>
+                      <Split className="mr-2 h-4 w-4" />
+                      Split
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </>
             )}
           </>
@@ -429,7 +419,7 @@ function GroupRow({
         <SwipeableRow
           enabled={FF.SWIPE_TO_TRIAGE}
           disabled={busy || leavingGroup}
-          onConfirm={!isOtc ? () => fadeThenDecideGroup(true) : undefined}
+          onConfirm={() => fadeThenDecideGroup(true)}
           onDismiss={() => fadeThenDecideGroup(false)}
           onTap={() => setSoloDetailOpen((v) => !v)}
           showCoachMark={showCoachMark}
@@ -446,7 +436,7 @@ function GroupRow({
           amount={solo.amount}
           category={solo.category}
           explanation={solo.classification_explanation}
-          onConfirm={!isOtc ? () => fadeThenDecideGroup(true) : undefined}
+          onConfirm={() => fadeThenDecideGroup(true)}
           onDismiss={() => fadeThenDecideGroup(false)}
           onSplit={() => onSplitTransaction(solo)}
           onClose={() => setSoloDetailOpen(false)}

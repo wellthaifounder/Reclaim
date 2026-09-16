@@ -127,6 +127,14 @@ dangerous rule — _"every Costco trip is healthcare"_ — never appears anyway,
 group has no all-of-these-are-healthcare button in the first place. The model polices itself
 without a special case.
 
+**Superseded 2026-09-16.** The last sentence above was wrong on its own terms: a trip can be
+entirely OTC medical items (a basket of only Tylenol and bandages), so withholding the
+healthcare button there was itself the special case D17 says to avoid, not an avoidance of
+one. The button is now offered in the OTC lane exactly as in the medical lane, bulk and solo
+alike, and the "every Costco trip is healthcare" rule this paragraph called dangerous is
+simply the rule that fires when the user has, in fact, said every Costco trip is healthcare —
+same as it would for any other merchant. Left here for the record, not as current behavior.
+
 **On D18.** Offering "always treat Walgreens as healthcare" while sixteen Walgreens rows sit
 undecided two inches below is the app claiming to know something the user has not said. This
 is a truthfulness constraint, not a safety veto — the button is always reachable, it just
