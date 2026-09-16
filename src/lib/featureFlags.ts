@@ -50,6 +50,19 @@ export const FF = {
     "VITE_FF_SCOPE_GET_STARTED_TO_DASHBOARD",
   ),
 
+  /**
+   * Spec D35: swipe right for healthcare, left to dismiss, on the review
+   * queue's touch-only rows (a solo transaction card, or a row inside an
+   * already-expanded group -- never a collapsed group, which could bulk
+   * decide dozens of transactions in one accidental gesture). Buttons stay
+   * exactly as they are regardless of this flag; swipe is purely additive.
+   *
+   * Set VITE_FF_SWIPE_TO_TRIAGE=false to disable if a gesture misbehaves on
+   * some device/browser combination -- a redeploy away, not an emergency
+   * revert.
+   */
+  SWIPE_TO_TRIAGE: flagOnByDefault("VITE_FF_SWIPE_TO_TRIAGE"),
+
   // BILLS_LEDGER_IA_COLLAPSE removed 2026-08-20. It existed to test merging
   // the Ledger into the expense list; the Ledger has since been retired
   // outright, so there are no longer two arrangements to choose between.

@@ -55,10 +55,9 @@
 // time as the receipt-offer toast above, instead of one silently pre-empting
 // the other.
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { format } from "date-fns";
 import {
   useReviewFeed,
   useReviewGroupTransactions,
@@ -68,7 +67,7 @@ import {
   type ReviewGroupTransaction,
 } from "@/hooks/useReviewFeed";
 import { cn } from "@/lib/utils";
-import { parseDateOnly } from "@/lib/dates";
+import { formatFeedDate } from "@/components/transactions/reviewFeedDates";
 import { supabase } from "@/integrations/supabase/client";
 import { logError } from "@/utils/errorHandler";
 import { Button } from "@/components/ui/button";
@@ -105,19 +104,10 @@ import {
 } from "@/components/transactions/CreateRulePrompt";
 import { ExpenseSplitDialog } from "@/components/transactions/ExpenseSplitDialog";
 import { SubstantiateDialog } from "@/components/expense/SubstantiateDialog";
-
-/**
- * transaction_date, earliest_date and latest_date are Postgres `date` columns:
- * calendar days with no time and no zone. `new Date("2026-09-02")` parses that
- * as UTC midnight, which is the evening of Sep 1 anywhere west of Greenwich —
- * so every date in this feed rendered a day early for users in the Americas.
- * src/lib/dates.ts exists for exactly this and the rest of the app already uses
- * it; the review feed had simply never been switched over.
- */
-function formatFeedDate(value: string, pattern: string): string {
-  const parsed = parseDateOnly(value);
-  return parsed ? format(parsed, pattern) : value;
-}
+import { SwipeableRow } from "@/components/transactions/SwipeableRow";
+import { ReviewRowDetail } from "@/components/transactions/ReviewRowDetail";
+import { useSwipeCoachMark } from "@/hooks/useSwipeCoachMark";
+import { FF } from "@/lib/featureFlags";
 
 /**
  * Spec D11: a decided row fades over ~200ms rather than vanishing the instant
@@ -152,6 +142,8 @@ function GroupRow({
   onSplitTransaction,
   onDecideTransaction,
   busy,
+  showCoachMark,
+  onCoachMarkDone,
 }: {
   group: ReviewGroup;
   /**
@@ -180,6 +172,11 @@ function GroupRow({
     group: ReviewGroup,
   ) => void;
   busy: boolean;
+  /** Spec D35: true for exactly one GroupRow per queue visit — the one
+   *  holding whichever row claims the coach mark. See ReviewFeed's
+   *  coachMarkTargetKey. */
+  showCoachMark: boolean;
+  onCoachMarkDone: () => void;
 }) {
   const many = group.txn_count > 1;
   const isOtc = group.lane === "possible_otc";
@@ -190,6 +187,10 @@ function GroupRow({
   const [leavingGroup, setLeavingGroup] = useState(false);
   // Fades one row inside the expanded list, independent of the card itself.
   const [leavingTxnIds, setLeavingTxnIds] = useState<Set<string>>(new Set());
+  // Spec D35's "tap for detail": at most one detail panel open at a time,
+  // between the solo card and any row inside an expanded list.
+  const [soloDetailOpen, setSoloDetailOpen] = useState(false);
+  const [detailOpenTxnId, setDetailOpenTxnId] = useState<string | null>(null);
 
   // Only fetches once opened, and only while there's a list to open: a group
   // that has just been whittled down to one row (a sibling was just decided)
@@ -244,6 +245,172 @@ function GroupRow({
     );
   };
 
+  const headerRow = (
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <Store className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <p className="font-medium truncate">{group.display_name}</p>
+          {many && (
+            <Badge variant="secondary" className="text-xs">
+              {group.txn_count} transactions
+            </Badge>
+          )}
+        </div>
+
+        <p className="mt-1 text-sm text-muted-foreground">
+          <Money value={group.total_amount} />
+          {many ? " total" : ""} &middot; {dateRange}
+        </p>
+
+        {group.explanation && (
+          <p className="mt-2 flex items-start gap-1.5 text-xs text-muted-foreground">
+            <HelpCircle
+              className="mt-0.5 h-3 w-3 shrink-0"
+              aria-hidden="true"
+            />
+            <span>{group.explanation}</span>
+          </p>
+        )}
+
+        {isOtc && many && (
+          <p className="mt-2 text-xs text-muted-foreground">
+            These vary trip to trip, so there is one answer per trip — open the
+            list to split any healthcare items out of a particular one.
+          </p>
+        )}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 sm:shrink-0 sm:flex-nowrap">
+        {many ? (
+          <>
+            {/* The OTC lane never gets this button. A bulk "all of these
+                  are healthcare" here would mean "every Costco trip is
+                  healthcare" — the one dangerous rule this app can offer —
+                  and it stays unreachable by never rendering the control
+                  that would create it, rather than by a check somewhere
+                  else. See docs/TRANSACTION_REVIEW_SPEC.md D17. */}
+            {!isOtc && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busy || leavingGroup}
+                onClick={() => fadeThenDecideGroup(true)}
+              >
+                <CheckCircle2 className="mr-1 h-4 w-4" />
+                All healthcare
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={busy || leavingGroup}
+              onClick={() => fadeThenDecideGroup(false)}
+            >
+              <XCircle className="mr-1 h-4 w-4" />
+              {isOtc ? "None had healthcare items" : "Not healthcare"}
+            </Button>
+            {/* Spec D34: with "All healthcare" and "Not healthcare" both
+                  spelled out in full, a third full-width text button here
+                  is what wrapped this row onto three lines at 390px. Unlike
+                  Split on the rows below, this button IS the primary way
+                  into the group -- hiding it in an overflow menu would bury
+                  the one action most people take first. Shrinking it to an
+                  icon below sm keeps it a single, always-visible tap instead. */}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setExpanded((v) => !v)}
+              aria-expanded={expanded}
+              aria-controls={listId}
+              aria-label={
+                expanded ? "Hide" : `Show ${group.txn_count} transactions`
+              }
+            >
+              <ChevronDown
+                className={cn(
+                  "h-4 w-4 transition-transform sm:mr-1",
+                  expanded && "rotate-180",
+                )}
+                aria-hidden="true"
+              />
+              <span className="hidden sm:inline" aria-hidden="true">
+                {expanded ? "Hide" : `Show ${group.txn_count}`}
+              </span>
+            </Button>
+          </>
+        ) : (
+          <>
+            {!isOtc && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busy || leavingGroup}
+                onClick={() => fadeThenDecideGroup(true)}
+              >
+                <CheckCircle2 className="mr-1 h-4 w-4" />
+                Healthcare
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={busy || leavingGroup}
+              onClick={() => fadeThenDecideGroup(false)}
+            >
+              <XCircle className="mr-1 h-4 w-4" />
+              {isOtc ? "No healthcare items here" : "Not healthcare"}
+            </Button>
+            {solo && (
+              <>
+                {/* Spec D34: at narrow widths a row shows two buttons
+                      (Healthcare / Not healthcare) plus an overflow menu,
+                      not three buttons wrapping onto two lines. The OTC
+                      lane never shows the Healthcare button here (see
+                      above), so its row is only ever two buttons and Split
+                      stays inline at every width -- there is nothing to
+                      make room for. */}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy || leavingGroup}
+                  onClick={() => onSplitTransaction(solo)}
+                  className={cn(!isOtc && "hidden sm:inline-flex")}
+                >
+                  <Split className="mr-1 h-4 w-4" />
+                  {isOtc ? "Split out healthcare items" : "Split"}
+                </Button>
+                {!isOtc && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={busy || leavingGroup}
+                        className="h-8 w-8 p-0 text-muted-foreground sm:hidden"
+                      >
+                        <MoreHorizontal className="h-4 w-4" />
+                        <span className="sr-only">More actions</span>
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem
+                        onClick={() => onSplitTransaction(solo)}
+                      >
+                        <Split className="mr-2 h-4 w-4" />
+                        Split
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <div
       className={cn(
@@ -252,169 +419,40 @@ function GroupRow({
           "pointer-events-none max-h-0 overflow-hidden p-0 opacity-0",
       )}
     >
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <Store className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <p className="font-medium truncate">{group.display_name}</p>
-            {many && (
-              <Badge variant="secondary" className="text-xs">
-                {group.txn_count} transactions
-              </Badge>
-            )}
-          </div>
+      {/* Spec D35: swipe never applies to a collapsed multi-transaction
+          group -- one careless gesture could bulk-decide dozens of
+          transactions at once. A solo group's card IS one transaction, so
+          it gets the gesture; an unopened "many" group doesn't. */}
+      {many ? (
+        headerRow
+      ) : (
+        <SwipeableRow
+          enabled={FF.SWIPE_TO_TRIAGE}
+          disabled={busy || leavingGroup}
+          onConfirm={!isOtc ? () => fadeThenDecideGroup(true) : undefined}
+          onDismiss={() => fadeThenDecideGroup(false)}
+          onTap={() => setSoloDetailOpen((v) => !v)}
+          showCoachMark={showCoachMark}
+          onCoachMarkDone={onCoachMarkDone}
+        >
+          {headerRow}
+        </SwipeableRow>
+      )}
 
-          <p className="mt-1 text-sm text-muted-foreground">
-            <Money value={group.total_amount} />
-            {many ? " total" : ""} &middot; {dateRange}
-          </p>
-
-          {group.explanation && (
-            <p className="mt-2 flex items-start gap-1.5 text-xs text-muted-foreground">
-              <HelpCircle
-                className="mt-0.5 h-3 w-3 shrink-0"
-                aria-hidden="true"
-              />
-              <span>{group.explanation}</span>
-            </p>
-          )}
-
-          {isOtc && many && (
-            <p className="mt-2 text-xs text-muted-foreground">
-              These vary trip to trip, so there is one answer per trip — open
-              the list to split any healthcare items out of a particular one.
-            </p>
-          )}
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2 sm:shrink-0 sm:flex-nowrap">
-          {many ? (
-            <>
-              {/* The OTC lane never gets this button. A bulk "all of these
-                  are healthcare" here would mean "every Costco trip is
-                  healthcare" — the one dangerous rule this app can offer —
-                  and it stays unreachable by never rendering the control
-                  that would create it, rather than by a check somewhere
-                  else. See docs/TRANSACTION_REVIEW_SPEC.md D17. */}
-              {!isOtc && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={busy || leavingGroup}
-                  onClick={() => fadeThenDecideGroup(true)}
-                >
-                  <CheckCircle2 className="mr-1 h-4 w-4" />
-                  All healthcare
-                </Button>
-              )}
-              <Button
-                size="sm"
-                variant="ghost"
-                disabled={busy || leavingGroup}
-                onClick={() => fadeThenDecideGroup(false)}
-              >
-                <XCircle className="mr-1 h-4 w-4" />
-                {isOtc ? "None had healthcare items" : "Not healthcare"}
-              </Button>
-              {/* Spec D34: with "All healthcare" and "Not healthcare" both
-                  spelled out in full, a third full-width text button here
-                  is what wrapped this row onto three lines at 390px. Unlike
-                  Split on the rows below, this button IS the primary way
-                  into the group -- hiding it in an overflow menu would bury
-                  the one action most people take first. Shrinking it to an
-                  icon below sm keeps it a single, always-visible tap instead. */}
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setExpanded((v) => !v)}
-                aria-expanded={expanded}
-                aria-controls={listId}
-                aria-label={
-                  expanded ? "Hide" : `Show ${group.txn_count} transactions`
-                }
-              >
-                <ChevronDown
-                  className={cn(
-                    "h-4 w-4 transition-transform sm:mr-1",
-                    expanded && "rotate-180",
-                  )}
-                  aria-hidden="true"
-                />
-                <span className="hidden sm:inline" aria-hidden="true">
-                  {expanded ? "Hide" : `Show ${group.txn_count}`}
-                </span>
-              </Button>
-            </>
-          ) : (
-            <>
-              {!isOtc && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={busy || leavingGroup}
-                  onClick={() => fadeThenDecideGroup(true)}
-                >
-                  <CheckCircle2 className="mr-1 h-4 w-4" />
-                  Healthcare
-                </Button>
-              )}
-              <Button
-                size="sm"
-                variant="ghost"
-                disabled={busy || leavingGroup}
-                onClick={() => fadeThenDecideGroup(false)}
-              >
-                <XCircle className="mr-1 h-4 w-4" />
-                {isOtc ? "No healthcare items here" : "Not healthcare"}
-              </Button>
-              {solo && (
-                <>
-                  {/* Spec D34: at narrow widths a row shows two buttons
-                      (Healthcare / Not healthcare) plus an overflow menu,
-                      not three buttons wrapping onto two lines. The OTC
-                      lane never shows the Healthcare button here (see
-                      above), so its row is only ever two buttons and Split
-                      stays inline at every width -- there is nothing to
-                      make room for. */}
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={busy || leavingGroup}
-                    onClick={() => onSplitTransaction(solo)}
-                    className={cn(!isOtc && "hidden sm:inline-flex")}
-                  >
-                    <Split className="mr-1 h-4 w-4" />
-                    {isOtc ? "Split out healthcare items" : "Split"}
-                  </Button>
-                  {!isOtc && (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          disabled={busy || leavingGroup}
-                          className="h-8 w-8 p-0 text-muted-foreground sm:hidden"
-                        >
-                          <MoreHorizontal className="h-4 w-4" />
-                          <span className="sr-only">More actions</span>
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          onClick={() => onSplitTransaction(solo)}
-                        >
-                          <Split className="mr-2 h-4 w-4" />
-                          Split
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  )}
-                </>
-              )}
-            </>
-          )}
-        </div>
-      </div>
+      {!many && solo && soloDetailOpen && (
+        <ReviewRowDetail
+          vendor={solo.vendor || solo.description || group.display_name}
+          date={solo.transaction_date}
+          amount={solo.amount}
+          category={solo.category}
+          explanation={solo.classification_explanation}
+          onConfirm={!isOtc ? () => fadeThenDecideGroup(true) : undefined}
+          onDismiss={() => fadeThenDecideGroup(false)}
+          onSplit={() => onSplitTransaction(solo)}
+          onClose={() => setSoloDetailOpen(false)}
+          busy={busy || leavingGroup}
+        />
+      )}
 
       {expanded && many && (
         <div id={listId} className="mt-3 space-y-2 border-t pt-3">
@@ -431,81 +469,114 @@ function GroupRow({
             </p>
           )}
 
-          {transactions?.map((txn) => (
-            <div
-              key={txn.id}
-              className={cn(
-                "flex flex-col gap-2 rounded-md border bg-muted/30 p-3 transition-all duration-200 sm:flex-row sm:items-center sm:justify-between",
-                leavingTxnIds.has(txn.id) &&
-                  "pointer-events-none max-h-0 overflow-hidden border-0 p-0 opacity-0",
-              )}
-            >
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">
-                  {txn.vendor || txn.description}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {formatFeedDate(txn.transaction_date, "MMM d, yyyy")} &middot;{" "}
-                  <Money value={txn.amount} />
-                </p>
+          {transactions?.map((txn) => {
+            const rowLeaving = leavingTxnIds.has(txn.id);
+            const rowContent = (
+              <div
+                className={cn(
+                  "flex flex-col gap-2 rounded-md border bg-muted/30 p-3 transition-all duration-200 sm:flex-row sm:items-center sm:justify-between",
+                  rowLeaving &&
+                    "pointer-events-none max-h-0 overflow-hidden border-0 p-0 opacity-0",
+                )}
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">
+                    {txn.vendor || txn.description}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {formatFeedDate(txn.transaction_date, "MMM d, yyyy")}{" "}
+                    &middot; <Money value={txn.amount} />
+                  </p>
+                </div>
+                {/* Three answers, because a basket has three honest outcomes:
+                    all of it counted, none of it did, or only part did. */}
+                <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy || rowLeaving}
+                    onClick={() => fadeThenDecideTransaction(txn, true)}
+                  >
+                    <CheckCircle2 className="mr-1 h-4 w-4" />
+                    Healthcare
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={busy || rowLeaving}
+                    onClick={() => fadeThenDecideTransaction(txn, false)}
+                  >
+                    <XCircle className="mr-1 h-4 w-4" />
+                    Not healthcare
+                  </Button>
+                  {/* Spec D34: Healthcare / Not healthcare stay visible at
+                      every width; Split -- the least-used of the three
+                      answers -- moves behind an overflow menu below sm
+                      instead of wrapping this row onto a second line. */}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy || rowLeaving}
+                    onClick={() => onSplitTransaction(txn)}
+                    className="hidden sm:inline-flex"
+                  >
+                    <Split className="mr-1 h-4 w-4" />
+                    Split
+                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={busy || rowLeaving}
+                        className="h-8 w-8 p-0 text-muted-foreground sm:hidden"
+                      >
+                        <MoreHorizontal className="h-4 w-4" />
+                        <span className="sr-only">More actions</span>
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => onSplitTransaction(txn)}>
+                        <Split className="mr-2 h-4 w-4" />
+                        Split
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
               </div>
-              {/* Three answers, because a basket has three honest outcomes:
-                  all of it counted, none of it did, or only part did. */}
-              <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={busy || leavingTxnIds.has(txn.id)}
-                  onClick={() => fadeThenDecideTransaction(txn, true)}
+            );
+            return (
+              <div key={txn.id}>
+                <SwipeableRow
+                  enabled={FF.SWIPE_TO_TRIAGE}
+                  disabled={busy || rowLeaving}
+                  onConfirm={() => fadeThenDecideTransaction(txn, true)}
+                  onDismiss={() => fadeThenDecideTransaction(txn, false)}
+                  onTap={() =>
+                    setDetailOpenTxnId((cur) =>
+                      cur === txn.id ? null : txn.id,
+                    )
+                  }
                 >
-                  <CheckCircle2 className="mr-1 h-4 w-4" />
-                  Healthcare
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={busy || leavingTxnIds.has(txn.id)}
-                  onClick={() => fadeThenDecideTransaction(txn, false)}
-                >
-                  <XCircle className="mr-1 h-4 w-4" />
-                  Not healthcare
-                </Button>
-                {/* Spec D34: Healthcare / Not healthcare stay visible at
-                    every width; Split -- the least-used of the three
-                    answers -- moves behind an overflow menu below sm
-                    instead of wrapping this row onto a second line. */}
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={busy || leavingTxnIds.has(txn.id)}
-                  onClick={() => onSplitTransaction(txn)}
-                  className="hidden sm:inline-flex"
-                >
-                  <Split className="mr-1 h-4 w-4" />
-                  Split
-                </Button>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      disabled={busy || leavingTxnIds.has(txn.id)}
-                      className="h-8 w-8 p-0 text-muted-foreground sm:hidden"
-                    >
-                      <MoreHorizontal className="h-4 w-4" />
-                      <span className="sr-only">More actions</span>
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => onSplitTransaction(txn)}>
-                      <Split className="mr-2 h-4 w-4" />
-                      Split
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                  {rowContent}
+                </SwipeableRow>
+                {detailOpenTxnId === txn.id && (
+                  <ReviewRowDetail
+                    vendor={txn.vendor || txn.description || "Unknown vendor"}
+                    date={txn.transaction_date}
+                    amount={txn.amount}
+                    category={txn.category}
+                    explanation={txn.classification_explanation}
+                    onConfirm={() => fadeThenDecideTransaction(txn, true)}
+                    onDismiss={() => fadeThenDecideTransaction(txn, false)}
+                    onSplit={() => onSplitTransaction(txn)}
+                    onClose={() => setDetailOpenTxnId(null)}
+                    busy={busy || rowLeaving}
+                  />
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
 
           {transactions?.length === 0 && !loadingTransactions && (
             <p className="text-sm text-muted-foreground">
@@ -544,6 +615,22 @@ export function ReviewFeed() {
   // The expense a receipt-offer toast's action was clicked for, so the
   // dialog opens on exactly the one the user just confirmed.
   const [substantiateId, setSubstantiateId] = useState<string | null>(null);
+
+  // Spec D35: the coach mark claims exactly one row per queue visit -- the
+  // first solo (single-transaction) group, medical lane first. Lane is part
+  // of the key for the same reason listId includes it: the same merchant
+  // name can produce a medical group and an OTC group at once. If the queue
+  // happens to hold no solo groups on load, no row claims it -- accepted
+  // rather than also reaching into collapsed groups' hidden per-transaction
+  // rows to find one, which would need those lists fetched just to place a
+  // coach mark.
+  const [coachMarkSeen, markCoachMarkSeen] = useSwipeCoachMark();
+  const coachMarkTargetKey = useMemo(() => {
+    const soloGroup = [...medicalGroups, ...otcGroups].find(
+      (g) => g.txn_count === 1,
+    );
+    return soloGroup ? `${soloGroup.merchant_key}-${soloGroup.lane}` : null;
+  }, [medicalGroups, otcGroups]);
 
   useEffect(() => {
     supabase.auth
@@ -881,6 +968,11 @@ export function ReviewFeed() {
                 }
                 onSplitTransaction={setSplitTarget}
                 onDecideTransaction={handleDecideTransaction}
+                showCoachMark={
+                  !coachMarkSeen &&
+                  `${group.merchant_key}-${group.lane}` === coachMarkTargetKey
+                }
+                onCoachMarkDone={markCoachMarkSeen}
               />
             ))}
           </CardContent>
@@ -908,6 +1000,11 @@ export function ReviewFeed() {
                 }
                 onSplitTransaction={setSplitTarget}
                 onDecideTransaction={handleDecideTransaction}
+                showCoachMark={
+                  !coachMarkSeen &&
+                  `${group.merchant_key}-${group.lane}` === coachMarkTargetKey
+                }
+                onCoachMarkDone={markCoachMarkSeen}
               />
             ))}
           </CardContent>
