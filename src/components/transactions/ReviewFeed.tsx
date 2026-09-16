@@ -316,21 +316,33 @@ function GroupRow({
                 <XCircle className="mr-1 h-4 w-4" />
                 {isOtc ? "None had healthcare items" : "Not healthcare"}
               </Button>
+              {/* Spec D34: with "All healthcare" and "Not healthcare" both
+                  spelled out in full, a third full-width text button here
+                  is what wrapped this row onto three lines at 390px. Unlike
+                  Split on the rows below, this button IS the primary way
+                  into the group -- hiding it in an overflow menu would bury
+                  the one action most people take first. Shrinking it to an
+                  icon below sm keeps it a single, always-visible tap instead. */}
               <Button
                 size="sm"
                 variant="outline"
                 onClick={() => setExpanded((v) => !v)}
                 aria-expanded={expanded}
                 aria-controls={listId}
+                aria-label={
+                  expanded ? "Hide" : `Show ${group.txn_count} transactions`
+                }
               >
                 <ChevronDown
                   className={cn(
-                    "mr-1 h-4 w-4 transition-transform",
+                    "h-4 w-4 transition-transform sm:mr-1",
                     expanded && "rotate-180",
                   )}
                   aria-hidden="true"
                 />
-                {expanded ? "Hide" : `Show ${group.txn_count}`}
+                <span className="hidden sm:inline" aria-hidden="true">
+                  {expanded ? "Hide" : `Show ${group.txn_count}`}
+                </span>
               </Button>
             </>
           ) : (
