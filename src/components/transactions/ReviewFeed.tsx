@@ -83,6 +83,12 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
+import {
   CheckCircle2,
   XCircle,
   HelpCircle,
@@ -91,6 +97,7 @@ import {
   Store,
   Split,
   ChevronDown,
+  MoreHorizontal,
 } from "lucide-react";
 import {
   CreateRulePrompt,
@@ -349,15 +356,48 @@ function GroupRow({
                 {isOtc ? "No healthcare items here" : "Not healthcare"}
               </Button>
               {solo && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={busy || leavingGroup}
-                  onClick={() => onSplitTransaction(solo)}
-                >
-                  <Split className="mr-1 h-4 w-4" />
-                  {isOtc ? "Split out healthcare items" : "Split"}
-                </Button>
+                <>
+                  {/* Spec D34: at narrow widths a row shows two buttons
+                      (Healthcare / Not healthcare) plus an overflow menu,
+                      not three buttons wrapping onto two lines. The OTC
+                      lane never shows the Healthcare button here (see
+                      above), so its row is only ever two buttons and Split
+                      stays inline at every width -- there is nothing to
+                      make room for. */}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy || leavingGroup}
+                    onClick={() => onSplitTransaction(solo)}
+                    className={cn(!isOtc && "hidden sm:inline-flex")}
+                  >
+                    <Split className="mr-1 h-4 w-4" />
+                    {isOtc ? "Split out healthcare items" : "Split"}
+                  </Button>
+                  {!isOtc && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={busy || leavingGroup}
+                          className="h-8 w-8 p-0 text-muted-foreground sm:hidden"
+                        >
+                          <MoreHorizontal className="h-4 w-4" />
+                          <span className="sr-only">More actions</span>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onClick={() => onSplitTransaction(solo)}
+                        >
+                          <Split className="mr-2 h-4 w-4" />
+                          Split
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
+                </>
               )}
             </>
           )}
@@ -418,15 +458,39 @@ function GroupRow({
                   <XCircle className="mr-1 h-4 w-4" />
                   Not healthcare
                 </Button>
+                {/* Spec D34: Healthcare / Not healthcare stay visible at
+                    every width; Split -- the least-used of the three
+                    answers -- moves behind an overflow menu below sm
+                    instead of wrapping this row onto a second line. */}
                 <Button
                   size="sm"
                   variant="outline"
                   disabled={busy || leavingTxnIds.has(txn.id)}
                   onClick={() => onSplitTransaction(txn)}
+                  className="hidden sm:inline-flex"
                 >
                   <Split className="mr-1 h-4 w-4" />
                   Split
                 </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={busy || leavingTxnIds.has(txn.id)}
+                      className="h-8 w-8 p-0 text-muted-foreground sm:hidden"
+                    >
+                      <MoreHorizontal className="h-4 w-4" />
+                      <span className="sr-only">More actions</span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => onSplitTransaction(txn)}>
+                      <Split className="mr-2 h-4 w-4" />
+                      Split
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
           ))}
