@@ -203,7 +203,7 @@ CREATE OR REPLACE FUNCTION public.match_reimbursement_deposits(p_user_id uuid DE
  RETURNS integer
  LANGUAGE plpgsql
  SECURITY DEFINER
- SET search_path TO 'public', 'pg_temp'
+ SET search_path = public, pg_temp
 AS $function$
 DECLARE
   v_user      UUID := COALESCE(p_user_id, auth.uid());
