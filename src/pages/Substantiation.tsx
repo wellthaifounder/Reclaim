@@ -10,25 +10,25 @@
 //     comes after the brief §8 dashboard's "READY TO SUBMIT" bucket
 //     (Phase 5 will surface this prominently from the home screen).
 //   - "generate": pick which ELIGIBLE expenses to include + format(s),
-//     generate client-side, download, and mark the underlying invoices
-//     SUBMITTED.
+//     generate client-side, and download. Nothing is locked here -- see
+//     below.
 //
 // Workstream E1: this is now the ONLY way to build a reimbursement claim. The
 // legacy path (/hsa-reimbursement and the ledger's Claim HSA dialog) is gone,
 // and those surfaces hand their selection here through router state instead.
 // That mattered for more than tidiness: the old flow marked expenses
-// 'reimbursed' the instant the PDF downloaded, before the custodian had seen
-// the claim. This one locks them and waits for the deposit.
+// 'reimbursed' the instant the PDF downloaded, before the custodian had even
+// seen the claim.
 //
-// SUBMITTED transition (the W2 piece):
-//   - On successful generation, every included invoice gets
-//     lifecycle_status='submitted', submitted_at=now(), submitted_record_id
-//     set to the new record's id. The first record an invoice lands in
-//     "owns" the back-link; subsequent records can reference the same
-//     invoice via substantiation_record_items but won't overwrite the
-//     submitted_record_id. This is intentional — if the user generates
-//     two records covering the same expense, the FIRST one is treated as
-//     canonical for the lifecycle.
+// Spec D30-D31: generating is a DRAFT, not a commitment. It used to lock and
+// SUBMIT the underlying invoices immediately, which blocked the honest
+// generate -> spot a mistake -> pull it -> regenerate loop behind a lock that
+// had not earned its authority yet. Locking now happens only when the user
+// marks a draft "sent" (markSent, calling mark_record_sent) -- that is what
+// sets lifecycle_status='submitted', submitted_at=now(), and
+// submitted_record_id on every included invoice. The first record an invoice
+// is locked into "owns" the back-link; a later one referencing the same
+// invoice via substantiation_record_items won't overwrite it.
 
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -129,7 +129,20 @@ interface PastRecord {
   total_amount: number;
   expense_count: number;
   formats_generated: string[];
-  status: "generated" | "reimbursed" | "voided";
+  /**
+   * Spec D30-D31: 'generated' is a draft that locks nothing. 'sent' is the
+   * user telling us it actually went to their custodian -- that is what
+   * locks the expenses inside it. A record (purpose='record') never reaches
+   * 'sent'; it has no custodian to send to.
+   */
+  status: "generated" | "sent" | "reimbursed" | "voided";
+  /**
+   * Whether this claim was EVER marked sent, independent of its current
+   * status. A withdrawn claim that was actually sent, and a rebuilt draft
+   * that never was, both end up status='voided' -- this is what tells them
+   * apart in the "Sent to X" / "Drafted for X, never sent" subtext.
+   */
+  sent_at: string | null;
   /** A document kept as evidence, or a request filed with a custodian. */
   purpose: "record" | "claim";
   custodian: string | null;
@@ -214,6 +227,61 @@ function unclaimableReason(e: EligibleExpense): string | null {
   }
 }
 
+/**
+ * The status badge for a past record.
+ *
+ * Spec D33: the word "voided" never reaches the screen, in either direction
+ * -- not a withdrawn claim, not a discarded record. And spec D30/D31 mean
+ * 'generated' no longer means "awaiting deposit" for a claim; that is now
+ * true only once it has been marked sent.
+ */
+function recordBadge(r: PastRecord): { label: string; className: string } {
+  const emerald =
+    "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800 text-xs";
+  const red =
+    "bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800 text-xs";
+  const amber =
+    "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800 text-xs";
+  const muted = "bg-muted text-muted-foreground border-border text-xs";
+
+  if (r.purpose === "record") {
+    return r.status === "voided"
+      ? { label: "Discarded", className: muted }
+      : { label: "Kept on file", className: muted };
+  }
+  switch (r.status) {
+    case "generated":
+      return { label: "Draft", className: muted };
+    case "sent":
+      return { label: "Awaiting deposit", className: amber };
+    case "reimbursed":
+      return { label: "Reimbursed", className: emerald };
+    case "voided":
+      return { label: "Withdrawn", className: red };
+  }
+}
+
+/**
+ * The custodian line under a past record.
+ *
+ * Keyed off sent_at rather than the current status, because a claim voided
+ * straight from draft and a claim withdrawn after actually being sent both
+ * end up status='voided' -- and only one of them was ever really "sent to"
+ * anyone.
+ */
+function custodianLine(r: PastRecord): string {
+  if (r.purpose === "record") return "Kept as evidence — nothing claimed";
+  if (r.sent_at) {
+    return r.custodian
+      ? `Sent to ${r.custodian}`
+      : "Sent — no custodian recorded";
+  }
+  const suffix = r.status === "voided" ? "never sent" : "not sent yet";
+  return r.custodian
+    ? `Drafted for ${r.custodian} — ${suffix}`
+    : `Draft — ${suffix}`;
+}
+
 const CURRENT_TAX_YEAR = new Date().getFullYear();
 
 /**
@@ -260,6 +328,34 @@ function explainClaimFailure(err: unknown): string {
     return "One of these expenses is already in an open claim — possibly one you built in another tab. We've refreshed the list; anything still claimable is shown.";
   }
   return "Could not generate the record. Please try again.";
+}
+
+/**
+ * Same idea as explainClaimFailure, for the "mark sent" action (spec D31).
+ *
+ * The interesting case is the same unique-index violation: a sibling draft
+ * that shared an expense with this one has already been sent (in another
+ * tab, or five minutes ago), so this one can no longer claim it too. That
+ * message already explains itself well enough to reuse verbatim.
+ */
+function explainSendFailure(err: unknown): string {
+  const message =
+    err instanceof Error
+      ? err.message
+      : typeof err === "object" && err && "message" in err
+        ? String((err as { message: unknown }).message)
+        : "";
+
+  if (/SEND_NOT_A_CLAIM/.test(message)) {
+    return "This is a saved record, not a claim — there's no custodian to send it to.";
+  }
+  if (/SEND_NOT_FOUND/.test(message)) {
+    return "That record could not be found. Please reload and try again.";
+  }
+  if (/SEND_WRONG_STATUS/.test(message)) {
+    return "That record has already moved on since this page loaded. We've refreshed the list.";
+  }
+  return explainClaimFailure(err);
 }
 
 /**
@@ -334,8 +430,8 @@ function reportPacket(
     toast.success(
       purpose === "record"
         ? `Medical Expense Record ${recordNumber} saved. Nothing was claimed — these expenses are still yours to claim whenever you want.`
-        : `Medical Expense Record ${recordNumber} generated.`,
-      purpose === "record" ? { duration: 8000 } : undefined,
+        : `${recordNumber} generated as a draft. Nothing is locked yet — mark it sent once you've actually filed it with your custodian.`,
+      { duration: 8000 },
     );
     return;
   }
@@ -412,6 +508,10 @@ export default function Substantiation() {
   const [voidReason, setVoidReason] = useState("");
   const [voiding, setVoiding] = useState(false);
 
+  // Spec D31/D32 — committing a draft, and rebuilding one in one click.
+  const [sendingId, setSendingId] = useState<string | null>(null);
+  const [rebuildingId, setRebuildingId] = useState<string | null>(null);
+
   const load = async () => {
     setLoading(true);
     try {
@@ -436,7 +536,7 @@ export default function Substantiation() {
         supabase
           .from("substantiation_records")
           .select(
-            "id, record_number, tax_year, generated_at, total_amount, expense_count, formats_generated, status, purpose, custodian, attested_no_double_benefit, attested_at",
+            "id, record_number, tax_year, generated_at, total_amount, expense_count, formats_generated, status, sent_at, purpose, custodian, attested_no_double_benefit, attested_at",
           )
           .eq("user_id", user.id)
           .order("generated_at", { ascending: false })
@@ -485,7 +585,8 @@ export default function Substantiation() {
           total_amount: Number(r.total_amount),
           expense_count: r.expense_count as number,
           formats_generated: (r.formats_generated as string[]) ?? [],
-          status: r.status as "generated" | "reimbursed" | "voided",
+          status: r.status as "generated" | "sent" | "reimbursed" | "voided",
+          sent_at: (r.sent_at as string | null) ?? null,
           // Every record written before the column existed was a claim, which
           // is what the database default says too -- so the fallback here
           // agrees with it rather than inventing a third answer.
@@ -776,6 +877,114 @@ export default function Substantiation() {
     }
   }
 
+  // ── Send a draft claim (Workstream D31) ──────────────────────────────────
+
+  /**
+   * The real commitment: tell Reclaim this draft actually went to the
+   * custodian. Generating and downloading the packet locks nothing -- this
+   * is the one action that does, because it is the only one describing
+   * something that actually happened outside the app.
+   */
+  async function markSent(record: PastRecord) {
+    setSendingId(record.id);
+    try {
+      const { data, error } = await supabase.rpc("mark_record_sent", {
+        p_record_id: record.id,
+      });
+      if (error) throw error;
+
+      const [result] = (data ?? []) as {
+        record_number: string;
+        expenses_locked: number;
+      }[];
+
+      setPastRecords((prev) =>
+        prev.map((r) =>
+          r.id === record.id
+            ? {
+                ...r,
+                status: "sent" as const,
+                sent_at: new Date().toISOString(),
+              }
+            : r,
+        ),
+      );
+      // Locking these expenses removes them from claimable_expenses(); the
+      // page's own idea of what is claimable was built before that happened.
+      await load();
+
+      toast.success(
+        `${result?.record_number ?? record.record_number} sent. ${
+          result?.expenses_locked ?? record.expense_count
+        } expense${(result?.expenses_locked ?? record.expense_count) === 1 ? "" : "s"} are now locked so they can't be claimed twice.`,
+      );
+    } catch (err) {
+      logError("Substantiation.markSent", err);
+      toast.error(explainSendFailure(err), { duration: 10000 });
+      await load();
+    } finally {
+      setSendingId(null);
+    }
+  }
+
+  // ── Rebuild a draft (spec D32/D33) ───────────────────────────────────────
+
+  /**
+   * "Rebuild this record" -- the one-click action a draft gets instead of a
+   * confirm-and-discard dialog. A draft never locked anything, so there is
+   * nothing to warn about: retiring it and reopening the generate flow
+   * pre-loaded with the same expenses is a single, reversible motion, not a
+   * decision that deserves friction. Internally this still calls the void
+   * RPC -- the word just never reaches the screen (spec D33).
+   */
+  async function rebuildDraft(record: PastRecord) {
+    setRebuildingId(record.id);
+    try {
+      const { data: itemRows, error: itemsErr } = await supabase.rpc(
+        "record_packet_items",
+        { p_record_id: record.id },
+      );
+      if (itemsErr) throw itemsErr;
+      const snapshotIds = ((itemRows ?? []) as unknown[]).map(
+        (r) => (r as Record<string, unknown>).invoice_id as string,
+      );
+      // A draft never locked its expenses, so this set is still exactly what
+      // is claimable -- computed before the void below, but nothing the void
+      // does can change it.
+      const stillEligible = snapshotIds.filter((id) =>
+        eligible.some((e) => e.id === id),
+      );
+
+      const { error: voidErr } = await supabase.rpc(
+        "void_substantiation_record",
+        { p_record_id: record.id, p_reason: "Rebuilt" },
+      );
+      if (voidErr) throw voidErr;
+
+      await load();
+
+      setPurpose("claim");
+      setTaxYear(record.tax_year);
+      setSelectedIds(new Set(stillEligible));
+      setFormatZip(true);
+      setFormatPdf(false);
+      setFormatCsv(false);
+      setAttested(false);
+      setPhase("generate");
+
+      if (stillEligible.length < snapshotIds.length) {
+        toast.info(
+          `${snapshotIds.length - stillEligible.length} of ${record.record_number}'s expenses are no longer eligible and were left out.`,
+        );
+      }
+    } catch (err) {
+      logError("Substantiation.rebuildDraft", err);
+      toast.error("Couldn't rebuild that record. Please try again.");
+    } finally {
+      setRebuildingId(null);
+    }
+  }
+
   // ── Re-download a past packet ────────────────────────────────────────────
 
   /**
@@ -1043,47 +1252,13 @@ export default function Substantiation() {
         throw itemsErr;
       }
 
-      // 3. Transition invoices to SUBMITTED — CLAIMS ONLY.
-      //
-      // This block is the difference between the two intents. Documenting an
-      // expense must leave it exactly as claimable as it was a moment earlier;
-      // a shoebox holder saves a record every year over a pile they will not
-      // touch for decades, and moving those expenses to locked_in_request would
-      // quietly take the money off the table. The database enforces the same
-      // split independently — record-purpose items are excluded from both the
-      // claim lock and claimable_expenses() — so a future call site that
-      // forgets this cannot strand anyone's money.
-      if (purpose === "claim") {
-        // Only set submitted_record_id for invoices that don't already have
-        // one (first record wins the back-link).
-        setProgress("Marking expenses as submitted…");
-        const { error: lifeErr } = await supabase
-          .from("invoices")
-          .update({
-            // Workstream B: claim_state drives the derived lifecycle_status.
-            // 'locked_in_request' is what makes the expense unavailable to any
-            // other reimbursement request.
-            claim_state: "locked_in_request",
-            submitted_at: generatedAt,
-            submitted_record_id: recordId,
-          })
-          .in("id", includedIds)
-          .is("submitted_record_id", null);
-        if (lifeErr) {
-          // Don't fully bail — the record was written. Surface a warning.
-          logError("Substantiation: invoice submit update failed", lifeErr);
-        }
-        // For invoices that already had a submitted_record_id (re-bundled into
-        // a new record), just refresh submitted_at so the lifecycle reflects
-        // the latest activity.
-        await supabase
-          .from("invoices")
-          .update({
-            claim_state: "locked_in_request",
-            submitted_at: generatedAt,
-          })
-          .in("id", includedIds);
-      }
+      // 3. Spec D30: generating locks nothing. A claim is a draft until the
+      // user tells us it was actually sent (mark_record_sent, triggered by
+      // the "Send to custodian" action on the list) -- that RPC is what sets
+      // claim_state='locked_in_request' and the submitted_at back-link. This
+      // used to happen right here, which is exactly the premature lock the
+      // spec calls out: generate -> spot a mistake -> pull it -> regenerate
+      // required voiding a claim that had not actually been sent anywhere.
 
       // 4. Remember the custodian for next time. Best-effort: the claim is
       // already written, and failing to save a preference must not look like a
@@ -1202,7 +1377,7 @@ export default function Substantiation() {
             <p className="text-sm text-muted-foreground">
               {purpose === "record"
                 ? "One file that proves each expense qualified: its IRS Publication 502 basis, the date you confirmed it, and every supporting document. It covers the whole year — including anything your HSA card already paid for, which is a distribution you still have to be able to explain. Nothing is claimed and nothing moves."
-                : "The same file, sent to your custodian as a request for reimbursement. The expenses in it are locked so they can't be claimed twice."}
+                : "The same file, ready to send to your custodian. This is a draft — generating and downloading it locks nothing, so you can rebuild it as many times as you like. Its expenses are only locked once you mark it sent."}
             </p>
           </div>
 
@@ -1737,27 +1912,11 @@ export default function Substantiation() {
                       <p className="font-semibold tabular-nums">
                         {r.record_number}
                       </p>
-                      {/* A saved record is not waiting for anything, so it
-                          must not wear a status that says it is. "Awaiting
-                          deposit" over a document the user filed away would be
-                          the app inventing an outstanding task. */}
                       <Badge
                         variant="outline"
-                        className={
-                          r.status === "reimbursed"
-                            ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800 text-xs"
-                            : r.status === "voided"
-                              ? "bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800 text-xs"
-                              : r.purpose === "record"
-                                ? "bg-muted text-muted-foreground border-border text-xs"
-                                : "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800 text-xs"
-                        }
+                        className={recordBadge(r).className}
                       >
-                        {r.status !== "generated"
-                          ? r.status
-                          : r.purpose === "record"
-                            ? "Kept on file"
-                            : "Awaiting deposit"}
+                        {recordBadge(r).label}
                       </Badge>
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5">
@@ -1768,15 +1927,11 @@ export default function Substantiation() {
                       {r.total_amount.toFixed(2)}
                     </p>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      {r.purpose === "record"
-                        ? "Kept as evidence — nothing claimed"
-                        : r.custodian
-                          ? `Sent to ${r.custodian}`
-                          : "No custodian recorded"}
+                      {custodianLine(r)}
                       {r.attested_no_double_benefit ? " · attested" : ""}
                     </p>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
                     {/* Workstream E3: the page has always said records can be
                         re-downloaded at any time. This is the button that
                         makes that true. */}
@@ -1793,17 +1948,50 @@ export default function Substantiation() {
                       )}
                       Packet
                     </Button>
-                    {/* Workstream E5: only an open claim can be withdrawn. A
-                        paid one would put money back into the claimable pool
-                        that has already arrived, and a voided one is already
-                        withdrawn — so neither offers the button at all rather
-                        than offering it and refusing.
 
-                        A saved record can be discarded too, and the same
-                        function does it: nothing was locked, so voiding one
-                        releases nothing and simply retires the document. It
-                        says "Discard" because there is no claim to withdraw. */}
-                    {r.status === "generated" && (
+                    {/* Spec D31/D32: a draft claim's primary action is
+                        committing it, and its secondary action is a
+                        one-click rebuild -- not a confirm-and-discard
+                        dialog, because nothing is locked yet to warn about. */}
+                    {r.purpose === "claim" && r.status === "generated" && (
+                      <>
+                        <Button
+                          size="sm"
+                          onClick={() => markSent(r)}
+                          disabled={sendingId !== null || rebuildingId !== null}
+                        >
+                          {sendingId === r.id ? (
+                            <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                          ) : (
+                            <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
+                          )}
+                          Send to custodian
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => rebuildDraft(r)}
+                          disabled={sendingId !== null || rebuildingId !== null}
+                        >
+                          {rebuildingId === r.id ? (
+                            <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                          ) : (
+                            <Undo2 className="h-3.5 w-3.5 mr-1.5" />
+                          )}
+                          Rebuild this record
+                        </Button>
+                      </>
+                    )}
+
+                    {/* Workstream E5: only a real commitment can be
+                        withdrawn -- a paid claim would put money back into
+                        the claimable pool that has already arrived, and a
+                        voided one is already withdrawn. A saved record can
+                        be discarded the same way: nothing was locked, so
+                        voiding one releases nothing and simply retires the
+                        document. */}
+                    {((r.purpose === "claim" && r.status === "sent") ||
+                      (r.purpose === "record" && r.status === "generated")) && (
                       <Button
                         size="sm"
                         variant="ghost"
