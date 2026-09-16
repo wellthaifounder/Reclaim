@@ -10,6 +10,7 @@
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import {
   useCategorizationRules,
   type CategorizationRuleWithImpact,
@@ -488,8 +489,30 @@ function RuleRow({
   ) => Promise<string[]>;
   busy: boolean;
 }) {
+  // Spec D25: overriding a decision a rule made links straight to that rule
+  // (`/settings#rule-<id>`, landed on by the generic hash-scroll effect in
+  // Settings.tsx). A plain scroll can drop you on the right row without it
+  // being obvious that's the one you were sent for, so this briefly
+  // highlights it too, then fades — a one-time cue, not a permanent marker.
+  const [justLinked, setJustLinked] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      window.location.hash === `#rule-${rule.id}`,
+  );
+  useEffect(() => {
+    if (!justLinked) return;
+    const timer = setTimeout(() => setJustLinked(false), 2500);
+    return () => clearTimeout(timer);
+  }, [justLinked]);
+
   return (
-    <div className="flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between">
+    <div
+      id={`rule-${rule.id}`}
+      className={cn(
+        "flex scroll-mt-20 flex-col gap-3 rounded-lg border p-4 transition-colors duration-500 sm:flex-row sm:items-center sm:justify-between",
+        justLinked && "border-primary bg-primary/5",
+      )}
+    >
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <p className="font-medium truncate">

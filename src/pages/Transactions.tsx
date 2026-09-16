@@ -336,6 +336,20 @@ export default function Transactions() {
   const decide = async (ids: string[], isMedical: boolean) => {
     if (ids.length === 0) return;
     setDeciding(true);
+    // Spec D25: a single row whose current verdict came from a rule, and
+    // whose verdict is actually about to change, is an override — captured
+    // before the RPC call while `transactions` still holds the prior state.
+    // Not evaluated for a bulk selection: a rule keys on one merchant, and
+    // "a rule filed this one" doesn't generalize to a mixed batch.
+    const overriddenRuleId =
+      ids.length === 1
+        ? (() => {
+            const txn = transactions.find((t) => t.id === ids[0]);
+            return txn?.applied_by_rule_id && txn.is_medical !== isMedical
+              ? txn.applied_by_rule_id
+              : null;
+          })()
+        : null;
     try {
       const { error } = await supabase.rpc("decide_transactions", {
         p_transaction_ids: ids,
@@ -343,17 +357,24 @@ export default function Transactions() {
       });
       if (error) throw error;
 
-      // The negative is a dismissal, not a verdict (spec D9): nothing was
-      // created, so undoing it is just re-opening the question — a plain
-      // update, using the exact ids this call touched, same as
-      // returnToReviewQueue below uses for a single row.
-      if (isMedical) {
+      if (overriddenRuleId) {
+        toast("A rule filed this one. Review it?", {
+          action: {
+            label: "Review",
+            onClick: () => navigate(`/settings#rule-${overriddenRuleId}`),
+          },
+        });
+      } else if (isMedical) {
         toast.success(
           ids.length === 1
             ? "Marked as healthcare — it's now waiting in Substantiate"
             : `${ids.length} transactions marked as healthcare`,
         );
       } else {
+        // The negative is a dismissal, not a verdict (spec D9): nothing was
+        // created, so undoing it is just re-opening the question — a plain
+        // update, using the exact ids this call touched, same as
+        // returnToReviewQueue below uses for a single row.
         toast.success(
           ids.length === 1
             ? "Dismissed — we won't ask again"
@@ -374,8 +395,11 @@ export default function Transactions() {
       queryClient.invalidateQueries({ queryKey: ["substantiate-queue"] });
 
       // Offer a rule only for a single row: a rule keys on one merchant, and a
-      // mixed bulk selection has no single merchant to offer.
-      if (ids.length === 1) {
+      // mixed bulk selection has no single merchant to offer. Skipped when
+      // overriding an existing rule (above) -- a rule already governs this
+      // merchant, so the fix is reviewing that one, not offering a second,
+      // competing rule on top of it.
+      if (ids.length === 1 && !overriddenRuleId) {
         const txn = transactions.find((t) => t.id === ids[0]);
         if (txn) setRuleCandidate({ ...txn, isMedical });
       }
@@ -402,10 +426,25 @@ export default function Transactions() {
         .eq("id", transaction.id);
 
       if (error) throw error;
-      toast.success("Marked as healthcare expense");
+      // Spec D25: only reachable while is_medical is false (see the
+      // dropdown's !isMedical guard in TransactionCard.tsx), so a rule
+      // governing this row is always being overridden here, not reaffirmed.
+      if (transaction.applied_by_rule_id) {
+        const ruleId = transaction.applied_by_rule_id;
+        toast("A rule filed this one. Review it?", {
+          action: {
+            label: "Review",
+            onClick: () => navigate(`/settings#rule-${ruleId}`),
+          },
+        });
+      } else {
+        toast.success("Marked as healthcare expense");
+      }
       fetchTransactions();
       invalidateAttentionItems();
-      setRuleCandidate({ ...transaction, isMedical: true });
+      if (!transaction.applied_by_rule_id) {
+        setRuleCandidate({ ...transaction, isMedical: true });
+      }
     } catch (error) {
       logError("Error updating transaction:", error);
       toast.error("Failed to update transaction");

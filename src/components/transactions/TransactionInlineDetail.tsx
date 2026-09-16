@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { logError } from "@/utils/errorHandler";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -31,6 +32,10 @@ interface TransactionInlineDetailProps {
     notes: string | null;
     reconciliation_status: string | null;
     invoice_id: string | null;
+    /** Spec D25: which rule (if any) currently governs this transaction's
+     *  verdict, so overriding it can say so instead of looking like a plain
+     *  edit. Null for a transaction the user (or nothing yet) decided. */
+    applied_by_rule_id: string | null;
     // Whether the HSA card paid for this, taken from the account the charge
     // landed on. See the note in Transactions.tsx's fetchTransactions.
     plaid_accounts?: {
@@ -48,6 +53,7 @@ export function TransactionInlineDetail({
 }: TransactionInlineDetailProps) {
   const [notes, setNotes] = useState(transaction.notes || "");
   const [saving, setSaving] = useState(false);
+  const navigate = useNavigate();
 
   const handleSaveNotes = async () => {
     try {
@@ -82,11 +88,25 @@ export function TransactionInlineDetail({
         .eq("id", transaction.id);
 
       if (error) throw error;
-      toast.success(
-        transaction.is_medical
-          ? "Unmarked as medical"
-          : "Marked as medical expense",
-      );
+
+      // Spec D25: this transaction's current verdict came from a rule, and
+      // the user just overrode it — say so, with a way straight to the rule,
+      // rather than a plain confirmation that looks like an ordinary edit.
+      if (transaction.applied_by_rule_id) {
+        const ruleId = transaction.applied_by_rule_id;
+        toast("A rule filed this one. Review it?", {
+          action: {
+            label: "Review",
+            onClick: () => navigate(`/settings#rule-${ruleId}`),
+          },
+        });
+      } else {
+        toast.success(
+          transaction.is_medical
+            ? "Unmarked as medical"
+            : "Marked as medical expense",
+        );
+      }
       onUpdate();
     } catch (error) {
       logError("Error toggling medical status", error);
