@@ -1169,6 +1169,7 @@ export type Database = {
           record_number: string
           reimbursed_at: string | null
           reimbursed_transaction_id: string | null
+          sent_at: string | null
           status: string
           tax_year: number
           total_amount: number
@@ -1193,6 +1194,7 @@ export type Database = {
           record_number: string
           reimbursed_at?: string | null
           reimbursed_transaction_id?: string | null
+          sent_at?: string | null
           status?: string
           tax_year: number
           total_amount: number
@@ -1217,6 +1219,7 @@ export type Database = {
           record_number?: string
           reimbursed_at?: string | null
           reimbursed_transaction_id?: string | null
+          sent_at?: string | null
           status?: string
           tax_year?: number
           total_amount?: number
@@ -1644,6 +1647,13 @@ export type Database = {
       }
       gate_owned_reasons: { Args: never; Returns: string[] }
       hsa_establishment_date: { Args: { p_user_id: string }; Returns: string }
+      mark_record_sent: {
+        Args: { p_record_id: string }
+        Returns: {
+          expenses_locked: number
+          record_number: string
+        }[]
+      }
       match_reimbursement_deposits: {
         Args: { p_lookback_days?: number; p_user_id?: string }
         Returns: number
