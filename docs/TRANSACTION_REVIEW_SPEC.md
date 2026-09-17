@@ -177,6 +177,15 @@ like that is invisible forever. One sentence, at the exact moment the user has a
 free, is the honest counterweight to a deliberately narrow classifier. A recurring nudge
 would be nagging.
 
+**D27 and D28 superseded 2026-09-17 — see §2.9.** Both were right about the symptom and wrong
+about the cause. D27's five named views mixed two questions (what did we decide about this
+charge, versus what is missing downstream) and left the app's own filing indistinguishable
+from the user's; D28 tried to compensate with a sentence for a classifier that was silently
+swallowing uncertainty, rather than stopping it from swallowing. §2.9 fixes the division of
+labour instead, and the named views fall out of it. The paragraph above is kept as the record
+of why a door onto the auto-filed pile has to exist at all — that argument survives intact,
+and D44 is its new form.
+
 ### 2.7 Changing your mind, and submission
 
 | #   | Decision                                                                                                         |
@@ -212,6 +221,83 @@ fast on a couch, which is where a queue like this actually gets worked. It is de
 it needs a coach mark to be discoverable and a keyboard equivalent to stay accessible — a
 bigger build than it looks, and not a reason to leave buttons wrapping onto two lines in the
 meantime.
+
+### 2.9 What the engine decides on its own
+
+Agreed 2026-09-17. Supersedes D27 and D28, and overrides §4's "any change to the classifier
+itself" exclusion. The browse view was never really a browse-view problem: what it was
+struggling to describe is the division of labour between the engine and the user, so that is
+what gets decided here, and the views fall out of it.
+
+| #   | Decision                                                                                                                                                                                                                                                  |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D36 | **The engine never files anything it is not confident about.** "No medical signal in the merchant name or category" is the absence of a judgment, not a judgment. It stops being a filing decision; those charges reach the queue.                        |
+| D37 | **Confidence means Plaid's own confidence grade.** A charge may be auto-filed only at `HIGH` or `VERY_HIGH` personal-finance-category confidence. `LOW`, `MEDIUM` and uncategorized always reach the queue.                                               |
+| D38 | **Four categories are never auto-filed at any confidence** — general merchandise, groceries, personal care, insurance — because each can hold a qualifying item.                                                                                          |
+| D39 | **A dollar backstop overrides the category list.** Nothing above **~$200** is auto-filed, whatever its category or confidence.                                                                                                                            |
+| D40 | **The classifier re-runs over transactions already imported** whenever its rules change, and on demand from Settings. It never touches a transaction a person or a rule decided, and it only ever **adds** to the queue — never silently removes from it. |
+| D41 | **The queue keeps two lanes.** The second merges the basket cases and the unknowns under one heading — _"Worth a look"_ — each row carrying its own one-line reason.                                                                                      |
+| D42 | **The All-transactions list has one narrowing control**: a Status filter carrying counts — _Healthcare · Not healthcare · Needs review · Filed automatically · Transfers_. "Dismissed" is retired as a label; it always meant "not healthcare".           |
+| D43 | **"Healthcare" means confirmed.** A charge the engine suggested but nobody has approved appears under _Needs review_, never under _Healthcare_.                                                                                                           |
+| D44 | **"Filed automatically" keeps a permanent door with a count on it.** That count replaces D28's one-time nudge line, which is dropped.                                                                                                                     |
+| D45 | The All tab adds **group by** (none / merchant / month), **sort** (date / amount), **filter** (date / merchant / amount) and search. It lands **ungrouped, newest first**.                                                                                |
+| D46 | **"Needs a receipt" leaves this page's filter.** It belongs to Substantiate, whose own queue is keyed on the same column.                                                                                                                                 |
+
+**On D36.** Measured on a real account, 2026-09-17: **231 charges across 81 merchants**
+carried `classification_reason = 'none'` — "no medical signal" — and were filed as
+not-healthcare without ever being seen. One of those merchants was Paramount Accept, a
+medical payment-plan servicer, invisible for nine months. The engine had nothing to say about
+it and the app rendered that silence as a decision.
+
+Note the asymmetry D36 preserves rather than invents: every tier that concludes a charge _is_
+healthcare already sets `needsReview = true` and waits for approval
+(`supabase/functions/_shared/medicalClassifier.ts`). The engine has only ever decided alone in
+the negative direction. D36 narrows that to the cases where it can actually defend the answer.
+
+**On D37–D39.** Plaid grades its own certainty and the app already stores it
+(`transactions.pfc_confidence`), unused. On the same account ~139 of those 231 charges carried
+`HIGH` or `VERY_HIGH`, and ~59 across 34 merchants carried `LOW` or nothing at all — so the
+uncertainty signal was sitting in the database the whole time.
+
+D38 is the list of places eligibility actually hides: a blood pressure monitor is general
+merchandise, a gym membership with a letter of medical necessity is personal care, and COBRA,
+long-term-care and Medicare premiums are insurance. Groceries were already the OTC lane's
+reason for existing.
+
+D39 exists because no such list is ever complete, and the error is asymmetric: being wrong
+about a $9 lunch costs nothing, being wrong about a $1,400 charge costs a claim the user will
+never know they missed. The threshold is a starting guess and should be revisited against
+what it actually catches.
+
+**On D40.** The classifier runs once, at import, and never again. The OTC lane shipped
+2026-09-05; on that same account **51 charges imported before that date are superstore,
+grocery and convenience purchases that today's classifier would route straight to the
+queue** — invisible in the auto-filed pile purely because of when they arrived. Every future
+improvement has this hole unless a re-run exists.
+
+The "only ever adds" half is D36 applied to time. Taking a charge off the user's screen
+because the engine changed its mind is the same silent dismissal, just later.
+
+**On D41.** From the user's side, _this basket might have Tylenol in it_ and _we have no idea
+what this is_ are the same sentence: **we are not sure, you tell us.** Two lanes for one ask
+is the app showing its own plumbing. The cost is that the basket-specific heading has to
+become neutral, which the per-row reasons already cover.
+
+**On D42–D44.** Every non-transfer charge is in exactly one of four states, and they form a
+2×2 of _who decided_ against _what they decided_: you-yes, you-no, engine-no, nobody-yet.
+Engine-yes does not exist, by D36's asymmetry. Naming those states on screen is the point —
+today "the engine filed this" and "this is waiting on you" are indistinguishable and mean
+entirely different things.
+
+D44 keeps D28's purpose and drops its mechanism. A count sitting permanently beside a filter
+is a better counterweight than a sentence shown once: it cannot nag, it is stumbled onto by
+someone who does not already know the pile exists, and it stays true as the pile changes.
+A nested "decided by" filter was considered and rejected for exactly that reason — the person
+who most needs that pile is the one who does not know to look for it.
+
+**On D46.** It is the only named view answering a question from a different step of the
+spine: the other four are all _what did we decide about this charge_, and this one is _what is
+missing downstream_. Two doors onto one queue is how the two drift apart.
 
 ---
 
@@ -260,6 +346,12 @@ meantime.
 | D34               | Three buttons wrap onto two lines at 390px.                                                                                                                                                                                                                                                                                                                          |
 | D3                | The OTC lane renders fully expanded, below the medical lane.                                                                                                                                                                                                                                                                                                         |
 | D4                | `DuplicateWarnings` is a banner above the feed and is not counted in the queue total.                                                                                                                                                                                                                                                                                |
+| D36–D39           | The classifier files every unrecognised charge as not-healthcare (`reason = 'none'`) without ever surfacing it, and reads none of Plaid's own confidence grade. No category exclusion list beyond money movement and vet; no dollar backstop.                                                                                                                        |
+| D40               | The classifier runs once, at import, and never again — so every improvement leaves history behind. No re-run exists, automatic or manual. Measured cost on a real account: 51 charges the current classifier would queue, invisible because they predate the OTC lane.                                                                                               |
+| D41               | Two lanes, but the second is basket-specific (`possible_otc`) and has no room for "we simply do not know". `review_feed_groups` derives the lane from `classification_reason = 'possible_otc'`.                                                                                                                                                                      |
+| D42–D44           | Named views exist (`NAMED_VIEWS` in `src/pages/Transactions.tsx`) but carry no counts, "Healthcare" includes unapproved suggestions, "Dismissed" is the label for a user verdict, and transfers are unfilterable.                                                                                                                                                    |
+| D45               | No group-by, no sort, no amount or merchant filter. Flat, newest-first, search and date range only.                                                                                                                                                                                                                                                                  |
+| D46               | "Needs a receipt" is still in the filter.                                                                                                                                                                                                                                                                                                                            |
 
 ### 3.1 The three open questions, answered
 
@@ -348,11 +440,20 @@ timeline, with its own visible disagreement surface.
 - **Removing category-code rules**, which are blunt enough to be quietly dangerous — a rule
   on "pharmacy" sweeps in every pharmacy. The app already ranks that matcher last when
   suggesting one, which is sufficient for now.
-- **Any change to the classifier itself.** This spec is about what the user does with what
-  the classifier produces.
+- ~~**Any change to the classifier itself.** This spec is about what the user does with what
+  the classifier produces.~~ **Overridden 2026-09-17 by §2.9.** The exclusion held right up
+  until the question became _which charges reach the user at all_ — at which point what the
+  classifier files on its own stopped being upstream of this spec and became the first
+  decision in it. §2.9 changes only what the engine may decide **alone**; how it recognises a
+  medical charge in the first place is still out of scope.
+- **Settings as tabbed sections.** The page is a long scroll and the rules panel is buried at
+  the bottom of it. Real, agreed 2026-09-17, and its own slice.
 - **The service-worker / offline-cache decision**, still open from a previous session and
   unrelated to this page.
 
 ---
 
 _Agreed 2026-09-14. Supersedes the transactions-page portions of the earlier phased plan._
+
+_§2.9 agreed 2026-09-17, after D1–D35 shipped. It supersedes D27 and D28 and overrides one
+§4 exclusion; every other decision above stands as written._
