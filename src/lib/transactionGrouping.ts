@@ -51,6 +51,11 @@ export interface TransactionGroup<T> {
   label: string;
   count: number;
   total: number;
+  /** Oldest and newest transaction_date in the group, as the raw YYYY-MM-DD
+   *  strings. Kept as strings so the caller parses them once, with the
+   *  date-only parser, rather than this module guessing at a timezone. */
+  earliest: string;
+  latest: string;
   items: T[];
 }
 
@@ -103,12 +108,16 @@ export function groupTransactions<T extends GroupableTransaction>(
 ): TransactionGroup<T>[] {
   const sorted = sortTransactions(rows, sort);
   if (groupBy === "none") {
+    const dates = sorted.map((t) => t.transaction_date);
     return [
       {
         key: "all",
         label: "",
         count: sorted.length,
         total: sorted.reduce((sum, t) => sum + Number(t.amount), 0),
+        // Sorted lexicographically, which is chronological for YYYY-MM-DD.
+        earliest: dates.length ? dates.reduce((a, b) => (a < b ? a : b)) : "",
+        latest: dates.length ? dates.reduce((a, b) => (a > b ? a : b)) : "",
         items: sorted,
       },
     ];
@@ -127,12 +136,18 @@ export function groupTransactions<T extends GroupableTransaction>(
         label: groupBy === "month" ? monthLabel(key) : key,
         count: 0,
         total: 0,
+        earliest: row.transaction_date,
+        latest: row.transaction_date,
         items: [],
       };
       buckets.set(key, bucket);
     }
     bucket.count += 1;
     bucket.total += Number(row.amount);
+    if (row.transaction_date < bucket.earliest)
+      bucket.earliest = row.transaction_date;
+    if (row.transaction_date > bucket.latest)
+      bucket.latest = row.transaction_date;
     bucket.items.push(row);
   }
 

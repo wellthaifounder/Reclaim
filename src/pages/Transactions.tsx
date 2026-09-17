@@ -35,6 +35,7 @@ import {
   type RuleCandidate,
 } from "@/components/transactions/CreateRulePrompt";
 import { TransactionListControls } from "@/components/transactions/TransactionListControls";
+import { MerchantGroupCard } from "@/components/transactions/MerchantGroupCard";
 import {
   TRANSACTION_STATUS_EMPTY_COPY,
   countTransactionStatuses,
@@ -674,6 +675,70 @@ export default function Transactions() {
     setExpenseSplitOpen(true);
   };
 
+  /**
+   * One row of the list. Extracted because the list now renders from three
+   * places -- flat, under a month heading, and inside an expanded merchant
+   * card -- and three copies of this block would drift.
+   */
+  const renderTransaction = (transaction: Transaction) => {
+    // Show split transaction card for split transactions
+    if (transaction.is_split) {
+      return (
+        <SplitTransactionCard key={transaction.id} transaction={transaction} />
+      );
+    }
+
+    return (
+      <div key={transaction.id}>
+        <TransactionCard
+          id={transaction.id}
+          date={transaction.transaction_date}
+          vendor={transaction.vendor || "Unknown"}
+          amount={transaction.amount}
+          description={transaction.description}
+          isMedical={transaction.is_medical ?? false}
+          reconciliationStatus={
+            (transaction.reconciliation_status ??
+              "unlinked") as TransactionCardProps["reconciliationStatus"]
+          }
+          isHsaEligible={transaction.is_hsa_eligible ?? false}
+          isFromHsaAccount={transaction.plaid_accounts?.is_hsa || false}
+          isSplit={transaction.is_split ?? false}
+          classificationExplanation={transaction.classification_explanation}
+          isTransfer={transaction.is_transfer ?? false}
+          transferKind={transaction.transfer_kind}
+          onUnlinkTransfer={() => handleUnlinkTransfer(transaction)}
+          invoiceId={transaction.invoice_id}
+          splitParentId={transaction.split_parent_id}
+          needsReview={transaction.needs_review ?? false}
+          selected={selectedIds.includes(transaction.id)}
+          onSelectedChange={(next) =>
+            setSelectedIds((prev) =>
+              next
+                ? [...prev, transaction.id]
+                : prev.filter((id) => id !== transaction.id),
+            )
+          }
+          onDecide={(isMedical) => decide([transaction.id], isMedical)}
+          onViewDetails={() => handleViewDetails(transaction)}
+          onMarkMedical={() => handleMarkMedical(transaction)}
+          onIgnore={() => handleIgnore(transaction)}
+          onUnignore={() => handleUnignore(transaction)}
+          onAddToReviewQueue={() => handleAddToReviewQueue(transaction)}
+          onSplitTransaction={() => handleSplitTransaction(transaction)}
+          onSplitIntoExpenses={() => handleSplitIntoExpenses(transaction)}
+        />
+        {expandedTransactionId === transaction.id && (
+          <TransactionInlineDetail
+            transaction={transaction}
+            onClose={() => setExpandedTransactionId(null)}
+            onUpdate={fetchTransactions}
+          />
+        )}
+      </div>
+    );
+  };
+
   // Workstream C5: transfers are excluded from every total. Moving $500 from
   // checking to a credit card is not $1,000 of spending, and counting it as
   // any spending at all is what makes the app's own numbers visibly wrong.
@@ -963,110 +1028,51 @@ export default function Transactions() {
                     onDecide={(isMedical) => decide(selectedIds, isMedical)}
                     onClear={() => setSelectedIds([])}
                   />
-                  {transactionGroups.map((group) => (
-                    <div key={group.key} className="space-y-3">
-                      {/* Spec D45. A heading only when there is grouping to
-                          describe -- "No grouping" returns one unlabelled
-                          group, so the ungrouped list this page lands on is
-                          exactly the flat list it has always been. Sticky
-                          below the page header so the merchant or month you
-                          are reading stays named while you scroll a long
-                          section. */}
-                      {groupBy !== "none" && (
-                        <div className="sticky top-[4.5rem] z-[5] flex items-baseline justify-between gap-3 border-b bg-background/95 py-1.5 backdrop-blur">
-                          <h2 className="truncate text-sm font-semibold text-foreground">
-                            {group.label}
-                          </h2>
-                          <p className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                            {group.count} &middot; {formatCurrency(group.total)}
-                          </p>
-                        </div>
-                      )}
-                      {group.items.map((transaction) => {
-                        // Show split transaction card for split transactions
-                        if (transaction.is_split) {
-                          return (
-                            <SplitTransactionCard
-                              key={transaction.id}
-                              transaction={transaction}
-                            />
-                          );
-                        }
-
-                        return (
-                          <div key={transaction.id}>
-                            <TransactionCard
-                              id={transaction.id}
-                              date={transaction.transaction_date}
-                              vendor={transaction.vendor || "Unknown"}
-                              amount={transaction.amount}
-                              description={transaction.description}
-                              isMedical={transaction.is_medical ?? false}
-                              reconciliationStatus={
-                                (transaction.reconciliation_status ??
-                                  "unlinked") as TransactionCardProps["reconciliationStatus"]
-                              }
-                              isHsaEligible={
-                                transaction.is_hsa_eligible ?? false
-                              }
-                              isFromHsaAccount={
-                                transaction.plaid_accounts?.is_hsa || false
-                              }
-                              isSplit={transaction.is_split ?? false}
-                              classificationExplanation={
-                                transaction.classification_explanation
-                              }
-                              isTransfer={transaction.is_transfer ?? false}
-                              transferKind={transaction.transfer_kind}
-                              onUnlinkTransfer={() =>
-                                handleUnlinkTransfer(transaction)
-                              }
-                              invoiceId={transaction.invoice_id}
-                              splitParentId={transaction.split_parent_id}
-                              needsReview={transaction.needs_review ?? false}
-                              selected={selectedIds.includes(transaction.id)}
-                              onSelectedChange={(next) =>
-                                setSelectedIds((prev) =>
-                                  next
-                                    ? [...prev, transaction.id]
-                                    : prev.filter(
-                                        (id) => id !== transaction.id,
-                                      ),
-                                )
-                              }
-                              onDecide={(isMedical) =>
-                                decide([transaction.id], isMedical)
-                              }
-                              onViewDetails={() =>
-                                handleViewDetails(transaction)
-                              }
-                              onMarkMedical={() =>
-                                handleMarkMedical(transaction)
-                              }
-                              onIgnore={() => handleIgnore(transaction)}
-                              onUnignore={() => handleUnignore(transaction)}
-                              onAddToReviewQueue={() =>
-                                handleAddToReviewQueue(transaction)
-                              }
-                              onSplitTransaction={() =>
-                                handleSplitTransaction(transaction)
-                              }
-                              onSplitIntoExpenses={() =>
-                                handleSplitIntoExpenses(transaction)
-                              }
-                            />
-                            {expandedTransactionId === transaction.id && (
-                              <TransactionInlineDetail
-                                transaction={transaction}
-                                onClose={() => setExpandedTransactionId(null)}
-                                onUpdate={fetchTransactions}
-                              />
-                            )}
+                  {transactionGroups.map((group) =>
+                    // Spec D45, extended 2026-09-17: grouping by merchant now
+                    // gives the same collapsible merchant card the review
+                    // queue uses, so "grouped by merchant" means one thing
+                    // across the app rather than a card on one screen and a
+                    // heading on the other. A merchant with a single charge
+                    // renders as the bare row -- a card you must open to find
+                    // one transaction is a click that buys nothing, and the
+                    // review queue treats a one-row group the same way.
+                    groupBy === "merchant" && group.count > 1 ? (
+                      <MerchantGroupCard
+                        key={group.key}
+                        label={group.label}
+                        count={group.count}
+                        total={group.total}
+                        earliest={group.earliest}
+                        latest={group.latest}
+                      >
+                        {group.items.map(renderTransaction)}
+                      </MerchantGroupCard>
+                    ) : (
+                      <div key={group.key} className="space-y-3">
+                        {/* Months stay open headings: you group by month to
+                            read the months, so collapsing them by default
+                            would hide the very thing asked for. "No grouping"
+                            returns one unlabelled group, which is how the
+                            list this page lands on stays exactly the flat
+                            list it has always been. Sticky below the page
+                            header so the month you are reading stays named
+                            while you scroll it. */}
+                        {groupBy === "month" && (
+                          <div className="sticky top-[4.5rem] z-[5] flex items-baseline justify-between gap-3 border-b bg-background/95 py-1.5 backdrop-blur">
+                            <h2 className="truncate text-sm font-semibold text-foreground">
+                              {group.label}
+                            </h2>
+                            <p className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                              {group.count} &middot;{" "}
+                              {formatCurrency(group.total)}
+                            </p>
                           </div>
-                        );
-                      })}
-                    </div>
-                  ))}
+                        )}
+                        {group.items.map(renderTransaction)}
+                      </div>
+                    ),
+                  )}
                 </div>
               )}
             </TabsContent>
