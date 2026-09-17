@@ -447,7 +447,9 @@ timeline, with its own visible disagreement surface.
   decision in it. §2.9 changes only what the engine may decide **alone**; how it recognises a
   medical charge in the first place is still out of scope.
 - **Settings as tabbed sections.** The page is a long scroll and the rules panel is buried at
-  the bottom of it. Real, agreed 2026-09-17, and its own slice.
+  the bottom of it. Real, agreed 2026-09-17, and its own slice. **Built 2026-09-17 (slice
+  3):** four tabs -- Account, Household & HSA, Banks & rules, App -- with the open tab in
+  `?section=` and every `/settings#...` deep link resolved to the tab that owns it.
 - **The service-worker / offline-cache decision**, still open from a previous session and
   unrelated to this page.
 
@@ -458,5 +460,5 @@ _Agreed 2026-09-14. Supersedes the transactions-page portions of the earlier pha
 _§2.9 agreed 2026-09-17, after D1–D35 shipped. It supersedes D27 and D28 and overrides one
 §4 exclusion; every other decision above stands as written._
 
-_D36–D41 built 2026-09-17 (PR #55). D42–D46 built 2026-09-17 (slice 2). The remaining
-item from §2.9's plan is breaking Settings into tabs, which is its own slice._
+_D36–D41 built 2026-09-17 (PR #55). D42–D46 built 2026-09-17 (PR #56). Settings tabs
+built 2026-09-17 (slice 3). Every item in §2.9's plan is now built._
