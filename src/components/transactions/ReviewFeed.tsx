@@ -179,7 +179,11 @@ function GroupRow({
   onCoachMarkDone: () => void;
 }) {
   const many = group.txn_count > 1;
-  const isOtc = group.lane === "possible_otc";
+  // Spec D41: the second lane is everything the engine is only asking about —
+  // baskets and unrecognised merchants alike. The wire value is still
+  // 'possible_otc' (renaming it would empty the lane on screen for the length
+  // of a deploy, since migrations land before the frontend that reads them).
+  const unsureLane = group.lane === "possible_otc";
   const [expanded, setExpanded] = useState(false);
   // Fades the whole card: used for a bulk decision on a multi-transaction
   // group, and for any decision on a single-transaction group, since there
@@ -273,10 +277,10 @@ function GroupRow({
           </p>
         )}
 
-        {isOtc && many && (
+        {unsureLane && many && (
           <p className="mt-2 text-xs text-muted-foreground">
-            These vary trip to trip — mark a trip healthcare or not, or open it
-            to split the healthcare items out of a particular one.
+            These can differ from one charge to the next — answer the whole
+            merchant at once, or open the list to take them one at a time.
           </p>
         )}
       </div>
@@ -642,12 +646,18 @@ export function ReviewFeed() {
    * heavier, riskier action than a toast button should trigger silently.
    * The spec only asks for undo on the easy direction, and that's this one.
    *
-   * `lane` restores which queue it comes back to. Both decide RPCs always
-   * stamp `classification_reason = 'user'` (that IS the record of "a human
-   * decided this"), and a group's lane is derived from that same column
-   * (`classification_reason = 'possible_otc'` vs. anything else) — so without
-   * this, undoing a dismissal from the OTC lane would resurrect the
-   * transaction in the medical lane instead of the one it actually left.
+   * `lane` restores which queue it comes back to. Since spec D41 the lane is
+   * derived from `is_medical` — did the engine claim this IS healthcare, or
+   * is it only asking — and a dismissal sets `is_medical = false` whichever
+   * lane it happened in. So the healthcare lane is the one that now needs
+   * restoring, exactly mirroring the fix the OTC lane needed when the lane
+   * came from `classification_reason` instead.
+   *
+   * `is_medical = true` with `needs_review = true` is the same state the
+   * engine leaves a flagged-but-unapproved charge in, and it does not create
+   * an expense: `trg_transactions_confirm_medical` fires on confirmation
+   * (needs_review false), not on the flag.
+   *
    * `classification_explanation`, by contrast, cannot be restored this way —
    * the original classifier sentence was overwritten and never captured
    * client-side — so the row comes back reading "You said this wasn't
@@ -665,9 +675,7 @@ export function ReviewFeed() {
         .update({
           needs_review: true,
           reconciliation_status: "unlinked",
-          ...(lane === "possible_otc"
-            ? { classification_reason: "possible_otc" }
-            : {}),
+          ...(lane === "medical" ? { is_medical: true } : {}),
         })
         .in("id", transactionIds);
       if (error) throw error;
@@ -972,11 +980,17 @@ export function ReviewFeed() {
       {otcGroups.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Might contain over-the-counter items</CardTitle>
+            {/* Spec D41: one lane for everything the engine is asking about,
+                rather than a separate lane per reason it is asking. A basket
+                that might hold allergy medicine and a merchant nobody
+                recognises are the same sentence to the person reading this —
+                "we are not sure, you tell us" — and each row carries its own
+                one-line reason underneath. */}
+            <CardTitle>Worth a look</CardTitle>
             <CardDescription>
-              These merchants aren&rsquo;t healthcare on their own, but a basket
-              here can still have a qualifying item mixed in — allergy medicine,
-              contact lens solution, and the like.
+              We couldn&rsquo;t tell whether these were healthcare. Some are
+              baskets that might have a qualifying item mixed in; others we
+              simply didn&rsquo;t recognise. Each one says why below.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
