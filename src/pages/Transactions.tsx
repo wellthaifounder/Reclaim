@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAttentionItems } from "@/hooks/useAttentionItems";
+import { useReclassifySweep } from "@/hooks/useReclassifySweep";
 import { BulkDecideBar } from "@/components/transactions/BulkDecideBar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -118,7 +119,14 @@ function matchesNamedView(t: Transaction, view: NamedView): boolean {
         !!t.classification_reason &&
         t.classification_reason !== "user" &&
         t.classification_reason !== "transfer" &&
-        t.reconciliation_status !== "ignored"
+        t.reconciliation_status !== "ignored" &&
+        // Spec D36: since the engine stopped filing what it cannot defend,
+        // "not healthcare and nobody decided it" no longer implies "filed" —
+        // an uncertain charge sits in the review queue with exactly those
+        // values. Without this, every charge waiting on the user would read
+        // as one the app had already dealt with. D42/D43 give this view its
+        // proper name and its siblings their counts.
+        t.needs_review !== true
       );
     case "needs_receipt":
       return (
@@ -150,6 +158,10 @@ export default function Transactions() {
   const { unreviewedTransactions: liveNeedsReview } = useAttentionItems();
   const invalidateAttentionItems = () =>
     queryClient.invalidateQueries({ queryKey: ["attention-items"] });
+  // Spec D40. Runs once per browser session and stays silent unless it moves
+  // something, so a classifier improvement reaches history that was imported
+  // before it shipped rather than only the next month of charges.
+  useReclassifySweep(true);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [filteredTransactions, setFilteredTransactions] = useState<
     Transaction[]

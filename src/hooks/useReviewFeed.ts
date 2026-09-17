@@ -36,11 +36,18 @@ export interface ReviewGroup {
   merchant_entity_id: string | null;
   mcc: string | null;
   /**
-   * 'medical': the classifier thinks this IS medical, confirm or reject.
-   * 'possible_otc': the classifier does NOT think this is medical (grocery,
-   * warehouse club, general merchandise) but flagged it because a basket
-   * there can still contain an IRS-qualifying item. is_medical is false on
-   * every row in this lane until a split or bulk decision changes it.
+   * Derived from is_medical, not from why the engine flagged the row (spec
+   * D41).
+   *
+   * 'medical': the classifier thinks this IS healthcare — confirm or reject.
+   * 'possible_otc': the classifier is only asking. Baskets that may contain
+   * an IRS-qualifying item, and merchants it could not read at all, share
+   * this lane, because to the user they are the same question. `is_medical`
+   * is false on every row in it until a decision or a split changes that.
+   *
+   * The value keeps its old spelling on the wire on purpose: renaming it
+   * would empty the lane on screen between the migration landing and the
+   * frontend deploying. Read it as "the engine is unsure", not as "OTC".
    */
   lane: "medical" | "possible_otc";
   /**

@@ -9,8 +9,11 @@
 // be taken back off the transactions it touched.
 
 import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { runReclassifySweep } from "@/hooks/useReclassifySweep";
+import { logError } from "@/utils/errorHandler";
 import {
   useCategorizationRules,
   type CategorizationRuleWithImpact,
@@ -612,12 +615,38 @@ export function CategorizationRulesManager() {
   const [pendingDelete, setPendingDelete] =
     useState<CategorizationRuleWithImpact | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [sweeping, setSweeping] = useState(false);
+  const queryClient = useQueryClient();
 
   const busy =
     applyRule.isPending ||
     revertRule.isPending ||
     updateRule.isPending ||
     deleteRule.isPending;
+
+  const handleRecheck = async () => {
+    setSweeping(true);
+    try {
+      const result = await runReclassifySweep();
+      const queued = result?.queued ?? 0;
+      // Reports what moved into the queue, not how many rows were examined.
+      // "We looked at 340 transactions" answers a question nobody asked; "3
+      // need a look" is the only number that changes what they do next.
+      toast.success(
+        queued > 0
+          ? `${queued} transaction${queued === 1 ? "" : "s"} added to your review queue`
+          : "Nothing new to look at — everything is already sorted",
+      );
+      queryClient.invalidateQueries({ queryKey: ["review-feed"] });
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["attention-items"] });
+    } catch (error) {
+      logError("Manual reclassify failed", error);
+      toast.error("Could not re-check your transactions — try again shortly");
+    } finally {
+      setSweeping(false);
+    }
+  };
 
   const handleToggle = (rule: CategorizationRuleWithImpact, next: boolean) => {
     updateRule.mutate(
@@ -755,6 +784,29 @@ export function CategorizationRulesManager() {
           Updating transactions&hellip;
         </p>
       )}
+
+      {/* Spec D40's manual half. The sweep already runs on its own once a
+          session; this is the deliberate path for when someone wants to know
+          now, or when the automatic one failed quietly. */}
+      <div className="rounded-lg border border-dashed p-4">
+        <p className="text-sm font-medium">Re-check my transactions</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          We improve how charges are recognised over time. This looks again at
+          everything you haven&rsquo;t decided yourself, and adds anything
+          we&rsquo;re no longer sure about to your review queue. It never
+          changes a decision you or one of your rules made.
+        </p>
+        <Button
+          size="sm"
+          variant="outline"
+          className="mt-3"
+          disabled={sweeping}
+          onClick={handleRecheck}
+        >
+          {sweeping && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
+          Re-check now
+        </Button>
+      </div>
 
       <AlertDialog
         open={!!pendingDelete}

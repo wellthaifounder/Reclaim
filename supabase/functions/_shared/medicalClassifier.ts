@@ -77,6 +77,14 @@ export interface PlaidTxnLike {
   /** Plaid's stable merchant id. Present on ~44% of transactions. */
   merchant_entity_id?: string | null;
   personal_finance_category?: PlaidPersonalFinanceCategory | null;
+  /**
+   * Spec D39's backstop. Plaid's convention (positive = money out) is
+   * irrelevant here — only magnitude is read. Absent is treated as 0, which
+   * fails open into "small enough to file": a caller that forgets to pass it
+   * cannot make the engine file something large by accident, because every
+   * other condition in D37/D38 still has to pass first.
+   */
+  amount?: number | null;
 }
 
 export type ClassificationReason =
@@ -86,7 +94,29 @@ export type ClassificationReason =
   | "personal_finance_category"
   | "keyword"
   | "possible_otc"
+  /** Spec D36: the engine is confident this is not a medical expense, and can
+   *  name the category it is confident about. Files without asking. */
+  | "not_medical"
+  /** Spec D36: the engine cannot defend an answer either way, so it asks.
+   *  Sets needsReview, never is_medical. */
+  | "uncertain"
+  /** Retired 2026-09-17 by spec D36 — it meant "filed, on no evidence at all",
+   *  which is the shrug D36 exists to stop. Kept in the union because rows
+   *  classified before the re-run still carry it. */
   | "none";
+
+/**
+ * Bumped whenever the rules below change what the engine decides on its own.
+ * Stamped onto every transaction at classification time, so the re-classify
+ * pass (spec D40) can find rows a newer engine has never looked at. Without
+ * it, a classifier improvement only ever reaches transactions imported after
+ * it shipped — which is how 51 superstore charges on a real account stayed
+ * invisible in the auto-filed pile.
+ *
+ * 1 — everything before 2026-09-17 (implicit; those rows carry NULL).
+ * 2 — spec D36–D39: no filing without defensible confidence.
+ */
+export const CLASSIFIER_VERSION = 2;
 
 export interface ClassificationResult {
   isMedical: boolean;
@@ -142,6 +172,33 @@ const TRUSTED_PFC_CONFIDENCE: ReadonlySet<string> = new Set([
   "VERY_HIGH",
   "HIGH",
 ]);
+
+// ── What the engine may file on its own (spec D36–D39) ────────────────────
+// Everything above this point decides a transaction IS medical, and every one
+// of those tiers asks the user before it counts. These three constants govern
+// the opposite direction: the only thing the engine has ever decided alone.
+//
+// Categories that can hold a qualifying item, whatever Plaid's confidence.
+// A blood-pressure monitor is general merchandise; a gym membership with a
+// letter of medical necessity is personal care; COBRA, long-term-care and
+// Medicare premiums are insurance. Groceries belong on this list too and are
+// already handled one tier up, by OTC_PFC_DETAILED.
+const NEVER_AUTO_FILE_PFC_PRIMARY: ReadonlySet<string> = new Set([
+  "GENERAL_MERCHANDISE",
+  "PERSONAL_CARE",
+]);
+
+const NEVER_AUTO_FILE_PFC_DETAILED: ReadonlySet<string> = new Set([
+  "GENERAL_SERVICES_INSURANCE",
+]);
+
+/**
+ * Spec D39. No category list is ever complete, and the error is asymmetric:
+ * filing a $9 lunch wrongly costs nothing, filing a $1,400 charge wrongly
+ * costs a claim the user will never know they missed. A starting figure, to
+ * be revisited against what it actually catches.
+ */
+const AUTO_FILE_MAX_AMOUNT = 200;
 
 // ── Possible-OTC lane ─────────────────────────────────────────────────────
 // Grocery, general-merchandise and warehouse-club purchases are never
@@ -554,11 +611,63 @@ export async function classifyTransaction(
     };
   }
 
+  // Tier 7 — the engine's own limit. Spec D36–D39.
+  //
+  // This used to return "none" unconditionally: filed, not medical, never
+  // shown to anyone, on the strength of having found nothing. That is a shrug
+  // rendered as a decision, and on one real account it hid 231 charges across
+  // 81 merchants — one of them a medical payment-plan servicer, invisible for
+  // nine months. The engine may still file, but only when it can say what it
+  // is confident about and why.
+  const confidence = (pfc?.confidence_level ?? "").toUpperCase();
+  const label = humanizePfc(detailed || primary);
+  const amount = Math.abs(txn.amount ?? 0);
+
+  if (!TRUSTED_PFC_CONFIDENCE.has(confidence)) {
+    return {
+      isMedical: false,
+      needsReview: true,
+      reason: "uncertain",
+      confidence: 0,
+      explanation: label
+        ? `Categorized as ${label}, but with low confidence — worth a look.`
+        : "We could not tell what this purchase was — worth a look.",
+    };
+  }
+  if (
+    NEVER_AUTO_FILE_PFC_PRIMARY.has(primary) ||
+    NEVER_AUTO_FILE_PFC_DETAILED.has(detailed)
+  ) {
+    return {
+      isMedical: false,
+      needsReview: true,
+      reason: "uncertain",
+      confidence: 0,
+      explanation: `Categorized as ${label}, which can include qualifying items — worth a look.`,
+    };
+  }
+  if (amount > AUTO_FILE_MAX_AMOUNT) {
+    return {
+      isMedical: false,
+      needsReview: true,
+      reason: "uncertain",
+      confidence: 0,
+      explanation: `Categorized as ${label}, but large enough to be worth confirming.`,
+    };
+  }
+
   return {
     isMedical: false,
     needsReview: false,
-    reason: "none",
+    reason: "not_medical",
     confidence: 0.9,
-    explanation: "No medical signal in the merchant name or category.",
+    explanation: `Categorized as ${label}, which is not a medical expense.`,
   };
+}
+
+/** "FOOD_AND_DRINK_FAST_FOOD" -> "food and drink fast food". Empty for an
+ *  absent category, which is what separates "Plaid was unsure" from "Plaid
+ *  said nothing at all" in the copy above. */
+function humanizePfc(value: string): string {
+  return value.toLowerCase().replace(/_/g, " ").trim();
 }

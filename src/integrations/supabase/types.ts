@@ -1028,6 +1028,7 @@ export type Database = {
           previous_classification_reason: string | null
           previous_is_medical: boolean | null
           previous_needs_review: boolean | null
+          previous_reconciliation_status: string | null
           reverted_at: string | null
           rule_id: string
           transaction_id: string
@@ -1041,6 +1042,7 @@ export type Database = {
           previous_classification_reason?: string | null
           previous_is_medical?: boolean | null
           previous_needs_review?: boolean | null
+          previous_reconciliation_status?: string | null
           reverted_at?: string | null
           rule_id: string
           transaction_id: string
@@ -1054,6 +1056,7 @@ export type Database = {
           previous_classification_reason?: string | null
           previous_is_medical?: boolean | null
           previous_needs_review?: boolean | null
+          previous_reconciliation_status?: string | null
           reverted_at?: string | null
           rule_id?: string
           transaction_id?: string
@@ -1315,6 +1318,7 @@ export type Database = {
           classification_confidence: number | null
           classification_explanation: string | null
           classification_reason: string | null
+          classifier_version: number | null
           created_at: string
           description: string
           id: string
@@ -1354,6 +1358,7 @@ export type Database = {
           classification_confidence?: number | null
           classification_explanation?: string | null
           classification_reason?: string | null
+          classifier_version?: number | null
           created_at?: string
           description: string
           id?: string
@@ -1393,6 +1398,7 @@ export type Database = {
           classification_confidence?: number | null
           classification_explanation?: string | null
           classification_reason?: string | null
+          classifier_version?: number | null
           created_at?: string
           description?: string
           id?: string

@@ -379,15 +379,128 @@ Deno.test(
 );
 
 Deno.test(
-  "a plain grocery run with no OTC signal at all stays fully silent",
+  "a merchant with no OTC signal does not land in the OTC lane",
   async () => {
-    // Confirms the OTC lane didn't accidentally widen to catch everything —
-    // a merchant with no grocery/general-merchandise/warehouse-club signal at
-    // all (medical or otherwise) is still "none", not "possible_otc".
+    // Confirms the OTC lane didn't accidentally widen to catch everything.
+    // It asked for reason === "none" until spec D36: a bare name with no
+    // Plaid category is now something the engine admits it cannot read, so
+    // it reaches the queue as "uncertain". The thing this test exists to
+    // protect — that it isn't claimed as a basket — is unchanged.
     const r = await classify(txn({ name: "STARBUCKS" }));
     assertEquals(r.isMedical, false);
+    assertEquals(r.reason, "uncertain");
+  },
+);
+
+// ── What the engine may file on its own (spec D36–D39) ────────────────────
+
+Deno.test(
+  "a confidently-categorized small charge is filed without asking",
+  async () => {
+    const r = await classify(
+      txn({
+        name: "STARBUCKS",
+        amount: 6.45,
+        personal_finance_category: {
+          primary: "FOOD_AND_DRINK",
+          detailed: "FOOD_AND_DRINK_COFFEE",
+          confidence_level: "VERY_HIGH",
+        },
+      }),
+    );
+    assertEquals(r.isMedical, false);
     assertEquals(r.needsReview, false);
-    assertEquals(r.reason, "none");
+    assertEquals(r.reason, "not_medical");
+    // The explanation has to name what it was confident about — "no medical
+    // signal" is the shrug D36 removed.
+    assertEquals(r.explanation.includes("food and drink coffee"), true);
+  },
+);
+
+Deno.test("a low-confidence category is never filed silently", async () => {
+  const r = await classify(
+    txn({
+      name: "SOME OBSCURE LLC",
+      amount: 12,
+      personal_finance_category: {
+        primary: "GENERAL_SERVICES",
+        detailed: "GENERAL_SERVICES_OTHER_GENERAL_SERVICES",
+        confidence_level: "LOW",
+      },
+    }),
+  );
+  assertEquals(r.needsReview, true);
+  assertEquals(r.reason, "uncertain");
+});
+
+Deno.test(
+  "general merchandise is never filed, however confident Plaid is",
+  async () => {
+    // Deliberately a subtype the OTC tier does NOT list, so this exercises
+    // D38's primary-level guard rather than falling into the OTC lane above.
+    // A blood-pressure monitor or a compression sleeve lives here.
+    const r = await classify(
+      txn({
+        name: "SOME DEPARTMENT STORE",
+        amount: 40,
+        personal_finance_category: {
+          primary: "GENERAL_MERCHANDISE",
+          detailed: "GENERAL_MERCHANDISE_CLOTHING_AND_ACCESSORIES",
+          confidence_level: "VERY_HIGH",
+        },
+      }),
+    );
+    assertEquals(r.needsReview, true);
+    assertEquals(r.reason, "uncertain");
+  },
+);
+
+Deno.test("insurance is never filed — premiums can qualify", async () => {
+  const r = await classify(
+    txn({
+      name: "SOME INSURER",
+      amount: 150,
+      personal_finance_category: {
+        primary: "GENERAL_SERVICES",
+        detailed: "GENERAL_SERVICES_INSURANCE",
+        confidence_level: "VERY_HIGH",
+      },
+    }),
+  );
+  assertEquals(r.needsReview, true);
+  assertEquals(r.reason, "uncertain");
+});
+
+Deno.test(
+  "a large charge is asked about even in a safe category (D39)",
+  async () => {
+    const safeCategory = {
+      primary: "TRAVEL",
+      detailed: "TRAVEL_FLIGHTS",
+      confidence_level: "VERY_HIGH",
+    };
+    // Travel for medical care is a qualified expense, which is exactly the
+    // kind of case no category list anticipates. The backstop is what catches
+    // it: same merchant, same confidence, only the amount differs.
+    const small = await classify(
+      txn({
+        name: "AIRLINE",
+        amount: 180,
+        ...{ personal_finance_category: safeCategory },
+      }),
+    );
+    assertEquals(small.needsReview, false);
+    assertEquals(small.reason, "not_medical");
+
+    const large = await classify(
+      txn({
+        name: "AIRLINE",
+        amount: 900,
+        ...{ personal_finance_category: safeCategory },
+      }),
+    );
+    assertEquals(large.needsReview, true);
+    assertEquals(large.reason, "uncertain");
   },
 );
 

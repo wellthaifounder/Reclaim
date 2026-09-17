@@ -25,6 +25,7 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   classifyTransaction,
+  CLASSIFIER_VERSION,
   type ClassificationResult,
   type PlaidTxnLike,
 } from "./medicalClassifier.ts";
@@ -378,6 +379,9 @@ async function drain(
         // (16/16) versus 60% for MCC — the classifier's most reliable signal,
         // and the source of the transfer/loan-payment exclusions.
         personal_finance_category: txn.personal_finance_category ?? null,
+        // Spec D39's backstop reads magnitude only; Plaid's sign convention
+        // (positive = money out) is not meaningful to it.
+        amount: txn.amount,
       };
       const c = await classifyTransaction(supabase, txnLike, opts.rules);
       classifications.set(txn.transaction_id, c);
@@ -418,6 +422,9 @@ async function drain(
         classification_reason: c.reason,
         classification_explanation: c.explanation,
         classification_confidence: c.confidence,
+        // Spec D40: which engine looked at this. The re-classify pass finds
+        // rows stamped older than CLASSIFIER_VERSION.
+        classifier_version: CLASSIFIER_VERSION,
         applied_by_rule_id: c.ruleId ?? null,
         // Workstream C2: eligibility is no longer decided at ingestion. It
         // depends on date of service, patient and Pub 502 category, none of
