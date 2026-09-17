@@ -306,7 +306,7 @@ function GroupRow({
               onClick={() => fadeThenDecideGroup(false)}
             >
               <XCircle className="mr-1 h-4 w-4" />
-              {isOtc ? "None had healthcare items" : "Not healthcare"}
+              Not healthcare
             </Button>
             {/* Spec D34: with "All healthcare" and "Not healthcare" both
                   spelled out in full, a third full-width text button here
@@ -355,7 +355,7 @@ function GroupRow({
               onClick={() => fadeThenDecideGroup(false)}
             >
               <XCircle className="mr-1 h-4 w-4" />
-              {isOtc ? "No healthcare items here" : "Not healthcare"}
+              Not healthcare
             </Button>
             {solo && (
               <>
