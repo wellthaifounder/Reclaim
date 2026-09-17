@@ -166,9 +166,47 @@ export function CreateRulePrompt({
     );
   };
 
+  // D20 asked for the forward promise rather than a past-tense recap, and that
+  // still holds — but it was written in the indicative ("From now on, we'll
+  // stop flagging Harmons"), which states as settled the very thing the panel
+  // is asking permission for. Nothing has been ruled yet at this point; the
+  // user can still pick "Just this once". So the heading asks, and the promise
+  // moves below it in the conditional.
   const forwardPromise = candidate?.isMedical
-    ? `From now on, charges from ${label} are healthcare`
-    : `From now on, we'll stop flagging ${label}`;
+    ? `We'd file charges from ${label} as healthcare from now on.`
+    : `We'd stop flagging ${label} from now on.`;
+
+  /**
+   * What the rule actually keys on, in words.
+   *
+   * `key.matchValue` is not this. For a merchant_entity rule it is Plaid's own
+   * identifier for the merchant — a 37-character string like
+   * "RMqBadjywbZJgg4MN3ORXJVVg4z2AW6Nmrayj" — which was being printed to the
+   * user verbatim under "Matching on: Exact merchant". It says nothing to
+   * anybody and looks like a bug. The settings list has always shown
+   * `display_label || match_value` for exactly this reason; this panel is the
+   * one place that leaked the raw value.
+   */
+  const matchSummary = (() => {
+    if (!key) return null;
+    switch (key.matchType) {
+      case "merchant_entity":
+        return {
+          value: label,
+          note: "Matched by your bank's own id for this merchant, so it keeps working even when the name on your statement changes.",
+        };
+      case "name_pattern":
+        return {
+          value: `“${key.matchValue}”`,
+          note: "Matched on the merchant name, ignoring store numbers and card-processor prefixes.",
+        };
+      case "mcc":
+        return {
+          value: key.matchValue,
+          note: null,
+        };
+    }
+  })();
 
   const panel = (
     <div
@@ -192,7 +230,10 @@ export function CreateRulePrompt({
       <Card className="space-y-4 p-4 shadow-lg">
         <div className="flex items-start justify-between gap-2">
           <div>
-            <p className="font-medium leading-snug">{forwardPromise}</p>
+            <p className="font-medium leading-snug">Want to make it a rule?</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {forwardPromise}
+            </p>
             {/* D20: the backfill count only shows up here when there is one
                 to report — a zero or still-loading count says nothing, so a
                 brand-new merchant's rule reads as pure upside. */}
@@ -218,9 +259,14 @@ export function CreateRulePrompt({
           <p className="font-medium">
             Matching on: {key ? MATCH_TYPE_LABELS[key.matchType] : ""}
           </p>
-          <p className="mt-1 text-muted-foreground break-words">
-            {key?.matchValue}
+          <p className="mt-1 break-words text-muted-foreground">
+            {matchSummary?.value}
           </p>
+          {matchSummary?.note && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              {matchSummary.note}
+            </p>
+          )}
           {key?.matchType === "mcc" && (
             <p className="mt-2 text-xs text-amber-600 dark:text-amber-500">
               This merchant has no usable name, so the rule matches its whole
