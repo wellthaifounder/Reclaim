@@ -61,7 +61,6 @@ import { toast } from "sonner";
 import {
   useReviewFeed,
   useReviewGroupTransactions,
-  useAutoFiledCount,
   groupRuleKey,
   type ReviewGroup,
   type ReviewGroupTransaction,
@@ -593,10 +592,6 @@ export function ReviewFeed() {
     decideTransaction,
     invalidate,
   } = useReviewFeed();
-  // Spec D28. Queried unconditionally rather than only once the queue is
-  // empty -- the empty state is a conditional early return below, and hooks
-  // can't follow it there.
-  const { data: autoFiledCount = 0 } = useAutoFiledCount();
   const [ruleCandidate, setRuleCandidate] = useState<RuleCandidate | null>(
     null,
   );
@@ -900,26 +895,12 @@ export function ReviewFeed() {
             <p className="max-w-sm text-sm text-muted-foreground">
               Everything that looked like healthcare has been sorted.
             </p>
-            {/* Spec D28: a narrow classifier is correct to never ask about
-                Netflix, but a miss the same way -- flagging 0 of a real
-                account's 208 charges, once -- is invisible forever if nothing
-                ever points at the auto-filed pile. One sentence, only when
-                there's something to see, not a recurring nag. */}
-            {autoFiledCount > 0 && (
-              <p className="max-w-sm text-sm text-muted-foreground">
-                We also filed {autoFiledCount} charge
-                {autoFiledCount === 1 ? "" : "s"} as not healthcare.{" "}
-                <button
-                  type="button"
-                  className="font-medium text-primary underline-offset-2 hover:underline"
-                  onClick={() =>
-                    navigate("/transactions?tab=all&view=auto_filed")
-                  }
-                >
-                  Worth a look?
-                </button>
-              </p>
-            )}
+            {/* D28's "we also filed N charges as not healthcare — worth a
+                look?" sentence stood here. Spec D44 keeps its purpose and
+                drops its mechanism: the count now sits permanently beside the
+                All tab's status filter, where it cannot nag, stays true as
+                the pile changes, and is seen by someone who never emptied
+                their queue — which is the person who needs it. */}
           </CardContent>
         </Card>
         {/* The rule prompt has to survive the queue emptying.

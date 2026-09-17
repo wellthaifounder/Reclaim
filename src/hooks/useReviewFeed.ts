@@ -135,44 +135,14 @@ export function useReviewGroupTransactions(
   });
 }
 
-/**
- * Spec D28: how many transactions were filed as not-healthcare without the
- * user ever seeing them, for the one-sentence nudge on the empty queue --
- * "Transactions that clearly aren't healthcare are auto-filed. That is
- * correct... but if nothing ever surfaces what was auto-dismissed, a miss
- * [in the classifier] is invisible forever."
- *
- * The predicate must mirror `matchesNamedView`'s 'auto_filed' case in
- * Transactions.tsx exactly, or the nudge's count and the view it links to
- * (`/transactions?tab=all&view=auto_filed`) will disagree. A transfer was
- * never a healthcare judgement at all, so it's excluded here the same way.
- */
-export function useAutoFiledCount() {
-  const { user } = useAuthUser();
-  const userId = user?.id;
-
-  return useQuery({
-    queryKey: ["auto-filed-count", userId],
-    enabled: !!userId,
-    staleTime: 60 * 1000,
-    queryFn: async (): Promise<number> => {
-      const { count, error } = await supabase
-        .from("transactions")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", userId as string)
-        .eq("is_medical", false)
-        .eq("is_transfer", false)
-        .not("classification_reason", "is", null)
-        .not("classification_reason", "in", '("user","transfer")')
-        // SQL's <> is unknown (excludes the row) against a NULL
-        // reconciliation_status, unlike the JS `!==` matchesNamedView uses --
-        // spelled out with .or so a null reads as "not ignored" here too.
-        .or("reconciliation_status.is.null,reconciliation_status.neq.ignored");
-      if (error) throw error;
-      return count ?? 0;
-    },
-  });
-}
+// useAutoFiledCount (spec D28) was removed 2026-09-17 by spec D44. It counted
+// charges filed as not-healthcare without the user ever seeing them, for a
+// one-sentence nudge on an empty review queue. Its predicate was a
+// hand-maintained duplicate of the All tab's own 'auto_filed' rule, kept in
+// agreement by a comment -- exactly the kind of pair that drifts. The count
+// now comes from `countTransactionStatuses` over the rows the All tab already
+// has (src/lib/transactionStatus.ts), so the number and the list it describes
+// are computed from one function and cannot disagree.
 
 export function useReviewFeed() {
   const queryClient = useQueryClient();

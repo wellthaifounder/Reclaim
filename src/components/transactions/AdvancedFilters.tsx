@@ -30,16 +30,26 @@ export type FilterCriteria = {
   dateEnd?: Date;
   isHsaEligible?: "all" | "yes" | "no";
   hsaAccountId?: string;
+  /** Spec D45. An exact merchant, picked from the ones actually on file --
+   *  distinct from the search box, which matches a substring across vendor,
+   *  description and amount. "CVS" typed in search also finds "CVS/pharmacy
+   *  #4412" and a $12.05 charge at Kroger; picking CVS here does not. */
+  merchant?: string;
 };
 
 type AdvancedFiltersProps = {
   onFilterChange: (filters: FilterCriteria) => void;
   activeFilters: FilterCriteria;
+  /** Every merchant present in the caller's data, already de-duplicated and
+   *  sorted. Passed in rather than queried here so the list can never offer a
+   *  merchant that would return nothing. */
+  merchants?: string[];
 };
 
 export function AdvancedFilters({
   onFilterChange,
   activeFilters,
+  merchants = [],
 }: AdvancedFiltersProps) {
   const [open, setOpen] = useState(false);
   const [filters, setFilters] = useState<FilterCriteria>(activeFilters);
@@ -86,7 +96,18 @@ export function AdvancedFilters({
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-96 pointer-events-auto" align="end">
+      {/* The panel is taller than the room above or below its button on a
+          laptop, so Radix flipped it upward and the top ~120px -- the heading
+          and the Clear button, the only way to drop a filter without
+          reloading -- ended up above the top of the window. Capping it at the
+          space actually available and letting it scroll is the fix; without
+          this, adding any field to this panel silently pushes another one out
+          of reach. */}
+      <PopoverContent
+        className="w-96 max-h-[var(--radix-popover-content-available-height)] overflow-y-auto pointer-events-auto"
+        align="end"
+        collisionPadding={12}
+      >
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h4 className="font-semibold">Advanced Filters</h4>
@@ -144,6 +165,33 @@ export function AdvancedFilters({
               </div>
             )}
           </div>
+
+          {/* Merchant Filter (spec D45) */}
+          {merchants.length > 0 && (
+            <div className="space-y-2">
+              <Label>Merchant</Label>
+              <Select
+                value={filters.merchant || "all"}
+                onValueChange={(value) =>
+                  updateFilter("merchant", value === "all" ? undefined : value)
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="All merchants" />
+                </SelectTrigger>
+                {/* The list is as long as the account is old, so it scrolls
+                    rather than growing the popover past the viewport. */}
+                <SelectContent className="max-h-72">
+                  <SelectItem value="all">All merchants</SelectItem>
+                  {merchants.map((merchant) => (
+                    <SelectItem key={merchant} value={merchant}>
+                      {merchant}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {/* Date Filter */}
           <div className="space-y-2">
