@@ -14,14 +14,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Plus, Search, Info, ScrollText, ListFilter } from "lucide-react";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Plus, Search, Info, ScrollText } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import {
@@ -41,6 +34,21 @@ import {
   CreateRulePrompt,
   type RuleCandidate,
 } from "@/components/transactions/CreateRulePrompt";
+import { TransactionListControls } from "@/components/transactions/TransactionListControls";
+import {
+  TRANSACTION_STATUS_EMPTY_COPY,
+  countTransactionStatuses,
+  isTransactionStatus,
+  matchesTransactionStatus,
+  type TransactionStatus,
+} from "@/lib/transactionStatus";
+import {
+  DEFAULT_GROUP_BY,
+  DEFAULT_SORT,
+  groupTransactions,
+  type GroupBy,
+  type SortOrder,
+} from "@/lib/transactionGrouping";
 import { canSplitIntoExpenses } from "@/lib/expenseSplitUtils";
 import { SplitTransactionCard } from "@/components/transactions/SplitTransactionCard";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
@@ -61,81 +69,16 @@ type Transaction = Database["public"]["Tables"]["transactions"]["Row"] & {
   plaid_accounts?: {
     is_hsa: boolean | null;
   } | null;
-  // Spec D27's "Needs a receipt" named view reads this directly rather than
-  // re-deriving it: `documentation_state = 'none'` is the exact column the
-  // Substantiate page's own queue is keyed on (trg_invoices_sync_lifecycle),
-  // so a transaction agrees with its expense about whether it has a receipt.
-  invoices?: {
-    documentation_state: string | null;
-  } | null;
 };
 
-/**
- * Spec D27: one filtered list replaces the old All / Healthcare /
- * Non-Healthcare tabs. "Filed automatically" and "Dismissed" both end up
- * not-healthcare, but split by who decided -- the distinction D28 exists to
- * surface (a narrow classifier's own misses are invisible unless its pile is
- * somewhere to look). A transfer was never a healthcare/not-healthcare
- * judgement at all, so it's excluded from every named view except Everything.
- */
-const NAMED_VIEWS = [
-  "everything",
-  "healthcare",
-  "auto_filed",
-  "needs_receipt",
-  "dismissed",
-] as const;
-type NamedView = (typeof NAMED_VIEWS)[number];
-
-const NAMED_VIEW_LABELS: Record<NamedView, string> = {
-  everything: "Everything",
-  healthcare: "Healthcare",
-  auto_filed: "Filed automatically",
-  needs_receipt: "Needs a receipt",
-  dismissed: "Dismissed",
-};
-
-const NAMED_VIEW_EMPTY_COPY: Record<NamedView, string> = {
-  everything: "Nothing here yet",
-  healthcare: "Nothing marked healthcare yet",
-  auto_filed: "Nothing filed automatically yet",
-  needs_receipt: "Nothing waiting on a receipt",
-  dismissed: "Nothing dismissed",
-};
-
-/** Mirrors the server-side count ReviewFeed.tsx uses for spec D28's nudge --
- *  keep the two in agreement or the nudge's number and this view's contents
- *  will disagree. */
-function matchesNamedView(t: Transaction, view: NamedView): boolean {
-  switch (view) {
-    case "everything":
-      return true;
-    case "healthcare":
-      return t.is_medical === true;
-    case "auto_filed":
-      return (
-        t.is_medical === false &&
-        !t.is_transfer &&
-        !!t.classification_reason &&
-        t.classification_reason !== "user" &&
-        t.classification_reason !== "transfer" &&
-        t.reconciliation_status !== "ignored" &&
-        // Spec D36: since the engine stopped filing what it cannot defend,
-        // "not healthcare and nobody decided it" no longer implies "filed" —
-        // an uncertain charge sits in the review queue with exactly those
-        // values. Without this, every charge waiting on the user would read
-        // as one the app had already dealt with. D42/D43 give this view its
-        // proper name and its siblings their counts.
-        t.needs_review !== true
-      );
-    case "needs_receipt":
-      return (
-        t.is_medical === true && t.invoices?.documentation_state === "none"
-      );
-    case "dismissed":
-      return t.reconciliation_status === "ignored";
-  }
-}
+// Spec D42–D46 replaced D27's five named views. The status model, its labels
+// and the one function that assigns a row to exactly one state now live in
+// src/lib/transactionStatus.ts; grouping and sorting in
+// src/lib/transactionGrouping.ts. "Needs a receipt" is gone from here
+// entirely (D46) — it asked a question from a different step of the spine
+// ("what is missing downstream" rather than "what did we decide"), and
+// Substantiate's own queue is keyed on the same column, so two doors onto one
+// queue was how the two were going to drift apart.
 
 export default function Transactions() {
   const queryClient = useQueryClient();
@@ -163,9 +106,6 @@ export default function Transactions() {
   // before it shipped rather than only the next month of charges.
   useReclassifySweep(true);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [filteredTransactions, setFilteredTransactions] = useState<
-    Transaction[]
-  >([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedTransactionId, setExpandedTransactionId] = useState<
@@ -187,15 +127,6 @@ export default function Transactions() {
   );
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [deciding, setDeciding] = useState(false);
-  // Transfers and split parents have no medical decision to make, so "select
-  // all" must not sweep them in and then fail on them one row at a time.
-  const selectableIds = useMemo(
-    () =>
-      filteredTransactions
-        .filter((t) => !t.is_transfer && !t.is_split)
-        .map((t) => t.id),
-    [filteredTransactions],
-  );
   // ?tab= opens a specific tab. The dashboard has linked to
   // /transactions?tab=review for a while, but nothing here ever read the
   // parameter, so "Review transactions" quietly dropped people on the All tab
@@ -213,9 +144,8 @@ export default function Transactions() {
   // fifth nav destination -- and spec D29 means that tab must be reachable
   // regardless of the queue's own state, so it is never conditionally
   // rendered. The old third and fourth tabs (Healthcare / Non-Healthcare)
-  // are gone; that distinction now lives inside "All" as the named-view
-  // control below (spec D27), reachable via ?view= the same way ?tab= always
-  // has been.
+  // are gone; that distinction now lives inside "All" as the status filter
+  // below (spec D42), reachable via ?view= the same way ?tab= always has been.
   const TABS = ["review", "all"];
   const requestedTab = searchParams.get("tab");
   const activeTab =
@@ -228,18 +158,28 @@ export default function Transactions() {
     setSearchParams(sp, { replace: true });
   };
 
+  // The status filter keeps ?view= as its parameter name so links written
+  // before D42 still land where they meant to -- ?view=auto_filed and
+  // ?view=healthcare both still name a real status. ?view=dismissed and
+  // ?view=needs_receipt no longer do, and fall back to Everything rather than
+  // to an empty list with no explanation.
   const requestedView = searchParams.get("view");
-  const namedView: NamedView =
-    requestedView && (NAMED_VIEWS as readonly string[]).includes(requestedView)
-      ? (requestedView as NamedView)
+  const status: TransactionStatus =
+    requestedView && isTransactionStatus(requestedView)
+      ? requestedView
       : "everything";
 
-  const setNamedView = (next: NamedView) => {
+  const setStatus = (next: TransactionStatus) => {
     const sp = new URLSearchParams(searchParams);
     if (next === "everything") sp.delete("view");
     else sp.set("view", next);
     setSearchParams(sp, { replace: true });
   };
+  // Spec D45: group-by and sort are view preferences rather than link
+  // targets, so unlike the tab and the status they stay in local state. The
+  // page lands ungrouped, newest first.
+  const [groupBy, setGroupBy] = useState<GroupBy>(DEFAULT_GROUP_BY);
+  const [sortOrder, setSortOrder] = useState<SortOrder>(DEFAULT_SORT);
   const [advancedFilters, setAdvancedFilters] = useState<FilterCriteria>({});
   const [hsaOpenedDate, setHsaOpenedDate] = useState<string | null>(null);
 
@@ -269,10 +209,6 @@ export default function Transactions() {
       setHsaOpenedDate(null);
     }
   };
-
-  useEffect(() => {
-    filterTransactions();
-  }, [transactions, searchQuery, activeTab, namedView, advancedFilters]);
 
   // Open on the review queue when there is something waiting -- but only as a
   // first-load default, and only when the URL did not ask for a tab.
@@ -328,14 +264,14 @@ export default function Transactions() {
       // screen said otherwise. Now they read the same column.
       const { data, error } = await supabase
         .from("transactions")
+        // The invoices!transactions_invoice_id_fkey join went with D46: its
+        // only reader was the "Needs a receipt" view, which has moved to
+        // Substantiate.
         .select(
           `
           *,
           plaid_accounts (
             is_hsa
-          ),
-          invoices!transactions_invoice_id_fkey (
-            documentation_state
           )
         `,
         )
@@ -351,13 +287,24 @@ export default function Transactions() {
     }
   };
 
-  const filterTransactions = () => {
+  /**
+   * Everything the user narrowed by EXCEPT the status filter: search, and the
+   * advanced filter panel's merchant / date / amount conditions.
+   *
+   * Kept separate because this is what the status counts are taken over
+   * (spec D42/D44). Counting the whole account instead would let the filter
+   * advertise "Filed automatically 231" and then show an empty list while a
+   * search was active, which reads as the page being broken; counting the
+   * narrowed set means every number beside the filter is exactly what
+   * choosing it would show.
+   *
+   * Now derived rather than pushed into state by an effect. The old version
+   * recomputed inside useEffect and wrote the result to useState, so every
+   * change rendered twice -- once with the stale list -- and the effect's
+   * dependency array was a hand-maintained copy of what the body read.
+   */
+  const narrowedTransactions = useMemo(() => {
     let filtered = [...transactions];
-
-    // Spec D27: the named view replaces the old medical/non-medical tabs.
-    if (activeTab === "all") {
-      filtered = filtered.filter((t) => matchesNamedView(t, namedView));
-    }
 
     // Filter by search query
     if (searchQuery) {
@@ -367,6 +314,14 @@ export default function Transactions() {
           t.vendor?.toLowerCase().includes(query) ||
           t.description.toLowerCase().includes(query) ||
           t.amount.toString().includes(query),
+      );
+    }
+
+    // Spec D45: an exact merchant, as opposed to the substring search above.
+    if (advancedFilters.merchant) {
+      const wanted = advancedFilters.merchant;
+      filtered = filtered.filter(
+        (t) => (t.vendor || t.description || "Unknown").trim() === wanted,
       );
     }
 
@@ -418,8 +373,50 @@ export default function Transactions() {
       });
     }
 
-    setFilteredTransactions(filtered);
-  };
+    return filtered;
+  }, [transactions, searchQuery, advancedFilters]);
+
+  const statusCounts = useMemo(
+    () => countTransactionStatuses(narrowedTransactions),
+    [narrowedTransactions],
+  );
+
+  const filteredTransactions = useMemo(
+    () =>
+      activeTab === "all"
+        ? narrowedTransactions.filter((t) =>
+            matchesTransactionStatus(t, status),
+          )
+        : narrowedTransactions,
+    [narrowedTransactions, activeTab, status],
+  );
+
+  const transactionGroups = useMemo(
+    () => groupTransactions(filteredTransactions, groupBy, sortOrder),
+    [filteredTransactions, groupBy, sortOrder],
+  );
+
+  /** Every merchant on file, for the filter panel's merchant list. Taken from
+   *  the unnarrowed set so choosing one is always a way IN to a merchant,
+   *  never a list that shrinks as you filter. */
+  const merchantOptions = useMemo(() => {
+    const names = new Set<string>();
+    for (const t of transactions) {
+      if (t.is_split) continue;
+      names.add((t.vendor || t.description || "Unknown").trim());
+    }
+    return [...names].sort((a, b) => a.localeCompare(b));
+  }, [transactions]);
+
+  // Transfers and split parents have no medical decision to make, so "select
+  // all" must not sweep them in and then fail on them one row at a time.
+  const selectableIds = useMemo(
+    () =>
+      filteredTransactions
+        .filter((t) => !t.is_transfer && !t.is_split)
+        .map((t) => t.id),
+    [filteredTransactions],
+  );
 
   const handleViewDetails = (transaction: Transaction) => {
     if (expandedTransactionId === transaction.id) {
@@ -871,6 +868,7 @@ export default function Transactions() {
             <AdvancedFilters
               onFilterChange={setAdvancedFilters}
               activeFilters={advancedFilters}
+              merchants={merchantOptions}
             />
           </div>
 
@@ -916,41 +914,29 @@ export default function Transactions() {
               value={activeTab === "review" ? "__inactive__" : activeTab}
               className="space-y-4"
             >
-              {/* Spec D27: one control, five named views. Reachable whenever
-                  this tab is (spec D29) -- nothing here is conditioned on the
-                  queue being empty. */}
-              <div className="flex items-center gap-2">
-                <ListFilter
-                  className="h-4 w-4 shrink-0 text-muted-foreground"
-                  aria-hidden="true"
-                />
-                <Select
-                  value={namedView}
-                  onValueChange={(v) => setNamedView(v as NamedView)}
-                >
-                  <SelectTrigger className="h-8 w-[200px] text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {NAMED_VIEWS.map((view) => (
-                      <SelectItem key={view} value={view}>
-                        {NAMED_VIEW_LABELS[view]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {/* Spec D42/D45: status (with counts), group-by and sort.
+                  Reachable whenever this tab is (spec D29) -- nothing here is
+                  conditioned on the queue being empty. */}
+              <TransactionListControls
+                status={status}
+                counts={statusCounts}
+                onStatusChange={setStatus}
+                groupBy={groupBy}
+                onGroupByChange={setGroupBy}
+                sort={sortOrder}
+                onSortChange={setSortOrder}
+              />
 
               {filteredTransactions.length === 0 ? (
                 <Card className="p-12 text-center">
                   <p className="text-muted-foreground">
-                    {NAMED_VIEW_EMPTY_COPY[namedView]}
+                    {TRANSACTION_STATUS_EMPTY_COPY[status]}
                   </p>
                   {/* "Add one manually" only makes sense on a genuinely empty
-                      account -- offering it under "Dismissed" or "Needs a
-                      receipt" would read as a non sequitur when the view is
+                      account -- offering it under "Not healthcare" or
+                      "Transfers" would read as a non sequitur when the view is
                       simply, correctly, empty. */}
-                  {namedView === "everything" && (
+                  {status === "everything" && (
                     <Button
                       onClick={() => navigate("/expenses/new")}
                       variant="outline"
@@ -977,81 +963,110 @@ export default function Transactions() {
                     onDecide={(isMedical) => decide(selectedIds, isMedical)}
                     onClear={() => setSelectedIds([])}
                   />
-                  {filteredTransactions.map((transaction) => {
-                    // Show split transaction card for split transactions
-                    if (transaction.is_split) {
-                      return (
-                        <SplitTransactionCard
-                          key={transaction.id}
-                          transaction={transaction}
-                        />
-                      );
-                    }
+                  {transactionGroups.map((group) => (
+                    <div key={group.key} className="space-y-3">
+                      {/* Spec D45. A heading only when there is grouping to
+                          describe -- "No grouping" returns one unlabelled
+                          group, so the ungrouped list this page lands on is
+                          exactly the flat list it has always been. Sticky
+                          below the page header so the merchant or month you
+                          are reading stays named while you scroll a long
+                          section. */}
+                      {groupBy !== "none" && (
+                        <div className="sticky top-[4.5rem] z-[5] flex items-baseline justify-between gap-3 border-b bg-background/95 py-1.5 backdrop-blur">
+                          <h2 className="truncate text-sm font-semibold text-foreground">
+                            {group.label}
+                          </h2>
+                          <p className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                            {group.count} &middot; {formatCurrency(group.total)}
+                          </p>
+                        </div>
+                      )}
+                      {group.items.map((transaction) => {
+                        // Show split transaction card for split transactions
+                        if (transaction.is_split) {
+                          return (
+                            <SplitTransactionCard
+                              key={transaction.id}
+                              transaction={transaction}
+                            />
+                          );
+                        }
 
-                    return (
-                      <div key={transaction.id}>
-                        <TransactionCard
-                          id={transaction.id}
-                          date={transaction.transaction_date}
-                          vendor={transaction.vendor || "Unknown"}
-                          amount={transaction.amount}
-                          description={transaction.description}
-                          isMedical={transaction.is_medical ?? false}
-                          reconciliationStatus={
-                            (transaction.reconciliation_status ??
-                              "unlinked") as TransactionCardProps["reconciliationStatus"]
-                          }
-                          isHsaEligible={transaction.is_hsa_eligible ?? false}
-                          isFromHsaAccount={
-                            transaction.plaid_accounts?.is_hsa || false
-                          }
-                          isSplit={transaction.is_split ?? false}
-                          classificationExplanation={
-                            transaction.classification_explanation
-                          }
-                          isTransfer={transaction.is_transfer ?? false}
-                          transferKind={transaction.transfer_kind}
-                          onUnlinkTransfer={() =>
-                            handleUnlinkTransfer(transaction)
-                          }
-                          invoiceId={transaction.invoice_id}
-                          splitParentId={transaction.split_parent_id}
-                          needsReview={transaction.needs_review ?? false}
-                          selected={selectedIds.includes(transaction.id)}
-                          onSelectedChange={(next) =>
-                            setSelectedIds((prev) =>
-                              next
-                                ? [...prev, transaction.id]
-                                : prev.filter((id) => id !== transaction.id),
-                            )
-                          }
-                          onDecide={(isMedical) =>
-                            decide([transaction.id], isMedical)
-                          }
-                          onViewDetails={() => handleViewDetails(transaction)}
-                          onMarkMedical={() => handleMarkMedical(transaction)}
-                          onIgnore={() => handleIgnore(transaction)}
-                          onUnignore={() => handleUnignore(transaction)}
-                          onAddToReviewQueue={() =>
-                            handleAddToReviewQueue(transaction)
-                          }
-                          onSplitTransaction={() =>
-                            handleSplitTransaction(transaction)
-                          }
-                          onSplitIntoExpenses={() =>
-                            handleSplitIntoExpenses(transaction)
-                          }
-                        />
-                        {expandedTransactionId === transaction.id && (
-                          <TransactionInlineDetail
-                            transaction={transaction}
-                            onClose={() => setExpandedTransactionId(null)}
-                            onUpdate={fetchTransactions}
-                          />
-                        )}
-                      </div>
-                    );
-                  })}
+                        return (
+                          <div key={transaction.id}>
+                            <TransactionCard
+                              id={transaction.id}
+                              date={transaction.transaction_date}
+                              vendor={transaction.vendor || "Unknown"}
+                              amount={transaction.amount}
+                              description={transaction.description}
+                              isMedical={transaction.is_medical ?? false}
+                              reconciliationStatus={
+                                (transaction.reconciliation_status ??
+                                  "unlinked") as TransactionCardProps["reconciliationStatus"]
+                              }
+                              isHsaEligible={
+                                transaction.is_hsa_eligible ?? false
+                              }
+                              isFromHsaAccount={
+                                transaction.plaid_accounts?.is_hsa || false
+                              }
+                              isSplit={transaction.is_split ?? false}
+                              classificationExplanation={
+                                transaction.classification_explanation
+                              }
+                              isTransfer={transaction.is_transfer ?? false}
+                              transferKind={transaction.transfer_kind}
+                              onUnlinkTransfer={() =>
+                                handleUnlinkTransfer(transaction)
+                              }
+                              invoiceId={transaction.invoice_id}
+                              splitParentId={transaction.split_parent_id}
+                              needsReview={transaction.needs_review ?? false}
+                              selected={selectedIds.includes(transaction.id)}
+                              onSelectedChange={(next) =>
+                                setSelectedIds((prev) =>
+                                  next
+                                    ? [...prev, transaction.id]
+                                    : prev.filter(
+                                        (id) => id !== transaction.id,
+                                      ),
+                                )
+                              }
+                              onDecide={(isMedical) =>
+                                decide([transaction.id], isMedical)
+                              }
+                              onViewDetails={() =>
+                                handleViewDetails(transaction)
+                              }
+                              onMarkMedical={() =>
+                                handleMarkMedical(transaction)
+                              }
+                              onIgnore={() => handleIgnore(transaction)}
+                              onUnignore={() => handleUnignore(transaction)}
+                              onAddToReviewQueue={() =>
+                                handleAddToReviewQueue(transaction)
+                              }
+                              onSplitTransaction={() =>
+                                handleSplitTransaction(transaction)
+                              }
+                              onSplitIntoExpenses={() =>
+                                handleSplitIntoExpenses(transaction)
+                              }
+                            />
+                            {expandedTransactionId === transaction.id && (
+                              <TransactionInlineDetail
+                                transaction={transaction}
+                                onClose={() => setExpandedTransactionId(null)}
+                                onUpdate={fetchTransactions}
+                              />
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
                 </div>
               )}
             </TabsContent>
