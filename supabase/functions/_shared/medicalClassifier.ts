@@ -616,9 +616,9 @@ export async function classifyTransaction(
   // This used to return "none" unconditionally: filed, not medical, never
   // shown to anyone, on the strength of having found nothing. That is a shrug
   // rendered as a decision, and on one real account it hid 231 charges across
-  // 81 merchants — one of them a medical payment-plan servicer, invisible for
-  // nine months. The engine may still file, but only when it can say what it
-  // is confident about and why.
+  // 81 merchants, filed with no signal at all and no way to check whether the
+  // silent answer happened to be right. The engine may still file, but only
+  // when it can say what it is confident about and why.
   const confidence = (pfc?.confidence_level ?? "").toUpperCase();
   const label = humanizePfc(detailed || primary);
   const amount = Math.abs(txn.amount ?? 0);

@@ -246,8 +246,12 @@ what gets decided here, and the views fall out of it.
 **On D36.** Measured on a real account, 2026-09-17: **231 charges across 81 merchants**
 carried `classification_reason = 'none'` — "no medical signal" — and were filed as
 not-healthcare without ever being seen. One of those merchants was Paramount Accept, a
-medical payment-plan servicer, invisible for nine months. The engine had nothing to say about
-it and the app rendered that silence as a decision.
+gym-membership servicer — correctly not healthcare in this case, since D38's category list
+exists for exactly this kind of charge (a gym membership only qualifies with a letter of
+medical necessity on file, which this account does not have) — but the engine had no way to
+know that either way, and filed it on no signal at all, invisible for nine months. The
+argument D36 rests on isn't this one merchant; it's that a filing decision made from silence
+is unreliable regardless of which way it happens to land.
 
 Note the asymmetry D36 preserves rather than invents: every tier that concludes a charge _is_
 healthcare already sets `needsReview = true` and waits for approval
@@ -350,7 +354,7 @@ missing downstream_. Two doors onto one queue is how the two drift apart.
 | D40               | The classifier runs once, at import, and never again — so every improvement leaves history behind. No re-run exists, automatic or manual. Measured cost on a real account: 51 charges the current classifier would queue, invisible because they predate the OTC lane.                                                                                               |
 | D41               | Two lanes, but the second is basket-specific (`possible_otc`) and has no room for "we simply do not know". `review_feed_groups` derives the lane from `classification_reason = 'possible_otc'`.                                                                                                                                                                      |
 | D42–D44           | **Built 2026-09-17 (slice 2).** One Status filter carrying live counts, over the five states in `src/lib/transactionStatus.ts`. "Healthcare" is confirmed-only, "Dismissed" is retired, transfers are their own state. D28's one-time nudge is gone with `useAutoFiledCount`.                                                                                        |
-| D45               | **Built 2026-09-17 (slice 2).** Group by none / merchant / month, sort by date or amount in either direction (`src/lib/transactionGrouping.ts`), and an exact-merchant condition in the filter panel. Still lands ungrouped, newest first.                                                                                                                            |
+| D45               | **Built 2026-09-17 (slice 2).** Group by none / merchant / month, sort by date or amount in either direction (`src/lib/transactionGrouping.ts`), and an exact-merchant condition in the filter panel. Still lands ungrouped, newest first.                                                                                                                           |
 | D46               | **Built 2026-09-17 (slice 2).** Gone from the filter, and the `invoices` join that fed it is off the page's query.                                                                                                                                                                                                                                                   |
 
 ### 3.1 The three open questions, answered
