@@ -2023,8 +2023,9 @@ export default function Substantiation() {
             date fell in the year, where the line means distributions TAKEN in
             the year, and stated a flat six-year retention rule that is not the
             rule. The honest version of what it offered is the record above
-            (per tax year, numbered, snapshotted) plus /expenses/all for the
-            whole-year view including what has already been claimed. */}
+            (per tax year, numbered, snapshotted) plus the Expenses page's All
+            tab for the whole-year view including what has already been
+            claimed. */}
 
         <p className="text-xs text-muted-foreground mt-6 text-center max-w-md mx-auto">
           Claim packets are built on your device and never stored on Reclaim's

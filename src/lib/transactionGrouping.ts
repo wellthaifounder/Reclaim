@@ -74,8 +74,12 @@ const MONTH_NAMES = [
   "December",
 ];
 
-/** "2026-09-17" → "September 2026", without ever building a Date. */
-function monthLabel(yyyymm: string): string {
+/** "2026-09-17" → "September 2026", without ever building a Date.
+ *
+ *  Exported for expenseListView.ts, which groups a different object by the
+ *  same calendar rule. Shared rather than copied: the timezone trap in the
+ *  header comment is the one detail both lists have to get right identically. */
+export function monthLabel(yyyymm: string): string {
   const [year, month] = yyyymm.split("-");
   const index = Number(month) - 1;
   return MONTH_NAMES[index] ? `${MONTH_NAMES[index]} ${year}` : yyyymm;

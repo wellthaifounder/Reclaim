@@ -10,9 +10,13 @@ type Props = {
   label: string;
   count: number;
   total: number;
-  /** Raw YYYY-MM-DD strings from the transaction_date column. */
+  /** Raw YYYY-MM-DD date strings — transaction_date here, invoices.date when
+   *  the expense lists use this. */
   earliest: string;
   latest: string;
+  /** What the rows are. The expense lists group by provider, and "3
+   *  transactions" on a card holding three expenses names the wrong object. */
+  itemNoun?: string;
   children: ReactNode;
 };
 
@@ -40,6 +44,7 @@ export function MerchantGroupCard({
   total,
   earliest,
   latest,
+  itemNoun = "transaction",
   children,
 }: Props) {
   const [expanded, setExpanded] = useState(false);
@@ -61,7 +66,8 @@ export function MerchantGroupCard({
             />
             <p className="truncate font-medium">{label}</p>
             <Badge variant="secondary" className="text-xs">
-              {count} transaction{count === 1 ? "" : "s"}
+              {count} {itemNoun}
+              {count === 1 ? "" : "s"}
             </Badge>
           </div>
           <p className="mt-1 text-sm tabular-nums text-muted-foreground">

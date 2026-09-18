@@ -286,7 +286,7 @@ export default function BillDetail() {
                 word the rest of the app says. */}
             <BreadcrumbItem>
               <BreadcrumbLink
-                onClick={() => navigate("/expenses/all")}
+                onClick={() => navigate("/substantiate?tab=all")}
                 className="cursor-pointer"
               >
                 All expenses
