@@ -23,7 +23,11 @@ export interface ExpenseSplitDraft {
   /** Date of service. The IRS ties an expense to when care was provided, not
    *  when it was paid, so this can differ from the transaction date. */
   serviceDate: string;
-  patientName: string;
+  /** family_members.id, or null while nothing is chosen yet. Was a free-text
+   *  name (see ExpenseSplitDialog.tsx); switched to the roster for the same
+   *  reason MileageEntryForm and SubstantiationPanel already had — see
+   *  supabase/migrations/20260816140000_family_roster.sql. */
+  patientId: string | null;
   notes: string;
 }
 

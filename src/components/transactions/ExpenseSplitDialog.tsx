@@ -16,6 +16,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { supabase } from "@/integrations/supabase/client";
 import { logError } from "@/utils/errorHandler";
 import { toast } from "sonner";
+import { PatientPicker } from "@/components/family/PatientPicker";
+import { useFamilyRoster } from "@/hooks/useFamilyRoster";
 import {
   formatUsd,
   splitEvenly,
@@ -49,7 +51,10 @@ function blankRow(
     vendor: txn.vendor || txn.description || "",
     category: txn.category || "Medical",
     serviceDate: txn.transaction_date,
-    patientName: "Self",
+    // Resolved to the roster's "self" member at render and save time (see
+    // effectivePatientId below) rather than baked in here: useFamilyRoster's
+    // query hasn't necessarily returned by the time this runs.
+    patientId: null,
     notes: "",
   };
 }
@@ -73,6 +78,7 @@ export function ExpenseSplitDialog({
   onSplit,
 }: ExpenseSplitDialogProps) {
   const queryClient = useQueryClient();
+  const { self } = useFamilyRoster();
   const [rows, setRows] = useState<ExpenseSplitDraft[]>([
     blankRow(transaction, transaction.amount),
   ]);
@@ -87,6 +93,13 @@ export function ExpenseSplitDialog({
     setRows((prev) =>
       prev.map((r, idx) => (idx === i ? { ...r, ...patch } : r)),
     );
+
+  // Same pattern as MileageEntryForm: a row's patientId starts null and
+  // resolves to the roster's "self" member until the user picks someone
+  // else, rather than being written into blankRow before the roster has
+  // loaded.
+  const effectivePatientId = (row: ExpenseSplitDraft) =>
+    row.patientId ?? self?.id ?? null;
 
   const addRow = () =>
     setRows((prev) => [
@@ -115,7 +128,12 @@ export function ExpenseSplitDialog({
         date: r.serviceDate,
         category: r.category || "Medical",
         notes: r.notes.trim() || null,
-        patient_name: r.patientName.trim() || null,
+        // patient_name is not set directly — the sync_invoice_patient_name
+        // trigger fills it in from patient_id on insert
+        // (20260816140000_family_roster.sql). Writing it here as free text is
+        // the exact bug this fixes: it let two different spellings of the
+        // same person become two different people.
+        patient_id: effectivePatientId(r),
         amount_paid: r.amount,
         reimbursable_amount: r.amount,
         // Facets, not the derived columns. Eligibility is resolved during
@@ -236,11 +254,10 @@ export function ExpenseSplitDialog({
               </div>
               <div className="space-y-1">
                 <Label htmlFor={`patient-${i}`}>Patient</Label>
-                <Input
+                <PatientPicker
                   id={`patient-${i}`}
-                  value={row.patientName}
-                  onChange={(e) => update(i, { patientName: e.target.value })}
-                  placeholder="Self, Spouse, or a name"
+                  value={effectivePatientId(row)}
+                  onChange={(id) => update(i, { patientId: id })}
                 />
               </div>
             </div>
