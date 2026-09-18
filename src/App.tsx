@@ -48,7 +48,6 @@ const HistoricalImport = lazy(() => import("./pages/HistoricalImport"));
 const Welcome = lazy(() => import("./pages/Welcome"));
 const ExpenseEntry = lazy(() => import("./pages/ExpenseEntry"));
 const Substantiate = lazy(() => import("./pages/Substantiate"));
-const AllExpenses = lazy(() => import("./pages/AllExpenses"));
 const Substantiation = lazy(() => import("./pages/Substantiation"));
 const Documents = lazy(() => import("./pages/Documents"));
 const Settings = lazy(() => import("./pages/Settings"));
@@ -316,25 +315,24 @@ const App = () => (
                           </ProtectedRoute>
                         }
                       />
-                      {/* The expense ledger: every expense at every stage,
-                          including ones already claimed. /substantiate is a
-                          queue that empties; this is the record that does not.
-                          Sits under /expenses/* alongside /expenses/new -- the
-                          bare /expenses root redirects for bookmark reasons
-                          only, its children are expense pages. */}
+                      {/* The expense ledger moved onto /substantiate as its
+                          "All" tab on 2026-09-18. It was a page listed in no
+                          nav, reachable only from a button on the queue --
+                          two pages about one object, which is what the tab
+                          replaced. Redirects rather than 404s: it shipped with
+                          links pointing at it and has been bookmarkable since,
+                          and a dead link is how a user concludes their expense
+                          history was deleted. */}
                       <Route
                         path="/expenses/all"
                         element={
-                          <ProtectedRoute>
-                            <ErrorBoundary>
-                              <AllExpenses />
-                            </ErrorBoundary>
-                          </ProtectedRoute>
+                          <Navigate to="/substantiate?tab=all" replace />
                         }
                       />
-                      {/* Reclaim Phase 5 W2: Substantiate — step two of
+                      {/* Reclaim Phase 5 W2: Expenses — step two of
                           Categorize -> Substantiate -> Reimburse. Attaching a
-                          document and confirming eligibility, in one place. */}
+                          document and confirming eligibility, in one place,
+                          plus the full history beside it. */}
                       <Route
                         path="/substantiate"
                         element={
