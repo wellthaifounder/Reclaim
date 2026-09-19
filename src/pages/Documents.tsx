@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { Upload, Search, FileText, Tag } from "lucide-react";
+import { Upload, Search, FileText, Tag, Loader2 } from "lucide-react";
+import { toUploadableFile } from "@/utils/heicConversion";
 import { DocumentCard } from "@/components/documents/DocumentCard";
 import { EditDocumentDialog } from "@/components/documents/EditDocumentDialog";
 import { MultiFileUpload } from "@/components/expense/MultiFileUpload";
@@ -41,6 +42,10 @@ const Documents = () => {
   const [editingReceipt, setEditingReceipt] = useState<Receipt | null>(null);
   const [showUpload, setShowUpload] = useState(false);
   const [newFiles, setNewFiles] = useState<PendingUpload[]>([]);
+  const [uploading, setUploading] = useState(false);
+  // Bumped after every upload attempt to remount the picker empty. It owns its
+  // own file list, so clearing newFiles here would not clear what it shows.
+  const [pickerKey, setPickerKey] = useState(0);
   const loadReceipts = async () => {
     try {
       setLoading(true);
@@ -111,41 +116,109 @@ const Documents = () => {
     filterReceipts();
   }, [filterReceipts]);
 
+  /**
+   * Upload a batch, one file at a time, with each file's fate independent of
+   * the others.
+   *
+   * The previous version threw on the first failure, which abandoned every
+   * file after it and reported "Failed to upload documents" — while the files
+   * uploaded before the failure stayed in storage and in the library. Someone
+   * uploading seven bills was told nothing worked when four of them had, and
+   * the reason the fifth failed was discarded: it went to logError, which is
+   * dev-only, so in production nothing recorded it at all.
+   *
+   * So: keep going after a failure, and say which file failed and why. When a
+   * file lands in storage but its row does not, the stored file is removed
+   * again — otherwise storage accumulates documents that no query can ever
+   * return, which is what it had already started doing.
+   */
   const handleUpload = async () => {
-    if (newFiles.length === 0) return;
+    if (newFiles.length === 0 || uploading) return;
+    setUploading(true);
+
+    const failures: string[] = [];
+    let uploaded = 0;
+
     try {
       const {
         data: { session },
       } = await supabase.auth.getSession();
       const user = session?.user;
       if (!user) throw new Error("Not authenticated");
+
       for (let i = 0; i < newFiles.length; i++) {
         const fileData = newFiles[i];
-        const fileExt = fileData.file.name.split(".").pop();
-        const timestamp = Date.now();
-        const filePath = `${user.id}/unattached/${fileData.documentType}_${timestamp}.${fileExt}`;
-        const { error: uploadError } = await supabase.storage
-          .from("receipts")
-          .upload(filePath, fileData.file);
-        if (uploadError) throw uploadError;
-        const { error: receiptError } = await supabase.from("receipts").insert({
-          user_id: user.id,
-          file_path: filePath,
-          file_type: fileData.file.type,
-          document_type: fileData.documentType,
-          description: fileData.description || null,
-          display_order: i,
-        });
-        if (receiptError) throw receiptError;
+        let filePath: string | null = null;
+        try {
+          // An iPhone photo arrives as HEIC, which nothing downstream can
+          // read; this hands back a JPEG. Anything else passes straight
+          // through.
+          const file = await toUploadableFile(fileData.file);
+
+          const fileExt = file.name.split(".").pop();
+          // randomUUID, not Date.now(): two files in one batch can finish
+          // inside the same millisecond, and storage refuses a path that
+          // already exists rather than overwriting it.
+          filePath = `${user.id}/unattached/${fileData.documentType}_${crypto.randomUUID()}.${fileExt}`;
+
+          const { error: uploadError } = await supabase.storage
+            .from("receipts")
+            .upload(filePath, file);
+          if (uploadError) throw uploadError;
+
+          const { error: receiptError } = await supabase
+            .from("receipts")
+            .insert({
+              user_id: user.id,
+              file_path: filePath,
+              file_type: file.type,
+              document_type: fileData.documentType,
+              description: fileData.description || null,
+              display_order: i,
+            });
+          if (receiptError) {
+            await supabase.storage.from("receipts").remove([filePath]);
+            throw receiptError;
+          }
+
+          uploaded += 1;
+        } catch (error) {
+          logError("Error uploading a document", error);
+          const reason =
+            error instanceof Error ? error.message : "Unknown error";
+          failures.push(`${fileData.file.name} — ${reason}`);
+        }
       }
-      toast.success("Documents uploaded successfully!");
-      setNewFiles([]);
-      setShowUpload(false);
-      loadReceipts();
     } catch (error) {
       logError("Error uploading documents", error);
-      toast.error("Failed to upload documents");
+      failures.push(
+        error instanceof Error && error.message === "Not authenticated"
+          ? "You've been signed out. Sign in again and retry."
+          : "Something went wrong before the upload started.",
+      );
+    } finally {
+      setUploading(false);
     }
+
+    if (uploaded > 0) {
+      toast.success(
+        `${uploaded} document${uploaded === 1 ? "" : "s"} uploaded.`,
+      );
+    }
+    if (failures.length > 0) {
+      toast.error(
+        `${failures.length} couldn't be uploaded:\n${failures.join("\n")}`,
+        { duration: 10000 },
+      );
+    }
+
+    // The picker is reset after every attempt, including a partial one: its
+    // list would otherwise still hold the files that just succeeded, and
+    // pressing Upload again would store a second copy of each.
+    setNewFiles([]);
+    setPickerKey((k) => k + 1);
+    if (failures.length === 0) setShowUpload(false);
+    loadReceipts();
   };
   const handleDelete = async (receiptId: string) => {
     try {
@@ -204,11 +277,29 @@ const Documents = () => {
           <CardContent>
             {showUpload && (
               <div className="mb-6 p-4 border rounded-lg bg-muted/50">
-                <MultiFileUpload onFilesChange={setNewFiles} disabled={false} />
+                <MultiFileUpload
+                  key={pickerKey}
+                  onFilesChange={setNewFiles}
+                  disabled={uploading}
+                />
                 {newFiles.length > 0 && (
-                  <Button onClick={handleUpload} className="mt-4">
-                    Upload {newFiles.length} Document
-                    {newFiles.length > 1 ? "s" : ""}
+                  <Button
+                    onClick={handleUpload}
+                    className="mt-4"
+                    disabled={uploading}
+                  >
+                    {uploading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Uploading {newFiles.length} document
+                        {newFiles.length > 1 ? "s" : ""}…
+                      </>
+                    ) : (
+                      <>
+                        Upload {newFiles.length} Document
+                        {newFiles.length > 1 ? "s" : ""}
+                      </>
+                    )}
                   </Button>
                 )}
               </div>

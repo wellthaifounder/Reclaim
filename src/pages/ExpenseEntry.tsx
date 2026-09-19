@@ -71,6 +71,12 @@ import {
   Camera,
 } from "lucide-react";
 import { logError } from "@/utils/errorHandler";
+import {
+  validateFileSize,
+  validateFileType,
+  FILE_ACCEPT_ATTRIBUTE,
+} from "@/utils/fileValidation";
+import { toUploadableFile } from "@/utils/heicConversion";
 import { formatDateOnly } from "@/lib/dates";
 import { useFamilyRoster } from "@/hooks/useFamilyRoster";
 import { PatientPicker } from "@/components/family/PatientPicker";
@@ -121,13 +127,9 @@ interface LocationState {
   savedDecision?: SavedDecisionState;
 }
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB, mirrors wizard
-const ALLOWED_TYPES = [
-  "application/pdf",
-  "image/png",
-  "image/jpeg",
-  "image/webp",
-];
+// The size and type rules live in utils/fileValidation.ts, shared with the
+// other two upload surfaces. This file used to carry its own shorter copy,
+// which is how one screen came to accept a photo format the others refused.
 
 /** What process-receipt-ocr gives back, narrowed to the fields this form has. */
 interface OcrSuggestion {
@@ -201,22 +203,32 @@ export default function ExpenseEntry() {
 
   const watchedCategory = watch("category");
 
-  const onFilePicked = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const onFilePicked = async (e: React.ChangeEvent<HTMLInputElement>) => {
     setFileError("");
     setSuggestion(null);
-    const f = e.target.files?.[0] ?? null;
-    if (!f) {
+    const picked = e.target.files?.[0] ?? null;
+    if (!picked) {
       setFile(null);
       return;
     }
-    if (!ALLOWED_TYPES.includes(f.type)) {
-      setFileError("Receipt must be PDF, PNG, JPEG, or WebP.");
+    const rejection = validateFileType(picked) ?? validateFileSize(picked);
+    if (rejection) {
+      setFileError(rejection);
       return;
     }
-    if (f.size > MAX_FILE_SIZE) {
-      setFileError("Receipt exceeds 10MB.");
+
+    // An iPhone photo arrives as HEIC, which the scanner below cannot read and
+    // no browser but Safari can display; this hands back a JPEG.
+    let f: File;
+    try {
+      f = await toUploadableFile(picked);
+    } catch (err) {
+      setFileError(
+        err instanceof Error ? err.message : "We couldn't read that photo.",
+      );
       return;
     }
+
     setFile(f);
     // Read it straight away. The moment the file is in hand is the moment the
     // user expects something to happen; making them press a second "scan"
@@ -585,7 +597,7 @@ export default function ExpenseEntry() {
                     <Input
                       id="receipt"
                       type="file"
-                      accept=".pdf,.png,.jpg,.jpeg,.webp"
+                      accept={FILE_ACCEPT_ATTRIBUTE}
                       onChange={onFilePicked}
                       className="cursor-pointer"
                     />

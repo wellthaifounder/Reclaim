@@ -184,6 +184,7 @@ Wellth.ai implements comprehensive security controls across all layers of the ap
 ```
 default-src 'self'
 script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://cdn.plaid.com
+worker-src 'self' blob:
 style-src 'self' 'unsafe-inline' https://fonts.googleapis.com
 img-src 'self' data: https: blob:
 connect-src 'self' https://*.supabase.co https://sandbox.plaid.com https://api.stripe.com
@@ -192,6 +193,15 @@ frame-ancestors 'none'
 base-uri 'self'
 form-action 'self'
 ```
+
+`worker-src` is stated rather than inherited from `script-src`, which is what
+it did until 2026-09-19. The HEIC-to-JPEG converter that runs on uploaded
+iPhone photos starts its decoder in a Web Worker created from a `blob:` URL,
+and `script-src` does not permit `blob:`. Naming `worker-src` explicitly is
+also narrower than the fallback it replaces: workers may come only from this
+origin or from a blob this application constructed, and no longer from Stripe,
+Plaid, or an inline script. Creating a blob worker requires script execution
+the attacker would already have to hold.
 
 **Security Headers:**
 
