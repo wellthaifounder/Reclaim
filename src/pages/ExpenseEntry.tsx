@@ -350,6 +350,7 @@ export default function ExpenseEntry() {
             invoice_id: invoice.id,
             user_id: user.id,
             file_path: filePath,
+            file_name: file.name,
             file_type: file.type,
             document_type: "bill",
           });

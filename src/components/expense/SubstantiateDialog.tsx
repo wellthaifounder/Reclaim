@@ -172,6 +172,7 @@ export function SubstantiateDialog({
           invoice_id: expenseId,
           user_id: user.id,
           file_path: path,
+          file_name: file.name,
           file_type: file.type,
           document_type: "receipt",
         });

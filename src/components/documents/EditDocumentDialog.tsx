@@ -23,6 +23,7 @@ import { logError } from "@/utils/errorHandler";
 interface EditDocumentDialogProps {
   receipt: {
     id: string;
+    file_name: string | null;
     document_type: string | null;
     description: string | null;
   };
@@ -48,6 +49,7 @@ export const EditDocumentDialog = ({
   const [documentType, setDocumentType] = useState(
     receipt.document_type ?? "receipt",
   );
+  const [fileName, setFileName] = useState(receipt.file_name || "");
   const [description, setDescription] = useState(receipt.description || "");
   const [saving, setSaving] = useState(false);
 
@@ -58,6 +60,11 @@ export const EditDocumentDialog = ({
         .from("receipts")
         .update({
           document_type: documentType,
+          // Renaming changes the title only. file_path is untouched on
+          // purpose: it is what every signed URL, download and claim packet
+          // resolves, and moving stored objects to follow a rename is how a
+          // record comes to cite a file that is no longer where it says.
+          file_name: fileName.trim() || null,
           description: description || null,
         })
         .eq("id", receipt.id);
@@ -80,11 +87,25 @@ export const EditDocumentDialog = ({
         <DialogHeader>
           <DialogTitle>Edit Document</DialogTitle>
           <DialogDescription>
-            Update the document type and description
+            Rename it, change its type, or add a description
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="document-file-name">File name</Label>
+            <Input
+              id="document-file-name"
+              value={fileName}
+              onChange={(e) => setFileName(e.target.value)}
+              placeholder="e.g. Averie-itemized-statement.pdf"
+            />
+            <p className="text-xs text-muted-foreground">
+              Only what you see here changes. The stored file itself stays where
+              it is, so anything already pointing at it keeps working.
+            </p>
+          </div>
+
           <div className="space-y-2">
             <Label>Document Type</Label>
             <Select value={documentType} onValueChange={setDocumentType}>

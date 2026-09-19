@@ -360,6 +360,9 @@ serve(async (req) => {
           invoice_id: invoice.id,
           user_id: userId,
           file_path: filePath,
+          // The attachment's own name. The storage key prefixes it with a
+          // timestamp to stay unique; this is the name to show.
+          file_name: att.filename || null,
           file_type: att.content_type,
           document_type: "bill",
           description: data.subject?.trim() || null,

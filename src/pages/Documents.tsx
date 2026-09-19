@@ -16,6 +16,7 @@ import { logError } from "@/utils/errorHandler";
 interface Receipt {
   id: string;
   file_path: string;
+  file_name: string | null;
   file_type: string;
   document_type: string | null;
   description: string | null;
@@ -62,7 +63,7 @@ const Documents = () => {
             // over time and a wildcard here would start shipping them to the
             // client the moment they land.
             .select(
-              "id, file_path, file_type, document_type, description, uploaded_at",
+              "id, file_path, file_name, file_type, document_type, description, uploaded_at",
             )
             .eq("user_id", user.id)
             .order("uploaded_at", { ascending: false }),
@@ -91,10 +92,12 @@ const Documents = () => {
   const filterReceipts = useCallback(() => {
     let filtered = receipts;
     if (searchQuery) {
+      const q = searchQuery.toLowerCase();
       filtered = filtered.filter(
         (r) =>
-          r.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          r.document_type?.toLowerCase().includes(searchQuery.toLowerCase()),
+          r.file_name?.toLowerCase().includes(q) ||
+          r.description?.toLowerCase().includes(q) ||
+          r.document_type?.toLowerCase().includes(q),
       );
     }
     if (selectedType !== "all") {
@@ -171,6 +174,10 @@ const Documents = () => {
             .insert({
               user_id: user.id,
               file_path: filePath,
+              // The name the user picked, kept so the card can show something
+              // they recognise. The storage key above is generated and is a
+              // different thing; renaming one must never move the other.
+              file_name: file.name,
               file_type: file.type,
               document_type: fileData.documentType,
               description: fileData.description || null,
