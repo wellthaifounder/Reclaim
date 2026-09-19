@@ -21,6 +21,7 @@ interface DocumentCardProps {
   receipt: {
     id: string;
     file_path: string;
+    file_name: string | null;
     file_type: string;
     document_type: string | null;
     description: string | null;
@@ -95,12 +96,25 @@ export const DocumentCard = ({
                   {receipt.document_type?.replace(/_/g, " ") ?? "document"}
                 </Badge>
               </div>
-              {receipt.description && (
-                <p className="text-sm text-foreground line-clamp-2 mb-2">
+              {/* The filename leads, because it is what the person recognises
+                  from their own computer. Rows uploaded before the name was
+                  kept have none, and fall back to the description rather than
+                  showing the generated storage key, which would look like a
+                  filename without being one. */}
+              <p
+                className="text-sm font-medium text-foreground line-clamp-2 break-words"
+                title={receipt.file_name ?? undefined}
+              >
+                {receipt.file_name ??
+                  receipt.description ??
+                  "Untitled document"}
+              </p>
+              {receipt.file_name && receipt.description && (
+                <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
                   {receipt.description}
                 </p>
               )}
-              <p className="text-xs text-muted-foreground">
+              <p className="mt-2 text-xs text-muted-foreground">
                 {format(new Date(receipt.uploaded_at), "MMM d, yyyy")}
               </p>
             </div>

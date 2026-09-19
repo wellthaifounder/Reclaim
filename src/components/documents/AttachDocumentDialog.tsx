@@ -27,6 +27,7 @@ interface AttachDocumentDialogProps {
 
 interface PickableReceipt {
   id: string;
+  file_name: string | null;
   document_type: string | null;
   description: string | null;
   uploaded_at: string;
@@ -73,7 +74,9 @@ export const AttachDocumentDialog = ({
         await Promise.all([
           supabase
             .from("receipts")
-            .select("id, document_type, description, uploaded_at, file_type")
+            .select(
+              "id, file_name, document_type, description, uploaded_at, file_type",
+            )
             .eq("user_id", user.id)
             .order("uploaded_at", { ascending: false }),
           supabase
@@ -216,8 +219,18 @@ export const AttachDocumentDialog = ({
                       {receipt.document_type?.replace(/_/g, " ") ?? "document"}
                     </Badge>
                   </div>
-                  {receipt.description && (
-                    <p className="text-sm mt-1">{receipt.description}</p>
+                  {/* Named, so the list can be read the way the Documents page
+                      reads. Picking the right bill out of a dozen by
+                      description alone was guesswork. */}
+                  <p className="mt-1 text-sm font-medium break-words">
+                    {receipt.file_name ??
+                      receipt.description ??
+                      "Untitled document"}
+                  </p>
+                  {receipt.file_name && receipt.description && (
+                    <p className="text-sm text-muted-foreground">
+                      {receipt.description}
+                    </p>
                   )}
                   <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
                     <Calendar className="h-3 w-3" />

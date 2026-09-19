@@ -240,6 +240,7 @@ export default function BillDetail() {
               user_id: user.id,
               invoice_id: billId,
               file_path: filePath,
+              file_name: fileData.file.name,
               file_type: fileData.file.type,
               document_type: fileData.documentType,
               description: fileData.description || null,
