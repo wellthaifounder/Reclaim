@@ -19,6 +19,14 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { logError } from "@/utils/errorHandler";
+import {
+  DOCUMENT_TYPES,
+  DEFAULT_DOCUMENT_TYPE,
+  documentTypeLabel,
+  documentTypePickerLabel,
+  isPickableDocumentType,
+  normalizeDocumentType,
+} from "@/lib/documentTypes";
 
 interface EditDocumentDialogProps {
   receipt: {
@@ -32,14 +40,6 @@ interface EditDocumentDialogProps {
   onSaved: () => void;
 }
 
-const DOCUMENT_TYPES = [
-  { value: "receipt", label: "Receipt" },
-  { value: "invoice", label: "Bill" },
-  { value: "eob", label: "Explanation of Benefits (EOB)" },
-  { value: "payment_confirmation", label: "Payment Confirmation" },
-  { value: "medical_record", label: "Medical Record" },
-];
-
 export const EditDocumentDialog = ({
   receipt,
   open,
@@ -47,8 +47,25 @@ export const EditDocumentDialog = ({
   onSaved,
 }: EditDocumentDialogProps) => {
   const [documentType, setDocumentType] = useState(
-    receipt.document_type ?? "receipt",
+    normalizeDocumentType(receipt.document_type ?? DEFAULT_DOCUMENT_TYPE),
   );
+
+  // A document may already carry a type no picker offers -- the legacy 'bill'
+  // spelling, or a letter of medical necessity. Show it as its own option
+  // rather than letting the box render empty: a blank type box reads as "no
+  // type set", and whatever the person picked next overwrote the real one.
+  const options = isPickableDocumentType(documentType)
+    ? DOCUMENT_TYPES
+    : [
+        ...DOCUMENT_TYPES,
+        { value: documentType, label: documentTypeLabel(documentType) },
+      ];
+
+  // Attaching a letter of medical necessity is what clears a conditionally
+  // eligible expense, and trg_receipts_lmn fires on INSERT and DELETE only --
+  // so retyping one here would drop the evidence without anything recomputing
+  // the eligibility it was holding up. Detach and re-upload instead.
+  const typeLocked = documentType === "letter_of_medical_necessity";
   const [fileName, setFileName] = useState(receipt.file_name || "");
   const [description, setDescription] = useState(receipt.description || "");
   const [saving, setSaving] = useState(false);
@@ -107,19 +124,30 @@ export const EditDocumentDialog = ({
           </div>
 
           <div className="space-y-2">
-            <Label>Document Type</Label>
-            <Select value={documentType} onValueChange={setDocumentType}>
+            <Label>Document type</Label>
+            <Select
+              value={documentType}
+              onValueChange={setDocumentType}
+              disabled={typeLocked}
+            >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {DOCUMENT_TYPES.map((type) => (
+                {options.map((type) => (
                   <SelectItem key={type.value} value={type.value}>
-                    {type.label}
+                    {documentTypePickerLabel(type)}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            {typeLocked && (
+              <p className="text-xs text-muted-foreground">
+                A letter of medical necessity is what makes its expense
+                eligible, so its type is fixed. Remove the document from the
+                expense if it was filed by mistake.
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">

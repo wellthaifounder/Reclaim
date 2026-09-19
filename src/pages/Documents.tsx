@@ -9,6 +9,7 @@ import { toUploadableFile } from "@/utils/heicConversion";
 import { DocumentCard } from "@/components/documents/DocumentCard";
 import { EditDocumentDialog } from "@/components/documents/EditDocumentDialog";
 import { MultiFileUpload } from "@/components/expense/MultiFileUpload";
+import { DOCUMENT_TYPES, documentTypeLabel } from "@/lib/documentTypes";
 import { Badge } from "@/components/ui/badge";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
 import { PageHeader } from "@/components/PageHeader";
@@ -97,7 +98,10 @@ const Documents = () => {
         (r) =>
           r.file_name?.toLowerCase().includes(q) ||
           r.description?.toLowerCase().includes(q) ||
-          r.document_type?.toLowerCase().includes(q),
+          // Match the name on the badge, not the stored value: someone
+          // searching "bill" is looking at a card that says Bill, while the
+          // row underneath it says "invoice".
+          documentTypeLabel(r.document_type).toLowerCase().includes(q),
       );
     }
     if (selectedType !== "all") {
@@ -249,13 +253,11 @@ const Documents = () => {
       toast.error("Failed to delete document");
     }
   };
-  const documentTypes = [
-    "receipt",
-    "invoice",
-    "eob",
-    "payment_confirmation",
-    "medical_record",
-  ];
+  // Chips come from the shared list, so a type that can be chosen is always a
+  // type that can be filtered for. The old hand-written list carried two values
+  // ('payment_confirmation', 'medical_record') that nothing could ever be, so
+  // those two chips emptied the page every time they were tapped.
+  const documentTypes = DOCUMENT_TYPES;
   const attachmentStatus = ["all", "attached", "unattached"];
   return (
     <AuthenticatedLayout>
@@ -340,12 +342,14 @@ const Documents = () => {
                 ))}
                 {documentTypes.map((type) => (
                   <Badge
-                    key={type}
-                    variant={selectedType === type ? "default" : "outline"}
+                    key={type.value}
+                    variant={
+                      selectedType === type.value ? "default" : "outline"
+                    }
                     className="cursor-pointer"
-                    onClick={() => setSelectedType(type)}
+                    onClick={() => setSelectedType(type.value)}
                   >
-                    {type.replace(/_/g, " ")}
+                    {type.label}
                   </Badge>
                 ))}
               </div>

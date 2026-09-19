@@ -364,7 +364,9 @@ serve(async (req) => {
           // timestamp to stay unique; this is the name to show.
           file_name: att.filename || null,
           file_type: att.content_type,
-          document_type: "bill",
+          // 'invoice', not the legacy 'bill' spelling -- see the note in
+          // src/lib/documentTypes.ts. The checklist only counts 'invoice'.
+          document_type: "invoice",
           description: data.subject?.trim() || null,
         })
         .select("id")

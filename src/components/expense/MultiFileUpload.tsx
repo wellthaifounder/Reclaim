@@ -13,6 +13,11 @@ import { Upload, X, FileText, Image as ImageIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { validateFiles, FILE_ACCEPT_ATTRIBUTE } from "@/utils/fileValidation";
+import {
+  DOCUMENT_TYPES,
+  DEFAULT_DOCUMENT_TYPE,
+  documentTypePickerLabel,
+} from "@/lib/documentTypes";
 
 interface FileWithMetadata {
   file: File;
@@ -25,15 +30,6 @@ interface MultiFileUploadProps {
   onFilesChange: (files: FileWithMetadata[]) => void;
   disabled?: boolean;
 }
-
-const DOCUMENT_TYPES = [
-  { value: "invoice", label: "Medical Bill" },
-  { value: "payment_receipt", label: "Payment Receipt" },
-  { value: "eob", label: "Explanation of Benefits (EOB)" },
-  { value: "prescription_label", label: "Prescription Label" },
-  { value: "receipt", label: "General Receipt" },
-  { value: "other", label: "Other Document" },
-];
 
 export function MultiFileUpload({
   onFilesChange,
@@ -64,7 +60,7 @@ export function MultiFileUpload({
     if (valid.length > 0) {
       const newFiles: FileWithMetadata[] = valid.map((file) => ({
         file,
-        documentType: "receipt",
+        documentType: DEFAULT_DOCUMENT_TYPE,
         description: "",
         id: Math.random().toString(36).substring(7),
       }));
@@ -189,7 +185,7 @@ export function MultiFileUpload({
                     <SelectContent>
                       {DOCUMENT_TYPES.map((type) => (
                         <SelectItem key={type.value} value={type.value}>
-                          {type.label}
+                          {documentTypePickerLabel(type)}
                         </SelectItem>
                       ))}
                     </SelectContent>

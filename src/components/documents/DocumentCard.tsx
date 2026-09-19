@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { logError } from "@/utils/errorHandler";
 import { format } from "date-fns";
+import { documentTypeLabel } from "@/lib/documentTypes";
 
 interface DocumentCardProps {
   receipt: {
@@ -93,7 +94,7 @@ export const DocumentCard = ({
               <div className="flex items-center gap-2 mb-2">
                 <FileText className="h-4 w-4 text-muted-foreground" />
                 <Badge variant="secondary" className="text-xs">
-                  {receipt.document_type?.replace(/_/g, " ") ?? "document"}
+                  {documentTypeLabel(receipt.document_type)}
                 </Badge>
               </div>
               {/* The filename leads, because it is what the person recognises

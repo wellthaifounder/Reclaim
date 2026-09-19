@@ -1,3 +1,5 @@
+import { documentTypeLabel } from "./documentTypes";
+
 // The shape of a claim, and nothing else.
 //
 // Deliberately free of Supabase, jsPDF and the DOM: both the record generator
@@ -20,24 +22,13 @@ export interface ClaimDocument {
   description: string | null;
 }
 
-/** Human labels for `receipts.document_type`. */
-export const DOCUMENT_TYPE_LABELS: Record<string, string> = {
-  invoice: "Bill",
-  bill: "Bill",
-  payment_receipt: "Payment receipt",
-  eob: "Explanation of benefits",
-  itemized_statement: "Itemized statement",
-  prescription_label: "Prescription label",
-  letter_of_medical_necessity: "Letter of medical necessity",
-  receipt: "Receipt",
-  other: "Other document",
-};
+// The labels themselves live in documentTypes, next to the pickers that write
+// them, so the name on a badge and the name inside the packet cannot drift.
+// They are re-exported here because this module is the packet's public shape.
+export { DOCUMENT_TYPE_LABELS } from "./documentTypes";
 
 export function documentLabel(doc: ClaimDocument): string {
-  if (doc.type && DOCUMENT_TYPE_LABELS[doc.type])
-    return DOCUMENT_TYPE_LABELS[doc.type];
-  if (doc.type) return doc.type.replace(/_/g, " ");
-  return "Document";
+  return documentTypeLabel(doc.type);
 }
 
 export interface SubstantiationExpenseInput {

@@ -20,6 +20,7 @@ import {
   Check,
 } from "lucide-react";
 import { toast } from "sonner";
+import { documentTypeLabel } from "@/lib/documentTypes";
 
 interface Receipt {
   id: string;
@@ -38,17 +39,6 @@ interface ReceiptGalleryProps {
   onReceiptUpdated?: () => void;
 }
 
-const DOCUMENT_TYPE_LABELS = {
-  invoice: "Bill",
-  bill: "Bill",
-  payment_receipt: "Payment Receipt",
-  eob: "EOB",
-  itemized_statement: "Itemized Statement",
-  prescription_label: "Prescription Label",
-  receipt: "Receipt",
-  other: "Other",
-};
-
 const DOCUMENT_TYPE_COLORS = {
   invoice: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
   bill: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
@@ -59,6 +49,10 @@ const DOCUMENT_TYPE_COLORS = {
     "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200",
   prescription_label:
     "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
+  payment_plan_agreement:
+    "bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200",
+  letter_of_medical_necessity:
+    "bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-200",
   receipt: "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200",
   other:
     "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
@@ -193,12 +187,7 @@ export function ReceiptGallery({
     <>
       <div className="space-y-3">
         {sortedReceipts.map((receipt) => {
-          const typeLabel =
-            DOCUMENT_TYPE_LABELS[
-              receipt.document_type as keyof typeof DOCUMENT_TYPE_LABELS
-            ] ??
-            receipt.document_type ??
-            "Document";
+          const typeLabel = documentTypeLabel(receipt.document_type);
           const typeColor =
             DOCUMENT_TYPE_COLORS[
               receipt.document_type as keyof typeof DOCUMENT_TYPE_COLORS
@@ -319,9 +308,7 @@ export function ReceiptGallery({
             <DialogTitle>
               {selectedReceipt?.description ||
                 (selectedReceipt &&
-                  DOCUMENT_TYPE_LABELS[
-                    selectedReceipt.document_type as keyof typeof DOCUMENT_TYPE_LABELS
-                  ])}
+                  documentTypeLabel(selectedReceipt.document_type))}
             </DialogTitle>
           </DialogHeader>
           {selectedReceipt && viewUrl && (
