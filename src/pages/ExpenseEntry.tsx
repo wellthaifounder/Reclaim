@@ -352,7 +352,11 @@ export default function ExpenseEntry() {
             file_path: filePath,
             file_name: file.name,
             file_type: file.type,
-            document_type: "bill",
+            // 'invoice', not the legacy 'bill' spelling: both are accepted by
+            // the database, but the audit checklist and the Documents filter
+            // only ever looked for 'invoice', so a bill entered here never
+            // counted as the bill it plainly was.
+            document_type: "invoice",
           });
         }
       }

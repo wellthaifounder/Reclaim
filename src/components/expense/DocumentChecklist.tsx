@@ -21,7 +21,16 @@ interface DocumentChecklistProps {
 }
 
 interface RequiredDocument {
-  type: string;
+  /** Identifies the row. */
+  key: string;
+  /**
+   * Any one of these satisfies it. A list rather than a single value because
+   * the bill requirement is worded "bill or itemized statement" and was only
+   * ever satisfied by a document typed exactly 'invoice' -- so the itemized
+   * statement the row explicitly asks for did not count once it became
+   * possible to label one.
+   */
+  types: string[];
   label: string;
   required: boolean;
   reason: string;
@@ -39,7 +48,8 @@ export function DocumentChecklist({
     // Base requirement - always need proof
     if (amount >= 250) {
       docs.push({
-        type: "invoice",
+        key: "bill",
+        types: ["invoice", "bill", "itemized_statement"],
         label: "Medical Bill or Itemized Statement",
         required: true,
         reason: "IRS requires itemized documentation for expenses over $250",
@@ -50,7 +60,8 @@ export function DocumentChecklist({
     if (["Medical", "Dental", "Vision", "Hospital"].includes(category)) {
       if (amount >= 500) {
         docs.push({
-          type: "eob",
+          key: "eob",
+          types: ["eob"],
           label: "Explanation of Benefits (EOB)",
           required: false,
           reason: "Recommended for insurance coordination and audit protection",
@@ -61,7 +72,8 @@ export function DocumentChecklist({
     // Hospital-specific
     if (category === "Hospital" || amount >= 1000) {
       docs.push({
-        type: "invoice",
+        key: "itemized",
+        types: ["itemized_statement", "invoice", "bill"],
         label: "Itemized Hospital Bill",
         required: true,
         reason: "Must show detailed breakdown of charges",
@@ -71,7 +83,8 @@ export function DocumentChecklist({
     // Prescription
     if (category === "Prescription") {
       docs.push({
-        type: "prescription_label",
+        key: "prescription",
+        types: ["prescription_label"],
         label: "Prescription Label or Rx Number",
         required: false,
         reason: "Helpful for proving medical necessity",
@@ -81,7 +94,8 @@ export function DocumentChecklist({
     // Payment plan
     if (hasPaymentPlan) {
       docs.push({
-        type: "payment_receipt",
+        key: "installments",
+        types: ["payment_receipt", "payment_plan_agreement"],
         label: "Payment Receipts",
         required: true,
         reason: "Must document each installment payment made",
@@ -91,7 +105,8 @@ export function DocumentChecklist({
     // Payment proof for larger amounts
     if (amount >= 100 && !hasPaymentPlan) {
       docs.push({
-        type: "payment_receipt",
+        key: "payment_proof",
+        types: ["payment_receipt", "receipt"],
         label: "Proof of Payment",
         required: false,
         reason: "Credit card statement or payment confirmation",
@@ -107,12 +122,14 @@ export function DocumentChecklist({
     return null;
   }
 
-  const hasDocument = (type: string) => {
-    return receipts.some((r) => r.document_type === type);
+  const hasDocument = (types: string[]) => {
+    return receipts.some(
+      (r) => r.document_type && types.includes(r.document_type),
+    );
   };
 
   const completedRequired = requiredDocs.filter(
-    (doc) => doc.required && hasDocument(doc.type),
+    (doc) => doc.required && hasDocument(doc.types),
   ).length;
   const totalRequired = requiredDocs.filter((doc) => doc.required).length;
   const completionRate =
@@ -137,10 +154,10 @@ export function DocumentChecklist({
       </CardHeader>
       <CardContent className="space-y-3">
         {requiredDocs.map((doc) => {
-          const hasDoc = hasDocument(doc.type);
+          const hasDoc = hasDocument(doc.types);
           return (
             <div
-              key={doc.type}
+              key={doc.key}
               className={`flex items-start gap-3 p-3 rounded-lg border ${
                 hasDoc
                   ? "bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800"

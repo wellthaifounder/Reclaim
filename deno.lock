@@ -184,6 +184,7 @@
         "npm:eslint@^9.32.0",
         "npm:fflate@~0.8.3",
         "npm:globals@^15.15.0",
+        "npm:heic-to@^1.5.2",
         "npm:input-otp@^1.4.2",
         "npm:jspdf@^4.2.1",
         "npm:lovable-tagger@^1.1.10",

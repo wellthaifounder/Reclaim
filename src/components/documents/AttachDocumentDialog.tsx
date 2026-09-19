@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { logError } from "@/utils/errorHandler";
 import { FileText, Calendar } from "lucide-react";
 import { format } from "date-fns";
+import { documentTypeLabel } from "@/lib/documentTypes";
 
 interface AttachDocumentDialogProps {
   /** The expenses to attach to. One from an expense's own row; several when
@@ -216,7 +217,7 @@ export const AttachDocumentDialog = ({
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
                     <Badge variant="secondary" className="text-xs">
-                      {receipt.document_type?.replace(/_/g, " ") ?? "document"}
+                      {documentTypeLabel(receipt.document_type)}
                     </Badge>
                   </div>
                   {/* Named, so the list can be read the way the Documents page
