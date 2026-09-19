@@ -17,10 +17,21 @@
          every page load.
 
          `frame-ancestors` is removed for the same reason -- a meta CSP cannot
-         express it. Framing is denied by the X-Frame-Options header instead. -->
+         express it. Framing is denied by the X-Frame-Options header instead.
+
+         `worker-src 'self' blob:` is stated rather than left to fall back to
+         script-src, which is what it did before. The HEIC-to-JPEG converter
+         (src/utils/heicConversion.ts) starts its decoder in a Web Worker
+         created from a blob: URL, and script-src does not permit blob:, so
+         every iPhone photo upload failed on a blocked worker. Stating it is
+         also narrower than the fallback was: workers may now come only from
+         this origin or a blob this app built, and no longer from Stripe,
+         Plaid or an inline script. A blob worker can only be created by script
+         that is already running, so this grants nothing to an attacker who
+         does not already have script execution. -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://cdn.plaid.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https: blob:; font-src 'self' https://fonts.gstatic.com data:; connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:* https://*.supabase.co https://sandbox.plaid.com https://production.plaid.com https://api.stripe.com; frame-src 'self' http://localhost:* http://127.0.0.1:* https://js.stripe.com https://cdn.plaid.com https://*.supabase.co; base-uri 'self'; form-action 'self';"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://cdn.plaid.com; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https: blob:; font-src 'self' https://fonts.gstatic.com data:; connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:* https://*.supabase.co https://sandbox.plaid.com https://production.plaid.com https://api.stripe.com; frame-src 'self' http://localhost:* http://127.0.0.1:* https://js.stripe.com https://cdn.plaid.com https://*.supabase.co; base-uri 'self'; form-action 'self';"
     />
 
     <!--

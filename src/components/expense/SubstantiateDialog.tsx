@@ -52,7 +52,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { logError } from "@/utils/errorHandler";
-import { validateFiles } from "@/utils/fileValidation";
+import { validateFiles, FILE_ACCEPT_ATTRIBUTE } from "@/utils/fileValidation";
+import { toUploadableFile } from "@/utils/heicConversion";
 import { formatDateOnly } from "@/lib/dates";
 import { SubstantiationPanel } from "@/components/expense/SubstantiationPanel";
 import { ReceiptGallery } from "@/components/expense/ReceiptGallery";
@@ -136,13 +137,31 @@ export function SubstantiateDialog({
     if (valid.length === 0) return;
 
     setUploading(true);
+
+    // An iPhone photo arrives as HEIC, which neither the preview nor the
+    // receipt scanner can read, so it becomes a JPEG before it is stored or
+    // scanned. Handled on its own rather than inside the block below because
+    // the message names the file that failed, and the catch there deliberately
+    // does not repeat storage errors back to the user.
+    let uploadable: File[];
+    try {
+      uploadable = await Promise.all(valid.map(toUploadableFile));
+    } catch (e) {
+      logError("Photo conversion failed", e);
+      toast.error(
+        e instanceof Error ? e.message : "We couldn't read that photo.",
+      );
+      setUploading(false);
+      return;
+    }
+
     try {
       const {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
-      for (const file of valid) {
+      for (const file of uploadable) {
         const path = `${user.id}/${expenseId}/${Date.now()}-${file.name}`;
         const { error: upErr } = await supabase.storage
           .from("receipts")
@@ -160,9 +179,9 @@ export function SubstantiateDialog({
       }
 
       toast.success(
-        valid.length === 1
+        uploadable.length === 1
           ? "Document added"
-          : `${valid.length} documents added`,
+          : `${uploadable.length} documents added`,
       );
       await refetchReceipts();
       // documentation_state is recomputed by a trigger when receipts change,
@@ -172,7 +191,7 @@ export function SubstantiateDialog({
 
       // Offer to read the first image straight away -- that is the moment the
       // file is in hand and the user is still thinking about this expense.
-      const firstImage = valid.find((f) => f.type.startsWith("image/"));
+      const firstImage = uploadable.find((f) => f.type.startsWith("image/"));
       if (firstImage) void runOcr(firstImage);
     } catch (e) {
       logError("Receipt upload failed", e);
@@ -305,7 +324,7 @@ export function SubstantiateDialog({
                   <input
                     type="file"
                     multiple
-                    accept=".jpg,.jpeg,.png,.pdf,.gif,.webp,image/*,application/pdf"
+                    accept={FILE_ACCEPT_ATTRIBUTE}
                     className="hidden"
                     disabled={uploading}
                     onChange={(e) => {

@@ -12,7 +12,7 @@ import {
 import { Upload, X, FileText, Image as ImageIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { validateFiles } from "@/utils/fileValidation";
+import { validateFiles, FILE_ACCEPT_ATTRIBUTE } from "@/utils/fileValidation";
 
 interface FileWithMetadata {
   file: File;
@@ -110,7 +110,7 @@ export function MultiFileUpload({
           <Input
             id="file-upload"
             type="file"
-            accept=".jpg,.jpeg,.png,.pdf,.gif,.webp,image/jpeg,image/png,application/pdf,image/gif,image/webp"
+            accept={FILE_ACCEPT_ATTRIBUTE}
             multiple
             onChange={handleFileSelect}
             disabled={disabled}

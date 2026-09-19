@@ -10,9 +10,32 @@ export const FILE_VALIDATION = {
     "application/pdf",
     "image/gif",
     "image/webp",
+    // What an iPhone actually produces. Converted to JPEG in the browser
+    // before upload (see utils/heicConversion.ts) -- stored as-is it would be
+    // a document nobody could open, since Chrome, Firefox and Edge cannot
+    // render HEIC and the receipt scanner only accepts PNG/JPEG/GIF/WebP.
+    "image/heic",
+    "image/heif",
+    "image/heic-sequence",
+    "image/heif-sequence",
   ],
-  ALLOWED_EXTENSIONS: [".jpg", ".jpeg", ".png", ".pdf", ".gif", ".webp"],
+  ALLOWED_EXTENSIONS: [
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".pdf",
+    ".gif",
+    ".webp",
+    ".heic",
+    ".heif",
+  ],
 } as const;
+
+/** The `accept` attribute for a file input, kept in step with the rules above. */
+export const FILE_ACCEPT_ATTRIBUTE = [
+  ...FILE_VALIDATION.ALLOWED_EXTENSIONS,
+  ...FILE_VALIDATION.ALLOWED_TYPES,
+].join(",");
 
 export interface FileValidationError {
   file: File;
@@ -51,15 +74,18 @@ export function validateFileType(file: File): string | null {
   const allowedExtensions: readonly string[] =
     FILE_VALIDATION.ALLOWED_EXTENSIONS;
 
-  // Check MIME type
-  if (!allowedTypes.includes(file.type)) {
-    return `File type "${file.type}" is not allowed. Allowed types: JPG, PNG, PDF, GIF, WebP`;
+  const extension = "." + (file.name.split(".").pop()?.toLowerCase() ?? "");
+  if (!allowedExtensions.includes(extension)) {
+    return `"${file.name}" is a ${extension.replace(".", "").toUpperCase() || "file with no extension"}. You can upload PDFs and photos (JPG, PNG, HEIC, GIF, WebP).`;
   }
 
-  // Check file extension
-  const extension = "." + file.name.split(".").pop()?.toLowerCase();
-  if (!extension || !allowedExtensions.includes(extension)) {
-    return `File extension "${extension}" is not allowed`;
+  // The extension is checked first and on its own because the browser does not
+  // always know the type: Chrome and Edge on Windows report an empty string
+  // for a .heic file, since HEIC is not a type they can decode. Rejecting on
+  // an empty type would refuse exactly the iPhone photos this accepts, so an
+  // unknown type defers to the extension, which is already on the allowlist.
+  if (file.type && !allowedTypes.includes(file.type)) {
+    return `"${file.name}" is a ${file.type} file, which can't be uploaded. You can upload PDFs and photos (JPG, PNG, HEIC, GIF, WebP).`;
   }
 
   return null;
