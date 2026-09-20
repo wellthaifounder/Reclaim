@@ -1,6 +1,8 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { z } from "https://esm.sh/zod@3.22.4";
+import { CheckoutFailure, classify, logFacts } from "./errors.ts";
 
 const allowedOrigins = [
   "https://reclaim.health",
@@ -8,7 +10,7 @@ const allowedOrigins = [
   "https://wellth-ai.app",
   "https://www.wellth-ai.app",
   Deno.env.get("ALLOWED_ORIGIN"),
-].filter(Boolean);
+].filter((o): o is string => Boolean(o));
 
 function getCorsHeaders(requestOrigin: string | null) {
   const origin =
@@ -35,96 +37,103 @@ const TIER_PRICES = {
   premium: "price_1SO9jA2Oq7FyVuCtc2WjHtZd",
 };
 
+const RequestSchema = z.object({ tier: z.enum(["plus", "premium"]) });
+
 serve(async (req) => {
   const corsHeaders = getCorsHeaders(req.headers.get("origin"));
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const supabaseUrl = Deno.env.get("SUPABASE_URL");
-  const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
-
-  if (!supabaseUrl || !supabaseAnonKey) {
-    throw new Error(
-      "Missing required environment variables: SUPABASE_URL or SUPABASE_ANON_KEY",
-    );
-  }
-
-  const supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
+  // One id per request, minted first so that even a failure before anything else
+  // has run can be quoted. It goes to the browser and into the single log line
+  // that holds the detail; that pairing is the whole diagnostic story.
+  const requestId = crypto.randomUUID();
+  // Where in the flow we are, so a failure says which step it died in.
+  let stage = "start";
+  let userEmail = "";
 
   try {
-    const requestId = crypto.randomUUID();
-    logStep("Function started");
+    logStep("Function started", { requestId });
 
-    const { tier } = await req.json();
-    if (!tier || !["plus", "premium"].includes(tier)) {
-      throw new Error("Invalid tier specified");
-    }
-    logStep("Requested tier", { tier });
+    // These were once thrown *outside* the try, which turned a missing
+    // environment variable into an unhandled 500 with no body at all.
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
+    if (!supabaseUrl || !supabaseAnonKey) throw new CheckoutFailure("INTERNAL");
+    const supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
 
-    const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
-    if (!stripeKey) throw new Error("STRIPE_SECRET_KEY is not set");
-
+    stage = "authenticate";
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) throw new Error("No authorization header provided");
-
-    const token = authHeader.replace("Bearer ", "");
+    if (!authHeader) throw new CheckoutFailure("AUTH");
     const { data: userData, error: userError } =
-      await supabaseClient.auth.getUser(token);
-    if (userError)
-      throw new Error(`Authentication error: ${userError.message}`);
+      await supabaseClient.auth.getUser(authHeader.replace("Bearer ", ""));
+    if (userError || !userData.user?.email) throw new CheckoutFailure("AUTH");
     const user = userData.user;
-    if (!user?.email)
-      throw new Error("User not authenticated or email not available");
-    logStep(`[${requestId}] User authenticated successfully`);
+    userEmail = user.email ?? "";
+
+    stage = "validate";
+    const parsed = RequestSchema.safeParse(await req.json().catch(() => null));
+    if (!parsed.success) throw new CheckoutFailure("BAD_REQUEST");
+    const { tier } = parsed.data;
+    logStep("Requested tier", { requestId, tier });
+
+    stage = "configure";
+    const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
+    if (!stripeKey) throw new CheckoutFailure("BILLING_NOT_CONFIGURED");
 
     const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
+
+    stage = "find_customer";
     const customers = await stripe.customers.list({
       email: user.email,
       limit: 1,
     });
-    let customerId;
-    if (customers.data.length > 0) {
-      customerId = customers.data[0].id;
-      logStep("Found existing customer", { customerId });
-    }
+    const customerId =
+      customers.data.length > 0 ? customers.data[0].id : undefined;
 
-    const priceId = TIER_PRICES[tier as keyof typeof TIER_PRICES];
-    logStep("Creating checkout session", { priceId, tier });
+    // Return addresses are built from the CORS-checked origin, never from the
+    // raw header: this used to interpolate whatever Origin arrived straight
+    // into Stripe's success/cancel URLs, including the string "null" when the
+    // header was absent -- which Stripe rejects as an invalid URL.
+    const returnOrigin = corsHeaders["Access-Control-Allow-Origin"];
+    const priceId = TIER_PRICES[tier];
 
+    stage = "create_session";
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       customer_email: customerId ? undefined : user.email,
-      line_items: [
-        {
-          price: priceId,
-          quantity: 1,
-        },
-      ],
+      line_items: [{ price: priceId, quantity: 1 }],
       mode: "subscription",
-      success_url: `${req.headers.get("origin")}/dashboard?subscription=success`,
-      cancel_url: `${req.headers.get("origin")}/settings?subscription=cancelled`,
+      success_url: `${returnOrigin}/dashboard?subscription=success`,
+      cancel_url: `${returnOrigin}/settings?subscription=cancelled`,
     });
 
-    logStep("Checkout session created", {
-      sessionId: session.id,
-      url: session.url,
-    });
+    // The session URL is deliberately not logged: it is a live link to a
+    // payment page.
+    logStep("Checkout session created", { requestId, tier });
 
     return new Response(JSON.stringify({ url: session.url }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
     });
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    logStep("ERROR in create-checkout", { message: errorMessage });
+    const failure = classify(error);
+    logStep("ERROR in create-checkout", {
+      requestId,
+      stage,
+      code: failure.code,
+      ...logFacts(error, [userEmail]),
+    });
     return new Response(
       JSON.stringify({
-        error: "An unexpected error occurred. Please try again.",
+        error: failure.message,
+        code: failure.code,
+        request_id: requestId,
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 500,
+        status: failure.status,
       },
     );
   }

@@ -8,6 +8,11 @@ import React, {
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { safeLog, logError } from "@/utils/errorHandler";
+import {
+  checkoutFailureMessage,
+  isSafeCheckoutUrl,
+  readCheckoutFailure,
+} from "@/lib/checkoutFailure";
 
 type SubscriptionTier = "free" | "plus" | "premium";
 
@@ -85,6 +90,17 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const createCheckoutSession = async (checkoutTier: "plus" | "premium") => {
     try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      // A signed-out visitor pressing a paid plan on the landing page has no
+      // login to send. This used to fall through to the same "Failed to start
+      // checkout" toast; it now takes them where the free plan's button does.
+      if (!session) {
+        window.location.assign("/auth?signup=1");
+        return;
+      }
+
       const { data, error } = await supabase.functions.invoke(
         "create-checkout",
         {
@@ -93,14 +109,25 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({
       );
 
       if (error) throw error;
-
-      if (data?.url) {
-        window.open(data.url, "_blank");
+      if (!isSafeCheckoutUrl(data?.url)) {
+        throw new Error("create-checkout returned no usable URL");
       }
+
+      // Same tab, not window.open(..., "_blank"). The network round trip above
+      // means the browser no longer considers this a direct click, so it
+      // treats a new window as a pop-up and silently drops it -- the button
+      // then appears to do nothing at all. Stripe sends people back to us on
+      // success or cancel, so leaving this tab costs nothing.
+      window.location.assign(data.url);
     } catch (error) {
-      safeLog("Error creating checkout session", error);
-      toast.error("Error", {
-        description: "Failed to start checkout. Please try again.",
+      const details = await readCheckoutFailure(error);
+      logError("Error creating checkout session", {
+        code: details.code,
+        status: details.status,
+        requestId: details.requestId,
+      });
+      toast.error("Couldn't start checkout", {
+        description: checkoutFailureMessage(details),
       });
     }
   };

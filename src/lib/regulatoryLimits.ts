@@ -5,9 +5,10 @@
  * Do NOT hardcode IRS limit values elsewhere in the codebase.
  *
  * Update this file each January when the IRS publishes new limits.
- * Sources: IRS Publication 969, Revenue Procedure 2024-40.
+ * Sources: IRS Publication 969, Revenue Procedure 2024-40 (2025), Revenue
+ * Procedures 2025-19 and 2025-32 (2026).
  *
- * Last updated: 2026-04-08 (reflecting 2025 tax year limits)
+ * Last updated: 2026-09-19 (current year is 2026; 2025 kept for prior-year use)
  */
 
 // ── HSA Contribution Limits ───────────────────────────────────────────────────
@@ -35,18 +36,29 @@ export const FSA_LIMITS_2025 = {
   carryover: 660, // Up from $610 in 2024; only if plan allows carryover (not grace period)
 } as const;
 
-// ── 2026 Preview Limits ───────────────────────────────────────────────────────
-// Source: IRS Publication 969 (2025), Tip boxes — informational only
+// ── 2026 Limits ───────────────────────────────────────────────────────────────
+// HSA and HDHP: Rev. Proc. 2025-19. FSA: Rev. Proc. 2025-32. All three were
+// checked against the IRS's published text on 2026-09-19.
+//
+// These sat here labelled "preview, informational only" while the aliases at
+// the bottom of this file still pointed at 2025, so every limit the app showed
+// -- the Guide, the investment tracker -- was a year stale for all of 2026.
+// The aliases are the thing that decides what users see; keep them moving.
 
 export const HSA_LIMITS_2026 = {
   selfOnly: 4400,
   family: 8750,
-  catchUp: 1000,
+  catchUp: 1000, // Statutory ($1,000 under §223(b)(3)); not indexed to inflation
 } as const;
 
 export const HDHP_THRESHOLDS_2026 = {
   selfOnly: { minDeductible: 1700, maxOOP: 8500 },
   family: { minDeductible: 3400, maxOOP: 17000 },
+} as const;
+
+export const FSA_LIMITS_2026 = {
+  contribution: 3400,
+  carryover: 680, // Only if the plan allows carryover (not grace period)
 } as const;
 
 // ── Medical Mileage ───────────────────────────────────────────────────────────
@@ -225,7 +237,7 @@ export function medicalMileageAmount(
 // Use these aliases when displaying the "current year" limits in UI.
 // Update these aliases each January along with the raw limit objects above.
 
-export const HSA_LIMITS_CURRENT = HSA_LIMITS_2025;
-export const HDHP_THRESHOLDS_CURRENT = HDHP_THRESHOLDS_2025;
-export const FSA_LIMITS_CURRENT = FSA_LIMITS_2025;
-export const CURRENT_TAX_YEAR = 2025;
+export const HSA_LIMITS_CURRENT = HSA_LIMITS_2026;
+export const HDHP_THRESHOLDS_CURRENT = HDHP_THRESHOLDS_2026;
+export const FSA_LIMITS_CURRENT = FSA_LIMITS_2026;
+export const CURRENT_TAX_YEAR = 2026;

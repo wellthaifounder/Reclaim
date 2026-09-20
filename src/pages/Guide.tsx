@@ -17,6 +17,15 @@ import {
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
 import { HSA_LIMITS_CURRENT, CURRENT_TAX_YEAR } from "@/lib/regulatoryLimits";
 
+// The worked example is derived, not quoted: a literal "$4,300 grows to ~$8,500"
+// was correct for one year and silently wrong from the next January. 7% over ten
+// years is a factor of ~1.967; rounded to the nearest $100 so it reads as an
+// estimate rather than a promise.
+const TEN_YEAR_GROWTH_FACTOR = 1.07 ** 10;
+const tenYearExample =
+  Math.round((HSA_LIMITS_CURRENT.selfOnly * TEN_YEAR_GROWTH_FACTOR) / 100) *
+  100;
+
 const Guide = () => {
   const navigate = useNavigate();
 
@@ -150,8 +159,10 @@ const Guide = () => {
                   <div>
                     <p className="font-medium">Let your HSA grow tax-free</p>
                     <p className="text-sm text-muted-foreground">
-                      Invest your HSA balance. At a 7% annual return, $4,300
-                      grows to ~$8,500 in 10 years — all tax-free.
+                      Invest your HSA balance. At a 7% annual return,{" "}
+                      {formatCurrencyWhole(HSA_LIMITS_CURRENT.selfOnly)} grows
+                      to ~{formatCurrencyWhole(tenYearExample)} in 10 years —
+                      all tax-free.
                     </p>
                   </div>
                 </li>
