@@ -16,7 +16,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
-import { HSA_LIMITS_2025 } from "@/lib/regulatoryLimits";
+import { HSA_LIMITS_CURRENT } from "@/lib/regulatoryLimits";
 import { Money } from "@/components/ui/money";
 import { formatCurrency, formatCurrencyWhole } from "@/lib/utils";
 
@@ -61,8 +61,8 @@ export const HSAInvestmentTracker = ({
 
   // Calculate HSA contribution limits
   const currentYear = new Date().getFullYear();
-  const HSA_LIMIT_INDIVIDUAL = HSA_LIMITS_2025.selfOnly;
-  const HSA_LIMIT_FAMILY = HSA_LIMITS_2025.family;
+  const HSA_LIMIT_INDIVIDUAL = HSA_LIMITS_CURRENT.selfOnly;
+  const HSA_LIMIT_FAMILY = HSA_LIMITS_CURRENT.family;
 
   return (
     <div className="space-y-6">

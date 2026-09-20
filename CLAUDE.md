@@ -520,6 +520,11 @@ switch: it claims control, deletes every cache, unregisters itself, and reloads 
 `src/main.tsx` does the same from the page side as a second path. Do not reintroduce a service worker
 without a deliberate decision, and never remove the kill switch to "clean up".
 
+### 2026-09-19
+
+**Issue:** Every IRS limit the app displayed was a year stale for all of 2026. `regulatoryLimits.ts` already held the 2026 figures, but labelled "preview, informational only", while the `*_CURRENT` aliases and `CURRENT_TAX_YEAR` still pointed at 2025 -- and the aliases are what the Guide and the investment tracker actually read. One consumer (`HSAInvestmentTracker`) bypassed the alias and imported `HSA_LIMITS_2025` directly, and the Guide hardcoded a "$4,300 grows to ~$8,500" worked example. Adding the new year's numbers and *not moving the aliases* looks like completing the January checklist while changing nothing a user sees.
+**Fix:** Moved the aliases and `CURRENT_TAX_YEAR` to 2026, added the missing `FSA_LIMITS_2026` ($3,400 / $680 carryover, Rev. Proc. 2025-32), pointed the tracker at the alias, and made the Guide's example compute from it. **Rule:** the January update is not done until the aliases move; consumers import `*_CURRENT`, never a pinned year, and no page quotes an IRS figure as a literal.
+
 ---
 
-_Last updated: 2026-09-14_
+_Last updated: 2026-09-19_

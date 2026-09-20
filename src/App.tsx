@@ -16,6 +16,7 @@ import {
 } from "react-router-dom";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { SubscriptionProvider } from "@/contexts/SubscriptionContext";
+import { CheckoutReturnHandler } from "@/components/subscription/CheckoutReturnHandler";
 import { HSAProvider } from "@/contexts/HSAContext";
 // OnboardingProvider removed 2026-08-23. It kept setup state in localStorage,
 // which is per-browser: the same person setting up on a laptop was treated as
@@ -139,6 +140,7 @@ const App = () => (
             <DashboardLayoutProvider>
               <Sonner />
               <BrowserRouter>
+                <CheckoutReturnHandler />
                 <PWAInstallPrompt />
                 <CookieConsent />
                 <ErrorBoundary>
