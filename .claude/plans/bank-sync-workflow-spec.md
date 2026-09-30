@@ -163,10 +163,10 @@ Where documentation, service date, patient, and eligibility are resolved togethe
 
 ### What the user adds
 
-- **Multiple documents per expense**, no restriction on file type. An inline note explains what the IRS would want in an audit (itemized statement or receipt showing provider, date of service, patient, service description, and amount) without blocking anything else.
-- **OCR** extracts vendor, amounts, dates, and invoice number for confirmation — suggestions the user accepts, never silent overwrites.
-- **Date(s) of service** — multiple dates supported for a single payment. Note that the IRS ties an expense to date of service, not date of payment; this drives both the establishment-date gate and tax-year assignment.
-- **Patient** — selected from the family roster.
+- **Multiple documents per expense**, no restriction on file type. What the IRS would want in an audit (itemized statement or receipt showing provider, date of service, patient, service description, and amount) is one tap away behind "What counts?" on the amber label, and never blocks anything else. _(Amended 2026-09-30 — was an always-visible inline note. See `docs/SUBSTANTIATE_SPEC.md`, S26–S27.)_
+- **OCR** extracts vendor, amounts, dates, and invoice number. It fills blank fields and fields still holding a default directly, marked as read from the document, and never overwrites anything a person entered; where a document disagrees with the user, it asks. _(Amended 2026-09-30 — was "suggestions the user accepts, never silent overwrites." See `docs/SUBSTANTIATE_SPEC.md`, S9.)_
+- **Date(s) of service** — multiple dates supported for a single payment. Note that the IRS ties an expense to date of service, not date of payment; this drives both the establishment-date gate and tax-year assignment. Pre-filled with the payment date until a document or the user supplies it (`docs/SUBSTANTIATE_SPEC.md`, S18–S19).
+- **Patient** — selected from the family roster, with the account holder pre-selected (`docs/SUBSTANTIATE_SPEC.md`, S20).
 - **Tags** — free-form, multi-axis.
 - **Reimbursable amount** — defaults to `amount_paid`, editable downward for cases like an insurance refund arriving later.
 
