@@ -35,6 +35,7 @@ import { ExpenseListControls } from "@/components/expense/ExpenseListControls";
 import { BulkSubstantiateBar } from "@/components/expense/BulkSubstantiateBar";
 import { MerchantGroupCard } from "@/components/transactions/MerchantGroupCard";
 import { useFamilyRoster } from "@/hooks/useFamilyRoster";
+import { useClassifyExpense } from "@/hooks/useEligibilityGates";
 import type { QueueLifecycle } from "@/lib/expenseLifecycle";
 import {
   groupExpenses,
@@ -134,6 +135,7 @@ export function SubstantiateQueue({
 }: Props) {
   const navigate = useNavigate();
   const { members } = useFamilyRoster();
+  const classify = useClassifyExpense();
   const [actingId, setActingId] = useState<string | null>(null);
   const [substantiateId, setSubstantiateId] = useState<string | null>(null);
   const [attachTo, setAttachTo] = useState<string[] | null>(null);
@@ -419,9 +421,32 @@ export function SubstantiateQueue({
               )}
             </div>
           ) : (
-            <div className="rounded-md border border-dashed bg-muted/20 p-3 text-xs italic text-muted-foreground">
-              Awaiting AI classification. You can still confirm or reject based
-              on your own judgment.
+            // Workstream D4 made this a request, never a promise: nothing
+            // classifies an expense on its own, ever -- there is no queue or
+            // timer behind it. The row used to say "Awaiting AI
+            // classification," which reads as a wait about to end, when
+            // really nothing had been asked yet. It also failed silently: a
+            // network error here just left the spinner ending with nothing on
+            // screen, which is why the toast on failure lives in the shared
+            // hook rather than only here.
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-dashed bg-muted/20 p-3">
+              <p className="text-xs text-muted-foreground">
+                Not checked against IRS Publication 502 yet. You can still
+                confirm or reject based on your own judgment.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => classify.mutate(e.id, { onSuccess: onRefresh })}
+                disabled={classify.isPending && classify.variables === e.id}
+              >
+                {classify.isPending && classify.variables === e.id ? (
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                )}
+                Check eligibility
+              </Button>
             </div>
           )}
 
