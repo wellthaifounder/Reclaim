@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -9,11 +10,25 @@ import {
 } from "@/components/ui/card";
 import { Download, X } from "lucide-react";
 import { toast } from "sonner";
+import { useAuthUser } from "@/hooks/useAuthUser";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 }
+
+// Pages where a floating "Install Reclaim" card has no business appearing:
+// the two marketing/legal pages and sign-in are read by people who haven't
+// decided to use the app yet, and /install already has its own full install
+// walkthrough, so the card would just repeat it. Mounted once at the App
+// root, this component sees every route, so it has to rule these out itself.
+const SUPPRESSED_ROUTES = new Set([
+  "/",
+  "/auth",
+  "/install",
+  "/privacy",
+  "/terms",
+]);
 
 export const PWAInstallPrompt = () => {
   const [deferredPrompt, setDeferredPrompt] =
@@ -21,6 +36,8 @@ export const PWAInstallPrompt = () => {
   const [showPrompt, setShowPrompt] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
+  const location = useLocation();
+  const { user } = useAuthUser();
 
   useEffect(() => {
     // Check if app is already installed
@@ -107,8 +124,15 @@ export const PWAInstallPrompt = () => {
     toast.info("You can install the app anytime from your browser menu");
   };
 
-  // Don't show if already installed or prompt not ready
-  if (!showPrompt || isStandalone) {
+  // Don't show if already installed, prompt not ready, signed out (this is
+  // for people already using the app), or on a route where it would sit on
+  // top of the page's own content or its own install instructions.
+  if (
+    !showPrompt ||
+    isStandalone ||
+    !user ||
+    SUPPRESSED_ROUTES.has(location.pathname)
+  ) {
     return null;
   }
 
