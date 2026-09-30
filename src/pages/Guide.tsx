@@ -206,7 +206,7 @@ const Guide = () => {
           <p className="text-muted-foreground">
             Reclaim turns your medical expenses into a searchable, organized
             archive — so when you're ready to reimburse, you have everything you
-            need in one click. Here are the four steps:
+            need in one click. Here are the three steps:
           </p>
 
           <div className="space-y-4">

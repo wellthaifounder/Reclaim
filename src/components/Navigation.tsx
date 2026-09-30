@@ -13,9 +13,11 @@ import {
 } from "@/components/ui/sheet";
 import { useState, useEffect } from "react";
 import { analytics } from "@/lib/analytics";
+import { useAuthUser } from "@/hooks/useAuthUser";
 
 export const Navigation = () => {
   const navigate = useNavigate();
+  const { user } = useAuthUser();
   const [isOpen, setIsOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
 
@@ -94,34 +96,53 @@ export const Navigation = () => {
           aria-label="Authentication"
         >
           <ThemeToggle />
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              analytics.navigationClick("sign_in");
-              navigate("/auth");
-            }}
-            className="text-sm"
-          >
-            Sign In
-          </Button>
-          {/* Was the default (filled) variant -- a solid teal pill sitting
-              next to the hero's solid gold CTA in the very first viewport.
-              Two rounds of blind design review read that as two different
-              buttons both claiming to be "the" primary action. Outline
-              keeps Sign Up visible and clickable without competing with the
-              hero button for "which one do I press." */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              analytics.navigationClick("sign_up");
-              navigate("/auth");
-            }}
-            className="text-sm"
-          >
-            Sign Up
-          </Button>
+          {user ? (
+            // A signed-in visitor landing on the marketing page (e.g. via a
+            // bookmark, or /privacy and /terms, which use this same nav) was
+            // still offered "Sign In" / "Sign Up" with no acknowledgment
+            // they already have an account.
+            <Button
+              size="sm"
+              onClick={() => {
+                analytics.navigationClick("dashboard");
+                navigate("/dashboard");
+              }}
+              className="text-sm"
+            >
+              Go to Dashboard
+            </Button>
+          ) : (
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  analytics.navigationClick("sign_in");
+                  navigate("/auth");
+                }}
+                className="text-sm"
+              >
+                Sign In
+              </Button>
+              {/* Was the default (filled) variant -- a solid teal pill sitting
+                  next to the hero's solid gold CTA in the very first viewport.
+                  Two rounds of blind design review read that as two different
+                  buttons both claiming to be "the" primary action. Outline
+                  keeps Sign Up visible and clickable without competing with the
+                  hero button for "which one do I press." */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  analytics.navigationClick("sign_up");
+                  navigate("/auth");
+                }}
+                className="text-sm"
+              >
+                Sign Up
+              </Button>
+            </>
+          )}
         </div>
 
         {/* Mobile Hamburger Menu */}
@@ -186,33 +207,51 @@ export const Navigation = () => {
 
               {/* Auth Buttons */}
               <div className="flex flex-col gap-2 sm:gap-3">
-                <SheetClose asChild>
-                  <Button
-                    variant="ghost"
-                    size="lg"
-                    className="w-full text-sm sm:text-base"
-                    onClick={() => {
-                      analytics.navigationClick("sign_in_mobile");
-                      closeMenu();
-                      navigate("/auth");
-                    }}
-                  >
-                    Sign In
-                  </Button>
-                </SheetClose>
-                <SheetClose asChild>
-                  <Button
-                    size="lg"
-                    className="w-full text-sm sm:text-base"
-                    onClick={() => {
-                      analytics.navigationClick("sign_up_mobile");
-                      closeMenu();
-                      navigate("/auth");
-                    }}
-                  >
-                    Sign Up
-                  </Button>
-                </SheetClose>
+                {user ? (
+                  <SheetClose asChild>
+                    <Button
+                      size="lg"
+                      className="w-full text-sm sm:text-base"
+                      onClick={() => {
+                        analytics.navigationClick("dashboard_mobile");
+                        closeMenu();
+                        navigate("/dashboard");
+                      }}
+                    >
+                      Go to Dashboard
+                    </Button>
+                  </SheetClose>
+                ) : (
+                  <>
+                    <SheetClose asChild>
+                      <Button
+                        variant="ghost"
+                        size="lg"
+                        className="w-full text-sm sm:text-base"
+                        onClick={() => {
+                          analytics.navigationClick("sign_in_mobile");
+                          closeMenu();
+                          navigate("/auth");
+                        }}
+                      >
+                        Sign In
+                      </Button>
+                    </SheetClose>
+                    <SheetClose asChild>
+                      <Button
+                        size="lg"
+                        className="w-full text-sm sm:text-base"
+                        onClick={() => {
+                          analytics.navigationClick("sign_up_mobile");
+                          closeMenu();
+                          navigate("/auth");
+                        }}
+                      >
+                        Sign Up
+                      </Button>
+                    </SheetClose>
+                  </>
+                )}
               </div>
             </nav>
           </SheetContent>

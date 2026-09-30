@@ -149,6 +149,13 @@ const App = () => (
                       {/* Public routes */}
                       <Route path="/" element={<Index />} />
                       <Route path="/auth" element={<Auth />} />
+                      {/* The most guessable spelling of the sign-in URL,
+                          for anyone who types it or follows an old link
+                          that assumed it. */}
+                      <Route
+                        path="/signin"
+                        element={<Navigate to="/auth" replace />}
+                      />
                       <Route path="/install" element={<Install />} />
                       <Route path="/privacy" element={<PrivacyPolicy />} />
                       <Route path="/terms" element={<TermsOfService />} />
