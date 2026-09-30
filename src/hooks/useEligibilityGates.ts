@@ -10,6 +10,7 @@
 // roster answer reopen a claim from before the HSA existed.
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { logError } from "@/utils/errorHandler";
 
@@ -97,8 +98,25 @@ export function useClassifyExpense() {
       });
       queryClient.invalidateQueries({ queryKey: ["bill", invoiceId] });
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      // Partial keys: react-query invalidates every query whose key starts
+      // with this array, which reaches ["substantiate-queue", userId] and
+      // ["all-expenses", userId] without either caller having to know the
+      // other's key. Without this, a row classified from the queue only
+      // updated once something else happened to refetch it.
+      queryClient.invalidateQueries({ queryKey: ["substantiate-queue"] });
+      queryClient.invalidateQueries({ queryKey: ["all-expenses"] });
     },
-    onError: (error) => logError("Classifying expense failed", error),
+    onError: (error) => {
+      // Previously silent: the button's spinner just stopped, with nothing on
+      // screen to say the attempt had failed, so a network blip looked
+      // identical to "still working on it." The button reappears on its own
+      // (nothing here changed e.rule), so trying again needs no extra state.
+      logError("Classifying expense failed", error);
+      toast.error("Couldn't check eligibility", {
+        description:
+          "Something went wrong reaching the classifier. Please try again.",
+      });
+    },
   });
 }
 
