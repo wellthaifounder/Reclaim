@@ -313,16 +313,11 @@ export function HSAAccountManager() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-semibold text-foreground">
-            HSA Accounts
-          </h3>
-          <p className="text-sm text-muted-foreground">
-            Manage your Health Savings Accounts to track eligibility across
-            different time periods
-          </p>
-        </div>
+      {/* No heading here — the Settings card wrapping this component already
+          shows "HSA Accounts" and its description in its own CardHeader
+          (src/pages/Settings.tsx), and this used to repeat both verbatim
+          right below it. This is the only place this component is used. */}
+      <div className="flex justify-end">
         <Button onClick={() => handleOpenDialog()}>
           <Plus className="h-4 w-4 mr-2" />
           Add Account

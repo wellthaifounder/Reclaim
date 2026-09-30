@@ -2030,7 +2030,7 @@ export default function Substantiation() {
         <p className="text-xs text-muted-foreground mt-6 text-center max-w-md mx-auto">
           Claim packets are built on your device and never stored on Reclaim's
           servers. Your documents, confirmation timestamps and expense data are
-          — so you can rebuild any packet from this list at any time.
+          kept — so you can rebuild any packet from this list at any time.
         </p>
       </div>
 
