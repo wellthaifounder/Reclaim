@@ -19,6 +19,11 @@
 //                             overwrites" (S9).
 //   3. Date of care, who it was for, tags -- every field already holds a
 //                             sensible value and saves as it changes.
+//   4. The decision        -- pinned in the footer: Confirm eligible / Not
+//                             eligible (ExpenseDecision, S30-S33). Opened from
+//                             the Substantiate queue, either button moves
+//                             straight to the next expense, with a count
+//                             (S31); opened anywhere else, it closes.
 //
 // Deliberately NOT a wizard. A wizard implies a start and a finish, but
 // substantiation is resumable by nature: a receipt today, a service date when
@@ -26,7 +31,7 @@
 // saves on its own and the dialog can be closed at any point without losing
 // what was entered.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -36,6 +41,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { ExpenseDecision } from "@/components/expense/ExpenseDecision";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, Sparkles, Check, X } from "lucide-react";
 import { toast } from "sonner";
@@ -53,6 +59,16 @@ interface SubstantiateDialogProps {
   expenseId: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /**
+   * Set only when the dialog is working through the Substantiate queue (S31).
+   * The queue owns which expense is open, so a decision hands control back to
+   * it: it opens the next one, or closes the dialog after the last.
+   */
+  queue?: {
+    position: { current: number; total: number };
+    onDecided: () => void;
+    onSkip: () => void;
+  };
 }
 
 /** What process-receipt-ocr gives back, narrowed to the fields we offer. */
@@ -75,12 +91,21 @@ export function SubstantiateDialog({
   expenseId,
   open,
   onOpenChange,
+  queue,
 }: SubstantiateDialogProps) {
   const queryClient = useQueryClient();
   const [uploading, setUploading] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [suggestion, setSuggestion] = useState<OcrSuggestion | null>(null);
   const [choosing, setChoosing] = useState(false);
+
+  // The queue moves this dialog from one expense to the next without closing
+  // it, so anything belonging to the previous expense is dropped.
+  useEffect(() => {
+    setSuggestion(null);
+    setScanning(false);
+    setChoosing(false);
+  }, [expenseId]);
 
   const { data: expense, isLoading } = useQuery({
     queryKey: ["substantiate-expense", expenseId],
@@ -273,10 +298,10 @@ export function SubstantiateDialog({
           aria-describedby is cleared so the missing one is deliberate, not a
           warning. */}
       <DialogContent
-        className="max-w-2xl max-h-[90vh] overflow-y-auto"
+        className="flex max-h-[90vh] max-w-2xl flex-col gap-0 overflow-hidden p-0"
         aria-describedby={undefined}
       >
-        <DialogHeader>
+        <DialogHeader className="px-6 pb-4 pt-6">
           <DialogTitle>Substantiate this expense</DialogTitle>
         </DialogHeader>
 
@@ -285,7 +310,7 @@ export function SubstantiateDialog({
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : (
-          <div className="space-y-6">
+          <div className="flex-1 overflow-y-auto px-6 pb-6">
             <SubstantiationPanel
               hideHeader
               key={expense.id}
@@ -326,6 +351,7 @@ export function SubstantiateDialog({
                     invoiceId={expense.id}
                     hasDocuments={hasDocuments}
                     isMileage={expense.mileage_miles != null}
+                    noReceipt={expense.documentation_state === "not_available"}
                   />
 
                   <DocumentAttachOptions
@@ -403,11 +429,23 @@ export function SubstantiateDialog({
               }
             />
 
-            <div className="flex justify-end">
-              <Button variant="outline" onClick={() => onOpenChange(false)}>
-                Done
-              </Button>
-            </div>
+          </div>
+        )}
+
+        {/* Pinned, so the decision is never scrolled out of reach (S30). */}
+        {expense && (
+          <div className="border-t px-6 py-4">
+            <ExpenseDecision
+              key={expense.id}
+              invoiceId={expense.id}
+              eligibilityState={expense.eligibility_state}
+              claimState={expense.claim_state}
+              position={queue?.position}
+              onSkip={queue?.onSkip}
+              onDecided={() =>
+                queue ? queue.onDecided() : onOpenChange(false)
+              }
+            />
           </div>
         )}
 

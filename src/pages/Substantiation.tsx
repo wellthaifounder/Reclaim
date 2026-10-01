@@ -117,6 +117,7 @@ interface EligibleExpense {
   eligibility_basis_rule_id: string | null;
   rule_name: string | null;
   rule_section_ref: string | null;
+  rule_status: string | null;
   documentation_state: string | null;
   documents: ClaimDocument[];
 }
@@ -619,6 +620,7 @@ export default function Substantiation() {
           eligibility_basis_rule_id: (row.rule_id as string | null) ?? null,
           rule_name: (row.rule_name as string | null) ?? null,
           rule_section_ref: (row.rule_section_ref as string | null) ?? null,
+          rule_status: (row.rule_status as string | null) ?? null,
           documentation_state:
             (row.documentation_state as string | null) ?? null,
           documents: (row.documents as ClaimDocument[] | null) ?? [],
@@ -1021,6 +1023,7 @@ export default function Substantiation() {
           amount: Number(row.amount),
           ruleName: (row.rule_name as string | null) ?? null,
           ruleSectionRef: (row.rule_section_ref as string | null) ?? null,
+          ruleStatus: (row.rule_status as string | null) ?? null,
           confirmedAt: (row.confirmed_at as string | null) ?? "",
           documents: (row.documents as ClaimDocument[] | null) ?? [],
           documentationState:
@@ -1295,6 +1298,7 @@ export default function Substantiation() {
         amount: amountFor(e, purpose),
         ruleName: e.rule_name,
         ruleSectionRef: e.rule_section_ref,
+        ruleStatus: e.rule_status,
         confirmedAt: e.confirmed_at,
         documents: e.documents,
         documentationState: e.documentation_state,

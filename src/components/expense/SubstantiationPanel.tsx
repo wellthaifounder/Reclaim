@@ -60,6 +60,9 @@ export interface SubstantiationPanelProps {
   mileage?: MileageBreakdown | null;
   /** Rendered between the payment and the date of care. */
   documents?: ReactNode;
+  /** Rendered last, under the tags: the decision, on surfaces that do not pin
+   *  it to a footer of their own (S30). */
+  footer?: ReactNode;
   onSaved?: () => void;
   /** Hide the card's own title when the surrounding surface already has one. */
   hideHeader?: boolean;
@@ -92,6 +95,7 @@ export function SubstantiationPanel({
   patientId,
   mileage,
   documents,
+  footer,
   onSaved,
   hideHeader = false,
 }: SubstantiationPanelProps) {
@@ -562,6 +566,13 @@ export function SubstantiationPanel({
           </div>
         )}
       </div>
+
+      {footer && (
+        <>
+          <Separator />
+          {footer}
+        </>
+      )}
     </>
   );
 

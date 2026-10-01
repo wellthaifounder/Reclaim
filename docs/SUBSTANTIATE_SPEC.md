@@ -244,11 +244,38 @@ without a finance team to approve it, and the record stays honest about what bac
 
 ## 3. Gap list — this spec versus what is built
 
-**Build status:** slice 1 is built (1a: S1, S2, S5; 1b: S15–S23, S26, S27, S29, S35, and the
-faults below). Slices 2–4 are not. Beyond the decisions themselves, the session found these
+**Build status:** slices 1 and 2 are built (1a: S1, S2, S5; 1b: S15–S23, S26, S27, S29, S35, and
+the faults below; 2: S30–S34). Slices 3–4 are not. Beyond the decisions themselves, the session found these
 faults in the current code. Each is fixed in slice 1 unless marked otherwise.
 
-Slice 1b notes, for whoever builds the slices that follow:
+Slice 2 notes, for whoever builds the slices that follow:
+
+- **"I don't have one" is a documentation state, `not_available`**, beside none / partial /
+  complete — not a flag. The queue's status rule already treats it correctly (an eligible expense
+  leaves the queue; an undecided one waits for its decision as pending_review), attaching a
+  document replaces it by itself, and records snapshot the state as text, so a rebuilt record
+  still says "No receipt, bank record only." Anything asking "is it documented?" tests for
+  `complete` or `none`, so it is never mistaken for proof; the claim packet still lists such an
+  expense among the undocumented, which is accurate. The duplicate-merge function ranks it level
+  with `none`.
+- **S32's record note is derived, not stored**: the record prints it when the matched Publication
+  502 category says "ineligible" (`rule_status`, added to `substantiatable_expenses()` and
+  `record_packet_items()`). Reclassifying later changes the note with it, which is the honest
+  reading: the confirmation stands against whatever the list now says.
+- **S33 hides Confirm** rather than greying it, and the problem stays beside its field. The facts
+  are re-read from the database at the moment of the click (`useExpenseDecision`), not trusted
+  from what the screen last fetched, because the database re-applies a factual refusal even to a
+  confirmed expense.
+- **Skip** was added in queue mode only: an expense already confirmed and waiting for a document
+  has no decision left to make, and would otherwise trap the walk through the queue.
+- **The queue row's buttons and the bulk bar** share the writes. The row now takes the same
+  "Confirm anyway?" step. Bulk still skips rows the list says no to — it cannot take a per-expense
+  step — and its message now says to open one and confirm it anyway.
+- **Known leftover:** BillDetail's Overview tab still has its own "HSA Eligible" switch, which on
+  Save writes eligibility directly (and turns "ineligible" into "unknown"). It is a second,
+  unstamped way to decide that predates this spec.
+
+Slice 1b notes:
 
 - **"I don't have one"** is part of S26 but belongs to slice 2 (S34); the amber label ships
   with **What counts?** alone, and "proper proof" is for now any attached document (S28 needs
@@ -348,4 +375,4 @@ Gathered 2026-09-30. Claims quoted above come from these pages.
 
 ---
 
-_Agreed 2026-09-30. Slice 1 is built; start at slice 2._
+_Agreed 2026-09-30. Slices 1 and 2 are built; start at slice 3._

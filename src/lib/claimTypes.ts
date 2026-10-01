@@ -31,6 +31,20 @@ export function documentLabel(doc: ClaimDocument): string {
   return documentTypeLabel(doc.type);
 }
 
+/**
+ * What the record says about an expense the person has no receipt for
+ * (SUBSTANTIATE_SPEC S34), stated plainly rather than as a gap to be chased.
+ */
+export const NO_RECEIPT_STATEMENT = "No receipt, bank record only.";
+
+/**
+ * Printed when the IRS Publication 502 list says a category is not allowed and
+ * the account holder confirmed the expense anyway (S32). It is their judgement
+ * to make, and the record says whose call it was.
+ */
+export const CONFIRMED_AGAINST_LIST_STATEMENT =
+  "The IRS Publication 502 list says this category usually isn't allowed. The account holder confirmed it on their own judgement.";
+
 export interface SubstantiationExpenseInput {
   invoiceId: string;
   vendor: string;
@@ -40,13 +54,16 @@ export interface SubstantiationExpenseInput {
   amount: number;
   ruleName: string | null;
   ruleSectionRef: string | null;
+  /** What the Publication 502 list says about the matched category. */
+  ruleStatus?: string | null;
   confirmedAt: string; // ISO timestamp
   documents: ClaimDocument[];
   /**
-   * `none` | `partial` | `complete`. Only used to tell apart the two reasons an
-   * expense can carry no file: medical mileage, which is substantiated by its
-   * trip log and is deliberately `complete` with nothing attached, versus an
-   * expense that is genuinely still missing its paperwork. Reporting the first
+   * `none` | `partial` | `complete` | `not_available`. Only used to tell apart the
+   * reasons an expense can carry no file: medical mileage, which is
+   * substantiated by its trip log and is deliberately `complete` with nothing
+   * attached; `not_available`, where the person said there is no receipt; versus
+   * an expense that is genuinely still missing its paperwork. Reporting the first
    * as the second would tell a custodian a correct claim was incomplete.
    */
   documentationState: string | null;
