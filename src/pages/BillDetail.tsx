@@ -26,6 +26,7 @@ import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
 import { SubstantiationPanel } from "@/components/expense/SubstantiationPanel";
 import { mileageFromInvoice } from "@/lib/mileageBreakdown";
 import { ProofNotices } from "@/components/expense/ProofNotices";
+import { ExpenseDecision } from "@/components/expense/ExpenseDecision";
 import { logError } from "@/utils/errorHandler";
 import { todayLocalISO } from "@/lib/utils";
 import { ReceiptGallery } from "@/components/expense/ReceiptGallery";
@@ -350,6 +351,17 @@ export default function BillDetail() {
                 patientId={bill.patient_id ?? null}
                 mileage={mileageFromInvoice(bill)}
                 onSaved={refetch}
+                footer={
+                  // S30/S35: the same decision as the dialog's footer. There
+                  // is nothing to close or advance to on this page, so it
+                  // simply re-reads the expense.
+                  <ExpenseDecision
+                    invoiceId={bill.id}
+                    eligibilityState={bill.eligibility_state}
+                    claimState={bill.claim_state}
+                    onDecided={() => void refetch()}
+                  />
+                }
                 documents={
                   // The attach options live on the Documents tab below; the
                   // label points there (S35: same notices as the dialog).
@@ -357,6 +369,7 @@ export default function BillDetail() {
                     invoiceId={bill.id}
                     hasDocuments={!!receipts && receipts.length > 0}
                     isMileage={bill.mileage_miles != null}
+                    noReceipt={bill.documentation_state === "not_available"}
                     onAddDocument={() => {
                       setActiveTab("documents");
                       documentsRef.current?.scrollIntoView({

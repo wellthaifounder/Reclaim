@@ -1,4 +1,4 @@
-// What needs attention beside Documents (SUBSTANTIATE_SPEC S23, S26, S27).
+// What needs attention beside Documents (SUBSTANTIATE_SPEC S23, S26, S27, S34).
 //
 // Two things live here and nothing else:
 //
@@ -10,7 +10,10 @@
 //     something is attached, with "What counts?" opening the short list of what
 //     proof should show. That list is the ONE place the IRS explanation lives;
 //     it used to be told three times (a grey note, a "Still to add" box, and a
-//     "What the IRS would want to see" box).
+//     "What the IRS would want to see" box). "I don't have one" sits beside
+//     it (S34): the receipt is lost, so stop asking. The label becomes a plain
+//     statement of what backs the expense, with Undo -- and attaching a document
+//     later clears it by itself.
 //
 // A check that passes says nothing (S23). "Proper proof" is, for now, any
 // attached document; telling a bare card slip from an itemised receipt needs
@@ -22,6 +25,7 @@
 import { useState } from "react";
 import { FileWarning, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useExpenseDecision } from "@/hooks/useExpenseDecision";
 import {
   useClassifyExpense,
   useEligibilityGates,
@@ -32,6 +36,8 @@ interface ProofNoticesProps {
   hasDocuments: boolean;
   /** A mileage log is its own proof -- there is no receipt to chase (S17). */
   isMileage?: boolean;
+  /** The person said there is no receipt (documentation_state not_available). */
+  noReceipt?: boolean;
   /** Where "Add one" should take the person, when the attach options are not
    *  already on screen beside this label. */
   onAddDocument?: () => void;
@@ -49,13 +55,16 @@ export function ProofNotices({
   invoiceId,
   hasDocuments,
   isMileage = false,
+  noReceipt = false,
   onAddDocument,
 }: ProofNoticesProps) {
   const { pub502 } = useEligibilityGates(invoiceId);
   const classify = useClassifyExpense();
+  const { setNoReceipt } = useExpenseDecision();
   const [showWhatCounts, setShowWhatCounts] = useState(false);
 
-  const needsProof = !hasDocuments && !isMileage;
+  const needsProof = !hasDocuments && !isMileage && !noReceipt;
+  const declaredNone = !hasDocuments && !isMileage && noReceipt;
 
   return (
     <div className="space-y-2">
@@ -107,6 +116,13 @@ export function ProofNotices({
             >
               What counts?
             </button>
+            <button
+              type="button"
+              className="text-sm underline underline-offset-2 hover:opacity-80"
+              onClick={() => void setNoReceipt(invoiceId, true)}
+            >
+              I don&rsquo;t have one
+            </button>
             {onAddDocument && (
               <button
                 type="button"
@@ -131,6 +147,19 @@ export function ProofNotices({
             </div>
           )}
         </div>
+      )}
+
+      {declaredNone && (
+        <p className="flex flex-wrap items-center gap-x-3 text-sm">
+          No receipt, bank record only.
+          <button
+            type="button"
+            className="underline underline-offset-2 hover:opacity-80"
+            onClick={() => void setNoReceipt(invoiceId, false)}
+          >
+            Undo
+          </button>
+        </p>
       )}
     </div>
   );

@@ -1718,6 +1718,7 @@ export type Database = {
           rule_id: string
           rule_name: string
           rule_section_ref: string
+          rule_status: string
           service_date: string
           vendor: string
         }[]
@@ -1774,6 +1775,7 @@ export type Database = {
           rule_id: string
           rule_name: string
           rule_section_ref: string
+          rule_status: string
           service_date: string
           tax_year: number
           vendor: string
@@ -1818,7 +1820,7 @@ export type Database = {
         | "reimbursed"
         | "reimbursed_externally"
         | "not_reimbursable"
-      expense_documentation_state: "none" | "partial" | "complete"
+      expense_documentation_state: "none" | "partial" | "complete" | "not_available"
       expense_eligibility_state:
         | "unknown"
         | "eligible"
@@ -1988,7 +1990,7 @@ export const Constants = {
         "reimbursed_externally",
         "not_reimbursable",
       ],
-      expense_documentation_state: ["none", "partial", "complete"],
+      expense_documentation_state: ["none", "partial", "complete", "not_available"],
       expense_eligibility_state: [
         "unknown",
         "eligible",

@@ -36,6 +36,10 @@ import { BulkSubstantiateBar } from "@/components/expense/BulkSubstantiateBar";
 import { MerchantGroupCard } from "@/components/transactions/MerchantGroupCard";
 import { useFamilyRoster } from "@/hooks/useFamilyRoster";
 import { useClassifyExpense } from "@/hooks/useEligibilityGates";
+import {
+  CONFIRM_ANYWAY_PROMPT,
+  useExpenseDecision,
+} from "@/hooks/useExpenseDecision";
 import type { QueueLifecycle } from "@/lib/expenseLifecycle";
 import {
   groupExpenses,
@@ -135,8 +139,15 @@ export function SubstantiateQueue({
   const navigate = useNavigate();
   const { members } = useFamilyRoster();
   const classify = useClassifyExpense();
+  const { decide } = useExpenseDecision();
   const [actingId, setActingId] = useState<string | null>(null);
+  // The row waiting on "Confirm anyway?" (S32).
+  const [askingId, setAskingId] = useState<string | null>(null);
   const [substantiateId, setSubstantiateId] = useState<string | null>(null);
+  // The order the person was looking at when they opened the dialog, frozen:
+  // each decision refetches the queue and the rows move, but "3 of 12" and
+  // "the next one" must keep meaning what they meant a moment ago (S31).
+  const [walk, setWalk] = useState<string[] | null>(null);
   const [attachTo, setAttachTo] = useState<string[] | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -204,44 +215,46 @@ export function SubstantiateQueue({
     setSelected(next ? new Set(visible.map((e) => e.id)) : new Set());
 
   /**
-   * One expense, one decision. lifecycle_status is derived from the facets, so
-   * write the facet the decision concerns. "Needs receipt" is a documentation
-   * deferral, not an eligibility determination — which is exactly why it does
-   * not stamp confirmed_at.
+   * One expense, one decision, through the same writes the dialog uses. The
+   * IRS list saying no is judgement, so Confirm stays available with one extra
+   * step (S32); a bulk action cannot take that step, which is why bulkDecide
+   * still leaves those rows alone.
    */
   const act = async (
     id: string,
-    next: "eligible" | "ineligible" | "needs_receipt",
+    next: "eligible" | "ineligible",
+    acknowledgedList = false,
   ) => {
     setActingId(id);
     try {
-      const update: Record<string, unknown> =
-        next === "needs_receipt"
-          ? { documentation_state: "none" }
-          : { eligibility_state: next };
-      if (next === "eligible" || next === "ineligible") {
-        update.confirmed_at = new Date().toISOString();
+      const outcome = await decide(id, next, { acknowledgedList });
+      if (outcome === "needs_override") setAskingId(id);
+      if (outcome === "done") {
+        setAskingId(null);
+        await onRefresh();
       }
-      const { error } = await supabase
-        .from("invoices")
-        .update(update)
-        .eq("id", id);
-      if (error) throw error;
-
-      await onRefresh();
-      toast.success(
-        next === "eligible"
-          ? "Confirmed eligible. Logged with timestamp."
-          : next === "ineligible"
-            ? "Marked ineligible."
-            : "Flagged as needing a receipt.",
-      );
-    } catch (err) {
-      logError("SubstantiateQueue.act", err);
-      toast.error("Could not save that decision. Please try again.");
     } finally {
       setActingId(null);
     }
+  };
+
+  const openDialog = (id: string) => {
+    setWalk(groups.flatMap((g) => g.items.map((x) => x.id)));
+    setSubstantiateId(id);
+  };
+
+  const closeDialog = () => {
+    setSubstantiateId(null);
+    setWalk(null);
+    void onRefresh();
+  };
+
+  const walkIndex =
+    walk && substantiateId ? walk.indexOf(substantiateId) : -1;
+  const goToNext = () => {
+    const next = walkIndex >= 0 ? walk![walkIndex + 1] : undefined;
+    if (next) setSubstantiateId(next);
+    else closeDialog();
   };
 
   const bulkDecide = async (next: "eligible" | "ineligible") => {
@@ -262,7 +275,7 @@ export function SubstantiateQueue({
 
     if (targets.length === 0) {
       toast.error(
-        "Publication 502 lists every expense you selected as ineligible. Open one to override it with notes.",
+        "Publication 502 lists every expense you selected as ineligible. Open one to confirm it anyway.",
       );
       return;
     }
@@ -347,7 +360,6 @@ export function SubstantiateQueue({
 
   const renderRow = (e: QueueExpense) => {
     const tier = confidenceTier(e.classification_confidence);
-    const ineligibleByRule = e.rule?.eligibility_status === "ineligible";
     const hasDoc = e.receipt_count > 0;
     // Confirmed eligible but still queued: the only thing left is a document.
     // Say so, rather than leaving the row looking untouched.
@@ -483,49 +495,53 @@ export function SubstantiateQueue({
               variant="outline"
               size="sm"
               className="w-full"
-              onClick={() => setSubstantiateId(e.id)}
+              onClick={() => openDialog(e.id)}
             >
               <Paperclip className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
               {hasDoc ? "Documents & details" : "Attach a document"}
             </Button>
           </div>
 
-          <div className="flex flex-col gap-2 pt-1 sm:flex-row">
-            <Button
-              onClick={() => act(e.id, "eligible")}
-              disabled={
-                actingId === e.id ||
-                ineligibleByRule ||
-                e.eligibility_state === "eligible"
-              }
-              className="flex-1"
-            >
-              {actingId === e.id ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
+          {askingId === e.id ? (
+            <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center">
+              <p className="flex-1 text-sm">{CONFIRM_ANYWAY_PROMPT}</p>
+              <Button variant="outline" onClick={() => setAskingId(null)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => act(e.id, "eligible", true)}
+                disabled={actingId === e.id}
+              >
                 <CheckCircle2 className="mr-2 h-4 w-4" aria-hidden="true" />
-              )}
-              {e.eligibility_state === "eligible"
-                ? "Confirmed eligible"
-                : "Confirm eligible"}
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => act(e.id, "ineligible")}
-              disabled={actingId === e.id}
-              className="flex-1"
-            >
-              <XCircle className="mr-2 h-4 w-4" aria-hidden="true" />
-              Mark ineligible
-            </Button>
-          </div>
-
-          {ineligibleByRule && (
-            <p className="text-xs text-red-700 dark:text-red-400">
-              IRS Publication 502 lists this rule as ineligible. You can
-              override by marking it eligible with notes, but it won't be
-              defensible in an audit.
-            </p>
+                Confirm anyway
+              </Button>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2 pt-1 sm:flex-row">
+              <Button
+                onClick={() => act(e.id, "eligible")}
+                disabled={actingId === e.id || e.eligibility_state === "eligible"}
+                className="flex-1"
+              >
+                {actingId === e.id ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="mr-2 h-4 w-4" aria-hidden="true" />
+                )}
+                {e.eligibility_state === "eligible"
+                  ? "Confirmed eligible"
+                  : "Confirm eligible"}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => act(e.id, "ineligible")}
+                disabled={actingId === e.id}
+                className="flex-1"
+              >
+                <XCircle className="mr-2 h-4 w-4" aria-hidden="true" />
+                Not eligible
+              </Button>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -658,11 +674,20 @@ export function SubstantiateQueue({
         expenseId={substantiateId}
         open={substantiateId !== null}
         onOpenChange={(open) => {
-          if (!open) {
-            setSubstantiateId(null);
-            void onRefresh();
-          }
+          if (!open) closeDialog();
         }}
+        queue={
+          walkIndex >= 0
+            ? {
+                position: { current: walkIndex + 1, total: walk!.length },
+                onDecided: () => {
+                  void onRefresh();
+                  goToNext();
+                },
+                onSkip: goToNext,
+              }
+            : undefined
+        }
       />
 
       <AttachDocumentDialog

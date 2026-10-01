@@ -35,6 +35,8 @@ import { logError } from "@/utils/errorHandler";
 import { custodianSubmissionInstructions } from "@/lib/custodianInstructions";
 import {
   ATTESTATION_STATEMENT,
+  CONFIRMED_AGAINST_LIST_STATEMENT,
+  NO_RECEIPT_STATEMENT,
   RETENTION_STATEMENT,
   documentLabel,
   formatClaimMoney as fmtMoney,
@@ -274,11 +276,16 @@ function buildReadme(
           : "not classified"
       }`,
     );
+    if (expense.ruleStatus === "ineligible") {
+      lines.push(`    Note:    ${CONFIRMED_AGAINST_LIST_STATEMENT}`);
+    }
     if (expense.documents.length === 0) {
       lines.push(
         expense.documentationState === "complete"
           ? "    Documents: none — substantiated by the details recorded in Reclaim."
-          : "    Documents: none attached.",
+          : expense.documentationState === "not_available"
+            ? `    Documents: none. ${NO_RECEIPT_STATEMENT}`
+            : "    Documents: none attached.",
       );
     } else {
       lines.push(`    Documents: documents/${expenseFolder(index, expense)}/`);

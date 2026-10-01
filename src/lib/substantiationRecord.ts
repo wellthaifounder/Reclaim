@@ -29,6 +29,8 @@ import { custodianSubmissionInstructions } from "@/lib/custodianInstructions";
 import { formatCurrency } from "@/lib/utils";
 import {
   ATTESTATION_STATEMENT,
+  CONFIRMED_AGAINST_LIST_STATEMENT,
+  NO_RECEIPT_STATEMENT,
   RETENTION_STATEMENT,
   documentLabel,
   type SubstantiationExpenseInput,
@@ -322,6 +324,9 @@ async function drawExpensePage(
       ? `${expense.ruleName}${expense.ruleSectionRef ? ` — ${expense.ruleSectionRef}` : ""}`
       : "(unclassified — review required)",
   );
+  if (expense.ruleStatus === "ineligible") {
+    row("Note", CONFIRMED_AGAINST_LIST_STATEMENT);
+  }
   row(
     "Reclaim confirmation timestamp",
     fmtTimestamp(expense.confirmedAt),
@@ -367,6 +372,8 @@ async function drawExpensePage(
       note(
         "No third-party document applies to this expense. It is substantiated by the details recorded in Reclaim and shown above.",
       );
+    } else if (expense.documentationState === "not_available") {
+      note(NO_RECEIPT_STATEMENT);
     } else {
       note("No supporting document attached — this expense still needs one.");
     }
