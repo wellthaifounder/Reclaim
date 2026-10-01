@@ -38,15 +38,27 @@ import {
 
 const ADD_VALUE = "__add__";
 
+// The account holder reads as "You" wherever someone is picked (SUBSTANTIATE_SPEC
+// S20). The roster stores whatever the person typed -- "Me", "Self", a first
+// name -- and none of those read well as an answer to "who was it for?".
+const memberLabel = (m: { name: string; relationship: FamilyRelationship }) =>
+  m.relationship === "self" ? "You" : m.name;
+
 export function PatientPicker({
   value,
   onChange,
   id = "patient",
+  hideWarnings = false,
 }: {
   /** family_members.id, or null when nothing is chosen yet. */
   value: string | null;
   onChange: (patientId: string) => void;
   id?: string;
+  /**
+   * The host shows the dependency problem itself, beside the field and with a
+   * way to fix it (Substantiate, S23). Leave false where nothing else will.
+   */
+  hideWarnings?: boolean;
 }) {
   const { members, addMember } = useFamilyRoster();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -95,7 +107,7 @@ export function PatientPicker({
         <SelectContent>
           {members.map((m) => (
             <SelectItem key={m.id} value={m.id}>
-              {m.name}
+              {memberLabel(m)}
               {m.relationship !== "self" &&
                 ` · ${RELATIONSHIP_LABELS[m.relationship]}`}
             </SelectItem>
@@ -113,7 +125,7 @@ export function PatientPicker({
       {/* Warn at the point of entry, not at claim time. Telling someone their
           expense doesn't qualify only when they try to get their money back
           is the worst moment to find out. */}
-      {selected?.qualifies_for_hsa === false && (
+      {!hideWarnings && selected?.qualifies_for_hsa === false && (
         <p className="flex items-start gap-1.5 text-xs text-destructive">
           <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
           <span>
@@ -123,7 +135,7 @@ export function PatientPicker({
           </span>
         </p>
       )}
-      {selected?.qualifies_for_hsa === null && (
+      {!hideWarnings && selected?.qualifies_for_hsa === null && (
         <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
           <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
           <span>

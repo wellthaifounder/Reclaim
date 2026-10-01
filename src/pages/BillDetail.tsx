@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -24,6 +24,8 @@ import { FileText, FolderOpen, Upload } from "lucide-react";
 import { AttachDocumentDialog } from "@/components/documents/AttachDocumentDialog";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
 import { SubstantiationPanel } from "@/components/expense/SubstantiationPanel";
+import { mileageFromInvoice } from "@/lib/mileageBreakdown";
+import { ProofNotices } from "@/components/expense/ProofNotices";
 import { logError } from "@/utils/errorHandler";
 import { todayLocalISO } from "@/lib/utils";
 import { ReceiptGallery } from "@/components/expense/ReceiptGallery";
@@ -70,6 +72,7 @@ export default function BillDetail() {
   const [newFiles, setNewFiles] = useState<UploadedFile[]>([]);
   const [isAnalyzing] = useState(false);
   const [choosing, setChoosing] = useState(false);
+  const documentsRef = useRef<HTMLDivElement>(null);
   const [formData, setFormData] = useState({
     date: todayLocalISO(),
     vendor: "",
@@ -332,7 +335,10 @@ export default function BillDetail() {
             <div className="mb-4">
               <SubstantiationPanel
                 invoiceId={bill.id}
+                vendor={bill.vendor}
+                paidDate={bill.date}
                 amountPaid={Number(bill.amount_paid ?? bill.amount ?? 0)}
+                claimState={bill.claim_state}
                 reimbursableAmount={
                   bill.reimbursable_amount === null ||
                   bill.reimbursable_amount === undefined
@@ -342,23 +348,24 @@ export default function BillDetail() {
                 serviceDate={bill.service_date ?? null}
                 serviceDateEnd={bill.service_date_end ?? null}
                 patientId={bill.patient_id ?? null}
-                mileage={
-                  bill.mileage_miles == null
-                    ? null
-                    : {
-                        miles: Number(bill.mileage_miles),
-                        rate: Number(bill.mileage_rate ?? 0),
-                        trips:
-                          bill.mileage_trips == null
-                            ? null
-                            : Number(bill.mileage_trips),
-                        parkingAndTolls:
-                          bill.mileage_parking_tolls == null
-                            ? null
-                            : Number(bill.mileage_parking_tolls),
-                      }
-                }
+                mileage={mileageFromInvoice(bill)}
                 onSaved={refetch}
+                documents={
+                  // The attach options live on the Documents tab below; the
+                  // label points there (S35: same notices as the dialog).
+                  <ProofNotices
+                    invoiceId={bill.id}
+                    hasDocuments={!!receipts && receipts.length > 0}
+                    isMileage={bill.mileage_miles != null}
+                    onAddDocument={() => {
+                      setActiveTab("documents");
+                      documentsRef.current?.scrollIntoView({
+                        behavior: "smooth",
+                        block: "center",
+                      });
+                    }}
+                  />
+                }
               />
             </div>
           )}
@@ -384,7 +391,11 @@ export default function BillDetail() {
               </div>
             </CardHeader>
             <CardContent>
-              <Tabs value={activeTab} onValueChange={setActiveTab}>
+              <Tabs
+                value={activeTab}
+                onValueChange={setActiveTab}
+                ref={documentsRef}
+              >
                 {/* Payments tab removed 2026-08-21 — see the note where the
                     payment history used to render, below the Documents tab. */}
                 <TabsList className="grid w-full grid-cols-2">

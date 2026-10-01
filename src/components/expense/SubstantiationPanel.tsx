@@ -1,88 +1,134 @@
-// Workstream D5 — the substantiation step.
+// Workstream D5 — the substantiation step (SUBSTANTIATE_SPEC S15–S23, S29, S35).
 //
-// Where documentation, date of service, patient, tags and the reimbursable
-// amount are resolved together. The three eligibility gates report alongside
-// them, because the answers here are what move those gates.
+// One component for the dialog and the full expense page, so the two cannot
+// drift apart (S35). Top to bottom:
 //
-// The IRS note is informational and blocks nothing. The spec is explicit that
-// it "explains what the IRS would want in an audit without blocking anything
-// else" — a user with a bank record and no receipt still has a real expense,
-// and refusing to let them record it would lose information rather than
-// protect them.
+//   1. The payment   -- provider, when it was paid, what was paid, and
+//                       Claiming. What the bank recorded is shown and never
+//                       edited; Claiming is the one editable part.
+//   2. `documents`   -- a slot the host fills, so Documents sits between the
+//                       payment and the questions it answers.
+//   3. Date of care  -- pre-filled with the payment date, saved as it changes.
+//   4. Who for       -- the family list with "You" pre-selected.
+//   5. Tags          -- always visible.
+//
+// Every field already holds a sensible value before it is touched; the work is
+// correcting exceptions. Nothing is explained unless something is wrong, and
+// then beside the field it concerns (S23).
+//
+// Nothing here blocks. A missing receipt never stops anything, and the person
+// is the approver. What this surface reports are the facts: care before the HSA
+// opened, a patient who is not a tax dependent.
 
-import { useState } from "react";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Link } from "react-router-dom";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
-import { formatCurrency } from "@/lib/utils";
-import { Info, Plus, X, Loader2, ClipboardCheck } from "lucide-react";
+import { Money } from "@/components/ui/money";
+import { formatCurrency, todayLocalISO } from "@/lib/utils";
+import { formatDateOnly } from "@/lib/dates";
+import { paidShortlyAfterHsaOpened } from "@/lib/careDateDefaults";
+import { Plus, X, Loader2, ClipboardCheck, Users } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { logError } from "@/utils/errorHandler";
 import { PatientPicker } from "@/components/family/PatientPicker";
-import { EligibilityGates } from "@/components/hsa/EligibilityGates";
-import {
-  useExpenseTags,
-  useAllTags,
-  useSubstantiationStatus,
-} from "@/hooks/useExpenseTags";
-
-/** Workstream D6: present only when this expense is a car trip, not a payment. */
-export interface MileageBreakdown {
-  miles: number;
-  rate: number;
-  trips: number | null;
-  parkingAndTolls: number | null;
-}
+import { useExpenseTags, useAllTags } from "@/hooks/useExpenseTags";
+import { useEligibilityGates } from "@/hooks/useEligibilityGates";
+import { useHSAEstablishmentDate } from "@/hooks/useHSAEligibility";
+import { useFamilyRoster } from "@/hooks/useFamilyRoster";
+import { useAutosave } from "@/hooks/useAutosave";
+import type { MileageBreakdown } from "@/lib/mileageBreakdown";
 
 export interface SubstantiationPanelProps {
   invoiceId: string;
+  /** What the bank recorded. Shown, never edited here. */
+  vendor: string;
+  paidDate: string;
   amountPaid: number;
+  /** `not_reimbursable` marks a charge paid with the HSA card itself (S16). */
+  claimState?: string | null;
   reimbursableAmount: number | null;
   serviceDate: string | null;
   serviceDateEnd: string | null;
   patientId: string | null;
   mileage?: MileageBreakdown | null;
+  /** Rendered between the payment and the date of care. */
+  documents?: ReactNode;
   onSaved?: () => void;
   /** Hide the card's own title when the surrounding surface already has one. */
   hideHeader?: boolean;
 }
 
+type SavedField = "claim" | "date" | "patient" | "tags";
+
+/** The small confirmation beside a field that just saved (S22). */
+function Saved({ show }: { show: boolean }) {
+  return (
+    <span
+      role="status"
+      aria-live="polite"
+      className="text-xs text-muted-foreground"
+    >
+      {show ? "Saved." : ""}
+    </span>
+  );
+}
+
 export function SubstantiationPanel({
   invoiceId,
+  vendor,
+  paidDate,
   amountPaid,
+  claimState,
   reimbursableAmount,
   serviceDate,
   serviceDateEnd,
   patientId,
   mileage,
+  documents,
   onSaved,
   hideHeader = false,
 }: SubstantiationPanelProps) {
   const queryClient = useQueryClient();
   const { tags, addTag, removeTag } = useExpenseTags(invoiceId);
   const { tags: allTags } = useAllTags();
-  const { status } = useSubstantiationStatus(invoiceId);
+  const { gates } = useEligibilityGates(invoiceId);
+  const { establishmentDate } = useHSAEstablishmentDate();
+  const { self } = useFamilyRoster();
 
   const [tagDraft, setTagDraft] = useState("");
-  const [start, setStart] = useState(serviceDate ?? "");
+  // S18: a blank date of care is shown as the payment date, which is what the
+  // rules were already using. It only becomes a stored value once edited.
+  const [start, setStart] = useState(serviceDate ?? paidDate);
   const [end, setEnd] = useState(serviceDateEnd ?? "");
   const [multiDay, setMultiDay] = useState(!!serviceDateEnd);
-  const [amount, setAmount] = useState(
+  const [dateError, setDateError] = useState<string | null>(null);
+  const [claim, setClaim] = useState(
     String(reimbursableAmount ?? amountPaid ?? ""),
   );
-  const [saving, setSaving] = useState(false);
+  const [claimError, setClaimError] = useState<string | null>(null);
+  const [saved, setSaved] = useState<SavedField | null>(null);
+  const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const today = todayLocalISO();
+
+  const flash = (field: SavedField) => {
+    setSaved(field);
+    if (savedTimer.current) clearTimeout(savedTimer.current);
+    savedTimer.current = setTimeout(() => setSaved(null), 2500);
+  };
+  useEffect(
+    () => () => {
+      if (savedTimer.current) clearTimeout(savedTimer.current);
+    },
+    [],
+  );
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ["bill", invoiceId] });
@@ -97,8 +143,10 @@ export function SubstantiationPanel({
     onSaved?.();
   };
 
-  const save = async (patch: Record<string, unknown>) => {
-    setSaving(true);
+  const save = async (
+    patch: Record<string, unknown>,
+    { silent = false }: { silent?: boolean } = {},
+  ) => {
     try {
       const { error } = await supabase
         .from("invoices")
@@ -109,6 +157,7 @@ export function SubstantiationPanel({
       return true;
     } catch (error) {
       logError("Saving substantiation details failed", error);
+      if (silent) return false;
       // The reimbursable cap is a database constraint, so the friendly
       // explanation belongs here rather than in a generic failure message.
       const message =
@@ -118,39 +167,126 @@ export function SubstantiationPanel({
           : "Couldn't save that. Please try again.";
       toast.error(message);
       return false;
-    } finally {
-      setSaving(false);
     }
   };
 
-  const saveDates = async () => {
-    if (!start) return;
-    if (multiDay && end && end < start) {
-      toast.error("The care can't end before it started.");
-      return;
-    }
-    const ok = await save({
-      service_date: start,
-      service_date_end: multiDay && end ? end : null,
-    });
-    if (ok) toast.success("Dates of care saved.");
-  };
+  // ── Claiming ────────────────────────────────────────────────────────────
+  const claimSaver = useAutosave(async (amount: number) => {
+    if (await save({ reimbursable_amount: amount })) flash("claim");
+  });
 
-  const saveAmount = async () => {
-    const parsed = parseFloat(amount);
-    if (isNaN(parsed) || parsed < 0) {
-      toast.error("Enter a valid amount.");
+  const onClaimChange = (raw: string) => {
+    setClaim(raw);
+    const parsed = parseFloat(raw);
+    if (raw.trim() === "" || isNaN(parsed) || parsed < 0) {
+      // Mid-typing, or not a number: nothing to save yet, nothing to say.
+      claimSaver.cancel();
+      setClaimError(null);
       return;
     }
     if (parsed > amountPaid) {
-      toast.error(
-        `You can't claim more than the ${formatCurrency(amountPaid)} you paid.`,
+      claimSaver.cancel();
+      setClaimError(
+        `Can't be more than the ${formatCurrency(amountPaid)} you paid.`,
       );
       return;
     }
-    const ok = await save({ reimbursable_amount: parsed });
-    if (ok) toast.success("Claimable amount saved.");
+    setClaimError(null);
+    claimSaver.schedule(Math.round(parsed * 100) / 100);
   };
+
+  // Follow the stored value when it changes underneath us (a scan filling in,
+  // the other surface saving) -- but never while the person is mid-edit, and
+  // never by reformatting what they typed: "12." and 12 are the same amount.
+  useEffect(() => {
+    if (claimSaver.hasPending()) return;
+    const stored = reimbursableAmount ?? amountPaid;
+    if (parseFloat(claim) !== stored) setClaim(String(stored));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reimbursableAmount, amountPaid]);
+
+  // ── Date of care ────────────────────────────────────────────────────────
+  const dateSaver = useAutosave(
+    async (v: { start: string; end: string; multi: boolean }) => {
+      const ok = await save({
+        // Cleared hands the field back: the date of care falls back to the
+        // payment date (and, with the scan, to what a document says).
+        service_date: v.start || null,
+        service_date_end: v.multi && v.end && v.start ? v.end : null,
+      });
+      if (ok) flash("date");
+    },
+  );
+
+  const changeDates = (next: {
+    start: string;
+    end: string;
+    multi: boolean;
+  }) => {
+    setStart(next.start);
+    setEnd(next.end);
+    setMultiDay(next.multi);
+
+    if (next.multi && next.end && next.start && next.end < next.start) {
+      dateSaver.cancel();
+      setDateError("The care can't end before it started.");
+      return;
+    }
+    setDateError(null);
+    dateSaver.schedule(next);
+  };
+
+  useEffect(() => {
+    if (dateSaver.hasPending()) return;
+    setStart(serviceDate ?? paidDate);
+    if (serviceDateEnd) {
+      setEnd(serviceDateEnd);
+      setMultiDay(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serviceDate, serviceDateEnd, paidDate]);
+
+  // ── Who it was for ──────────────────────────────────────────────────────
+  // S20: "You" is the starting answer, and it is written down rather than just
+  // drawn. The dependency check reads patient_id; a default that only showed on
+  // screen left the check asking who the expense was for while the field
+  // answered "You". Written silently -- nothing the person did.
+  const defaultedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (patientId || !self || defaultedFor.current === invoiceId) return;
+    defaultedFor.current = invoiceId;
+    void save({ patient_id: self.id }, { silent: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [patientId, self, invoiceId]);
+
+  // ── Problems, each beside its field (S23) ───────────────────────────────
+  const timing = gates.find((g) => g.gate === "timing");
+  const dependency = gates.find((g) => g.gate === "dependency");
+  const timingProblem =
+    timing && timing.status !== "eligible" ? timing.reason : null;
+  // While "You" is being written the check still reflects the old, blank
+  // answer; saying "we need to know who" then would contradict the field.
+  const dependencyProblem =
+    dependency && dependency.status !== "eligible" && patientId
+      ? dependency.reason
+      : null;
+
+  // Still the pre-fill: nothing stored, and what is shown is the payment date.
+  // Clearing a typed date lands back here, which is right -- it is the
+  // pre-fill again.
+  const stillPrefilled =
+    !serviceDate && start === paidDate && !dateSaver.hasPending();
+  const checkTheDate =
+    stillPrefilled &&
+    !timingProblem &&
+    paidShortlyAfterHsaOpened(paidDate, establishmentDate);
+
+  const parsedClaim = parseFloat(claim);
+  const notClaimed =
+    !isNaN(parsedClaim) && parsedClaim >= 0 && parsedClaim < amountPaid
+      ? amountPaid - parsedClaim
+      : 0;
+  const paidFromHsa = claimState === "not_reimbursable";
 
   const suggestions = allTags
     .filter(
@@ -161,269 +297,287 @@ export function SubstantiationPanel({
     )
     .slice(0, 6);
 
-  return (
-    <Card>
-      {/* Suppressed when the host already says what this is -- the dialog
-          version is titled "Substantiate this expense" itself, and repeating
-          it two inches lower reads as a rendering bug. */}
-      {!hideHeader && (
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <ClipboardCheck className="h-5 w-5" />
-            Substantiate this expense
-          </CardTitle>
-          <CardDescription>
-            The details that decide whether you can claim it, and the paperwork
-            you&rsquo;d want if anyone ever asked.
-          </CardDescription>
-        </CardHeader>
-      )}
-
-      <CardContent className={hideHeader ? "space-y-5 pt-6" : "space-y-5"}>
-        <EligibilityGates invoiceId={invoiceId} serviceDate={serviceDate} />
-
-        {status && !status.is_complete && status.missing.length > 0 && (
-          <Alert>
-            <Info className="h-4 w-4" />
-            <AlertDescription>
-              Still to add: {status.missing.join(", ")}. You can claim it
-              without these, but they&rsquo;re what makes the claim hold up.
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {/* Dates of care */}
-        <div className="space-y-2">
-          <Label htmlFor="service-start">When was the care?</Label>
-          <p className="text-xs text-muted-foreground">
-            The IRS goes by when you were treated, not when you paid. For a
-            hospital stay or a course of treatment, give the range.
-          </p>
-          <div className="flex flex-wrap items-end gap-2">
-            <div className="space-y-1">
-              <Input
-                id="service-start"
-                type="date"
-                value={start}
-                max={new Date().toISOString().slice(0, 10)}
-                onChange={(e) => setStart(e.target.value)}
-                className="w-[170px]"
-              />
-            </div>
-            {multiDay && (
-              <div className="space-y-1">
-                <Label htmlFor="service-end" className="text-xs">
-                  through
-                </Label>
-                <Input
-                  id="service-end"
-                  type="date"
-                  value={end}
-                  min={start || undefined}
-                  max={new Date().toISOString().slice(0, 10)}
-                  onChange={(e) => setEnd(e.target.value)}
-                  className="w-[170px]"
-                />
-              </div>
-            )}
-            {!multiDay ? (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setMultiDay(true)}
-                disabled={saving}
-              >
-                It spanned several days
-              </Button>
-            ) : (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  setMultiDay(false);
-                  setEnd("");
-                }}
-                disabled={saving}
-              >
-                Single day
-              </Button>
-            )}
-            <Button size="sm" onClick={saveDates} disabled={saving || !start}>
-              Save
-            </Button>
+  const body = (
+    <>
+      {/* 1. The payment. */}
+      <div className="rounded-lg border bg-muted/40 p-4 space-y-3">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="font-medium truncate">{vendor}</p>
+            <p className="text-sm text-muted-foreground">
+              Paid {formatDateOnly(paidDate)}
+            </p>
           </div>
-        </div>
-
-        <Separator />
-
-        {/* Patient */}
-        <div className="space-y-2">
-          <Label htmlFor="subst-patient">Who was it for?</Label>
-          <PatientPicker
-            id="subst-patient"
-            value={patientId}
-            onChange={async (id) => {
-              const ok = await save({ patient_id: id });
-              if (ok) toast.success("Patient saved.");
-            }}
+          <Money
+            value={amountPaid}
+            className="text-lg font-semibold shrink-0"
           />
         </div>
 
-        <Separator />
+        {mileage && (
+          // Show the arithmetic. This figure was never a receipt, so if it is
+          // ever queried the only defence is the working behind it (S17).
+          <p className="text-sm text-muted-foreground">
+            {mileage.miles.toFixed(1)} miles
+            {mileage.trips && mileage.trips > 1
+              ? ` over ${mileage.trips} trips`
+              : ""}{" "}
+            at {(mileage.rate * 100).toFixed(0)}&cent; a mile
+            {mileage.parkingAndTolls
+              ? `, plus ${formatCurrency(mileage.parkingAndTolls)} in parking and tolls`
+              : ""}
+          </p>
+        )}
 
-        {/* Reimbursable amount */}
-        <div className="space-y-2">
-          <Label htmlFor="reimbursable">How much can you claim?</Label>
-          {mileage ? (
-            // Show the arithmetic. This figure was never a receipt, so if it
-            // is ever queried the only defence is the working behind it.
-            <p className="text-xs text-muted-foreground">
-              {mileage.miles.toFixed(1)} miles
-              {mileage.trips && mileage.trips > 1
-                ? ` over ${mileage.trips} trips`
-                : ""}{" "}
-              at {(mileage.rate * 100).toFixed(0)}&cent; a mile
-              {mileage.parkingAndTolls
-                ? `, plus ${formatCurrency(mileage.parkingAndTolls)} in parking and tolls`
-                : ""}{" "}
-              &mdash; {formatCurrency(amountPaid)}. Lower it if part of the
-              driving wasn&rsquo;t for medical care.
-            </p>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              You paid {formatCurrency(amountPaid)}. Lower this if some of it
-              came back to you &mdash; an insurance refund, say. You can never
-              claim more than you paid.
-            </p>
-          )}
-          <div className="flex items-center gap-2">
-            <Input
-              id="reimbursable"
-              type="number"
-              step="0.01"
-              min="0"
-              max={amountPaid}
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              className="w-[150px]"
-            />
-            <Button size="sm" onClick={saveAmount} disabled={saving}>
-              Save
-            </Button>
-            {parseFloat(amount) < amountPaid && (
-              <span className="text-xs text-muted-foreground">
-                {formatCurrency(amountPaid - parseFloat(amount || "0"))} not
-                claimable
-              </span>
+        {paidFromHsa ? (
+          // S16: the HSA already paid, so there is nothing to reimburse. It
+          // still needs proof -- the IRS can ask about any HSA spending.
+          <p className="text-sm">
+            Paid from your HSA, so there&rsquo;s nothing to reimburse.
+          </p>
+        ) : (
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <Label htmlFor="reimbursable" className="text-sm">
+                Claiming
+              </Label>
+              <div className="flex items-center gap-1">
+                <span className="text-sm text-muted-foreground">$</span>
+                <Input
+                  id="reimbursable"
+                  type="number"
+                  inputMode="decimal"
+                  step="0.01"
+                  min="0"
+                  max={amountPaid}
+                  value={claim}
+                  onChange={(e) => onClaimChange(e.target.value)}
+                  onBlur={claimSaver.flush}
+                  className="w-[130px]"
+                  aria-invalid={!!claimError}
+                />
+              </div>
+              {notClaimed > 0 && !claimError && (
+                <span className="text-sm text-muted-foreground">
+                  {formatCurrency(notClaimed)} won&rsquo;t be claimed.
+                </span>
+              )}
+              <Saved show={saved === "claim"} />
+            </div>
+            {claimError && (
+              <p className="text-sm text-destructive">{claimError}</p>
             )}
           </div>
-        </div>
+        )}
+      </div>
 
-        <Separator />
+      {/* 2. Documents, placed by the host. */}
+      {documents}
 
-        {/* Tags */}
-        <div className="space-y-2">
-          <Label htmlFor="tag-input">Tags</Label>
-          <p className="text-xs text-muted-foreground">
-            However you&rsquo;d go looking for this later &mdash; a person, a
-            condition, a tax year. An expense can carry as many as you like.
-          </p>
-
-          {tags.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {tags.map((t) => (
-                <Badge key={t.id} variant="secondary" className="gap-1">
-                  {t.name}
-                  <button
-                    type="button"
-                    onClick={() => removeTag.mutate(t.id)}
-                    className="opacity-60 hover:opacity-100"
-                    aria-label={`Remove tag ${t.name}`}
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              ))}
+      {/* 3. Date of care. */}
+      <div className="space-y-2">
+        <Label htmlFor="service-start">Date of care</Label>
+        <div className="flex flex-wrap items-end gap-2">
+          <Input
+            id="service-start"
+            type="date"
+            value={start}
+            max={today}
+            onChange={(e) =>
+              changeDates({ start: e.target.value, end, multi: multiDay })
+            }
+            onBlur={dateSaver.flush}
+            className="w-[170px]"
+          />
+          {multiDay && (
+            <div className="space-y-1">
+              <Label htmlFor="service-end" className="text-xs">
+                through
+              </Label>
+              <Input
+                id="service-end"
+                type="date"
+                value={end}
+                min={start || undefined}
+                max={today}
+                onChange={(e) =>
+                  changeDates({ start, end: e.target.value, multi: true })
+                }
+                onBlur={dateSaver.flush}
+                className="w-[170px]"
+              />
             </div>
           )}
-
-          <div className="flex gap-2">
-            <Input
-              id="tag-input"
-              value={tagDraft}
-              placeholder="e.g. Maya, orthodontics, 2025 taxes"
-              maxLength={40}
-              onChange={(e) => setTagDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && tagDraft.trim()) {
-                  e.preventDefault();
-                  addTag.mutate(tagDraft, {
-                    onSuccess: () => setTagDraft(""),
-                  });
-                }
-              }}
-              className="max-w-[280px]"
-            />
+          {!multiDay ? (
             <Button
               size="sm"
-              variant="outline"
-              disabled={!tagDraft.trim() || addTag.isPending}
-              onClick={() =>
-                addTag.mutate(tagDraft, { onSuccess: () => setTagDraft("") })
-              }
+              variant="ghost"
+              onClick={() => changeDates({ start, end, multi: true })}
             >
-              {addTag.isPending ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Plus className="h-3.5 w-3.5" />
-              )}
+              It spanned several days
             </Button>
-          </div>
-
-          {suggestions.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 pt-1">
-              {suggestions.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() =>
-                    addTag.mutate(t.name, { onSuccess: () => setTagDraft("") })
-                  }
-                  className="rounded-full border border-dashed border-border px-2 py-0.5 text-xs text-muted-foreground hover:border-primary hover:text-foreground"
-                >
-                  {t.name}
-                </button>
-              ))}
-            </div>
+          ) : (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => changeDates({ start, end: "", multi: false })}
+            >
+              Single day
+            </Button>
           )}
+          <Saved show={saved === "date"} />
+        </div>
+        {dateError && <p className="text-sm text-destructive">{dateError}</p>}
+        {timingProblem && (
+          <p className="text-sm text-destructive">{timingProblem}</p>
+        )}
+        {checkTheDate && (
+          <p className="text-sm text-amber-700 dark:text-amber-500">
+            Care before {formatDateOnly(establishmentDate)} can&rsquo;t be
+            reimbursed. Check the date on the bill.
+          </p>
+        )}
+      </div>
+
+      <Separator />
+
+      {/* 4. Who it was for. */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <Label htmlFor="subst-patient">Who was it for?</Label>
+          <Saved show={saved === "patient"} />
+        </div>
+        <PatientPicker
+          id="subst-patient"
+          value={patientId ?? self?.id ?? null}
+          hideWarnings
+          onChange={async (id) => {
+            if (await save({ patient_id: id })) flash("patient");
+          }}
+        />
+        {dependencyProblem && (
+          <p className="text-sm text-destructive">
+            {dependencyProblem}{" "}
+            <Link
+              to="/settings"
+              className="underline underline-offset-2 hover:opacity-80"
+            >
+              <Users className="mr-0.5 inline h-3 w-3" />
+              Update your family list
+            </Link>
+          </p>
+        )}
+      </div>
+
+      <Separator />
+
+      {/* 5. Tags -- visible, not folded away behind "More" (S21). */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <Label htmlFor="tag-input">Tags</Label>
+          <Saved show={saved === "tags"} />
         </div>
 
-        <Separator />
+        {tags.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {tags.map((t) => (
+              <Badge key={t.id} variant="secondary" className="gap-1">
+                {t.name}
+                <button
+                  type="button"
+                  onClick={() =>
+                    removeTag.mutate(t.id, { onSuccess: () => flash("tags") })
+                  }
+                  className="opacity-60 hover:opacity-100"
+                  aria-label={`Remove tag ${t.name}`}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            ))}
+          </div>
+        )}
 
-        {/* What good documentation looks like. Informational only. */}
-        <Alert>
-          <Info className="h-4 w-4" />
-          <AlertDescription className="text-xs">
-            {mileage ? (
-              <>
-                <strong>What the IRS would want to see:</strong> a mileage log
-                &mdash; the dates you drove, where you went, why the trip was
-                for medical care, and the miles. That&rsquo;s what this record
-                is, so there&rsquo;s no receipt to chase. Keep parking and toll
-                receipts if you claimed them.
-              </>
+        <div className="flex gap-2">
+          <Input
+            id="tag-input"
+            value={tagDraft}
+            placeholder="e.g. Maya, orthodontics, 2025 taxes"
+            maxLength={40}
+            onChange={(e) => setTagDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && tagDraft.trim()) {
+                e.preventDefault();
+                addTag.mutate(tagDraft, {
+                  onSuccess: () => {
+                    setTagDraft("");
+                    flash("tags");
+                  },
+                });
+              }
+            }}
+            className="max-w-[280px]"
+          />
+          <Button
+            size="sm"
+            variant="outline"
+            aria-label="Add tag"
+            disabled={!tagDraft.trim() || addTag.isPending}
+            onClick={() =>
+              addTag.mutate(tagDraft, {
+                onSuccess: () => {
+                  setTagDraft("");
+                  flash("tags");
+                },
+              })
+            }
+          >
+            {addTag.isPending ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
             ) : (
-              <>
-                <strong>What the IRS would want to see:</strong> an itemised
-                statement or receipt showing the provider, the date of service,
-                the patient, what was done, and the amount. A card statement
-                alone usually isn&rsquo;t enough on its own &mdash; but record
-                the expense anyway and add the paperwork when you have it.
-              </>
+              <Plus className="h-3.5 w-3.5" />
             )}
-          </AlertDescription>
-        </Alert>
-      </CardContent>
+          </Button>
+        </div>
+
+        {suggestions.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 pt-1">
+            {suggestions.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() =>
+                  addTag.mutate(t.name, {
+                    onSuccess: () => {
+                      setTagDraft("");
+                      flash("tags");
+                    },
+                  })
+                }
+                className="rounded-full border border-dashed border-border px-2 py-0.5 text-xs text-muted-foreground hover:border-primary hover:text-foreground"
+              >
+                {t.name}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </>
+  );
+
+  // In the dialog the surrounding surface is already a framed container with
+  // its own title, so a nested card would only add a second border.
+  if (hideHeader) return <div className="space-y-5">{body}</div>;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <ClipboardCheck className="h-5 w-5" />
+          Substantiate this expense
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-5">{body}</CardContent>
     </Card>
   );
 }
