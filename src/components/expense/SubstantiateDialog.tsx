@@ -5,21 +5,20 @@
 // journey for what is usually "attach the photo I already have and confirm two
 // dates", and it is the step users have to repeat most.
 //
-// So it is a dialog over the list. Three bands, in the order the work happens:
+// So it is a dialog over the list, laid out by SubstantiationPanel -- the same
+// component the full expense page uses, so the two surfaces cannot drift apart
+// (SUBSTANTIATE_SPEC S35). In the order the work happens:
 //
-//   1. What the bank saw   -- immutable. Provider, amount, date. Shown, never
-//                             edited: this came from the transaction and is
-//                             the anchor everything else is checked against.
+//   1. The payment         -- provider, when paid, the amount, and Claiming.
+//                             What the bank recorded is shown, never edited.
 //   2. Documents           -- attach a file, or reuse one already on file
-//                             (DocumentAttachOptions, S1/S2). An
-//                             image can be read by OCR, which fills the fields
-//                             below as SUGGESTIONS the user accepts. The spec
-//                             is explicit that OCR never silently overwrites.
-//   3. Substantiation      -- dates of service, patient, tags, reimbursable
-//                             amount, and the three eligibility gates. This is
-//                             the existing SubstantiationPanel, unchanged --
-//                             the same component the detail page uses, so the
-//                             two surfaces cannot drift apart.
+//                             (DocumentAttachOptions, S1/S2). An image can be
+//                             read by OCR, which fills the fields below as
+//                             SUGGESTIONS the user accepts, for now; the scan
+//                             slice moves that to "fills gaps, never
+//                             overwrites" (S9).
+//   3. Date of care, who it was for, tags -- every field already holds a
+//                             sensible value and saves as it changes.
 //
 // Deliberately NOT a wizard. A wizard implies a start and a finish, but
 // substantiation is resumable by nature: a receipt today, a service date when
@@ -33,22 +32,19 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import { Money } from "@/components/ui/money";
-import { Loader2, Sparkles, Check, X, FileText } from "lucide-react";
+import { Loader2, Sparkles, Check, X } from "lucide-react";
 import { toast } from "sonner";
 import { logError } from "@/utils/errorHandler";
 import { validateFiles } from "@/utils/fileValidation";
 import { toUploadableFile } from "@/utils/heicConversion";
-import { formatDateOnly } from "@/lib/dates";
 import { SubstantiationPanel } from "@/components/expense/SubstantiationPanel";
+import { mileageFromInvoice } from "@/lib/mileageBreakdown";
+import { ProofNotices } from "@/components/expense/ProofNotices";
 import { ReceiptGallery } from "@/components/expense/ReceiptGallery";
 import { DocumentAttachOptions } from "@/components/expense/DocumentAttachOptions";
 import { AttachDocumentDialog } from "@/components/documents/AttachDocumentDialog";
@@ -93,7 +89,7 @@ export function SubstantiateDialog({
       const { data, error } = await supabase
         .from("invoices")
         .select(
-          "id, vendor, amount, date, service_date, service_date_end, patient_id, reimbursable_amount, eligibility_state, documentation_state",
+          "id, vendor, amount, amount_paid, date, service_date, service_date_end, patient_id, reimbursable_amount, claim_state, eligibility_state, documentation_state, mileage_miles, mileage_rate, mileage_trips, mileage_parking_tolls",
         )
         .eq("id", expenseId!)
         .single();
@@ -264,15 +260,24 @@ export function SubstantiateDialog({
     ? (suggestion.serviceDate ?? suggestion.date)
     : null;
 
+  const hasDocuments = !!receipts && receipts.length > 0;
+  // The payment the bank recorded. amount_paid is what the claim cap is
+  // checked against, and is smaller than amount for one slice of a split.
+  const amountPaid = expense
+    ? Number(expense.amount_paid ?? expense.amount)
+    : 0;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      {/* No description under the title (S29): the layout says what to do.
+          aria-describedby is cleared so the missing one is deliberate, not a
+          warning. */}
+      <DialogContent
+        className="max-w-2xl max-h-[90vh] overflow-y-auto"
+        aria-describedby={undefined}
+      >
         <DialogHeader>
           <DialogTitle>Substantiate this expense</DialogTitle>
-          <DialogDescription>
-            Attach what proves it, then confirm who it was for and when. You can
-            close this at any point — everything saves as you go.
-          </DialogDescription>
         </DialogHeader>
 
         {isLoading || !expense ? (
@@ -281,131 +286,14 @@ export function SubstantiateDialog({
           </div>
         ) : (
           <div className="space-y-6">
-            {/* 1. What the bank saw. Read-only on purpose. */}
-            <div className="rounded-lg border bg-muted/40 p-4">
-              <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <p className="font-medium truncate">{expense.vendor}</p>
-                  <p className="text-sm text-muted-foreground">
-                    Paid {formatDateOnly(expense.date)}
-                  </p>
-                </div>
-                <Money
-                  value={Number(expense.amount)}
-                  className="text-lg font-semibold shrink-0"
-                />
-              </div>
-              <p className="text-xs text-muted-foreground mt-2">
-                From your bank, so it can't be edited here.
-              </p>
-            </div>
-
-            {/* 2. Documents. */}
-            <section className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="font-medium">Documents</h3>
-                {expense.documentation_state && (
-                  <Badge variant="outline" className="capitalize">
-                    {expense.documentation_state === "none"
-                      ? "Nothing attached"
-                      : expense.documentation_state}
-                  </Badge>
-                )}
-              </div>
-
-              {receipts && receipts.length > 0 && (
-                <ReceiptGallery
-                  expenseId={expense.id}
-                  receipts={receipts}
-                  onReceiptDeleted={refreshDocuments}
-                  onReceiptUpdated={() => void refetchReceipts()}
-                />
-              )}
-
-              <DocumentAttachOptions
-                uploading={uploading}
-                onFiles={(files) => void handleUpload(files)}
-                onChooseFromDocuments={() => setChoosing(true)}
-              />
-
-              {scanning && (
-                <p className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Sparkles className="h-4 w-4 animate-pulse" />
-                  Reading the receipt…
-                </p>
-              )}
-
-              {/* OCR output is a proposal, never an overwrite. The user sees
-                  the old and new value and decides. */}
-              {suggestion && (
-                <Alert>
-                  <Sparkles className="h-4 w-4" />
-                  <AlertDescription className="space-y-3">
-                    <p className="font-medium">
-                      We read this from the receipt:
-                    </p>
-                    <ul className="text-sm space-y-1">
-                      {suggestion.vendor &&
-                        suggestion.vendor !== expense.vendor && (
-                          <li>
-                            Provider:{" "}
-                            <span className="font-medium">
-                              {suggestion.vendor}
-                            </span>{" "}
-                            <span className="text-muted-foreground">
-                              (was {expense.vendor})
-                            </span>
-                          </li>
-                        )}
-                      {suggestedDate &&
-                        suggestedDate !== expense.service_date && (
-                          <li>
-                            Date of service:{" "}
-                            <span className="font-medium">{suggestedDate}</span>
-                            {expense.service_date && (
-                              <span className="text-muted-foreground">
-                                {" "}
-                                (was {expense.service_date})
-                              </span>
-                            )}
-                          </li>
-                        )}
-                    </ul>
-                    <div className="flex gap-2">
-                      <Button size="sm" onClick={() => void acceptSuggestion()}>
-                        <Check className="h-3.5 w-3.5 mr-1.5" />
-                        Use these
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => setSuggestion(null)}
-                      >
-                        <X className="h-3.5 w-3.5 mr-1.5" />
-                        Keep what I have
-                      </Button>
-                    </div>
-                  </AlertDescription>
-                </Alert>
-              )}
-
-              {(!receipts || receipts.length === 0) && !uploading && (
-                <p className="flex items-start gap-2 text-xs text-muted-foreground">
-                  <FileText className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                  An itemised statement showing the provider, date of service,
-                  patient and amount is what the IRS would ask for. You can
-                  claim without one — this is a note, not a block.
-                </p>
-              )}
-            </section>
-
-            <Separator />
-
-            {/* 3. The existing substantiation step, unchanged. */}
             <SubstantiationPanel
               hideHeader
+              key={expense.id}
               invoiceId={expense.id}
-              amountPaid={Number(expense.amount)}
+              vendor={expense.vendor}
+              paidDate={expense.date}
+              amountPaid={amountPaid}
+              claimState={expense.claim_state}
               reimbursableAmount={
                 expense.reimbursable_amount == null
                   ? null
@@ -414,12 +302,105 @@ export function SubstantiateDialog({
               serviceDate={expense.service_date}
               serviceDateEnd={expense.service_date_end}
               patientId={expense.patient_id}
+              mileage={mileageFromInvoice(expense)}
               onSaved={() => {
                 queryClient.invalidateQueries({
                   queryKey: ["substantiate-expense"],
                 });
                 queryClient.invalidateQueries({ queryKey: ["bills"] });
               }}
+              documents={
+                <section className="space-y-3">
+                  <h3 className="font-medium">Documents</h3>
+
+                  {hasDocuments && (
+                    <ReceiptGallery
+                      expenseId={expense.id}
+                      receipts={receipts}
+                      onReceiptDeleted={refreshDocuments}
+                      onReceiptUpdated={() => void refetchReceipts()}
+                    />
+                  )}
+
+                  <ProofNotices
+                    invoiceId={expense.id}
+                    hasDocuments={hasDocuments}
+                    isMileage={expense.mileage_miles != null}
+                  />
+
+                  <DocumentAttachOptions
+                    uploading={uploading}
+                    onFiles={(files) => void handleUpload(files)}
+                    onChooseFromDocuments={() => setChoosing(true)}
+                  />
+
+                  {scanning && (
+                    <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Sparkles className="h-4 w-4 animate-pulse" />
+                      Reading the receipt…
+                    </p>
+                  )}
+
+                  {/* OCR output is a proposal, never an overwrite. The user
+                      sees the old and new value and decides. */}
+                  {suggestion && (
+                    <Alert>
+                      <Sparkles className="h-4 w-4" />
+                      <AlertDescription className="space-y-3">
+                        <p className="font-medium">
+                          We read this from the receipt:
+                        </p>
+                        <ul className="text-sm space-y-1">
+                          {suggestion.vendor &&
+                            suggestion.vendor !== expense.vendor && (
+                              <li>
+                                Provider:{" "}
+                                <span className="font-medium">
+                                  {suggestion.vendor}
+                                </span>{" "}
+                                <span className="text-muted-foreground">
+                                  (was {expense.vendor})
+                                </span>
+                              </li>
+                            )}
+                          {suggestedDate &&
+                            suggestedDate !== expense.service_date && (
+                              <li>
+                                Date of service:{" "}
+                                <span className="font-medium">
+                                  {suggestedDate}
+                                </span>
+                                {expense.service_date && (
+                                  <span className="text-muted-foreground">
+                                    {" "}
+                                    (was {expense.service_date})
+                                  </span>
+                                )}
+                              </li>
+                            )}
+                        </ul>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => void acceptSuggestion()}
+                          >
+                            <Check className="h-3.5 w-3.5 mr-1.5" />
+                            Use these
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setSuggestion(null)}
+                          >
+                            <X className="h-3.5 w-3.5 mr-1.5" />
+                            Keep what I have
+                          </Button>
+                        </div>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </section>
+              }
             />
 
             <div className="flex justify-end">

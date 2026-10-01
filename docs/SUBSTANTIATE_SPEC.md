@@ -244,8 +244,25 @@ without a finance team to approve it, and the record stays honest about what bac
 
 ## 3. Gap list — this spec versus what is built
 
-Nothing in §2 is built. Beyond the decisions themselves, the session found these faults in the
-current code. Each is fixed in slice 1 unless marked otherwise.
+**Build status:** slice 1 is built (1a: S1, S2, S5; 1b: S15–S23, S26, S27, S29, S35, and the
+faults below). Slices 2–4 are not. Beyond the decisions themselves, the session found these
+faults in the current code. Each is fixed in slice 1 unless marked otherwise.
+
+Slice 1b notes, for whoever builds the slices that follow:
+
+- **"I don't have one"** is part of S26 but belongs to slice 2 (S34); the amber label ships
+  with **What counts?** alone, and "proper proof" is for now any attached document (S28 needs
+  the scan).
+- **"Work out if this qualifies"** stays as a quiet button beside Documents until slice 3 runs
+  the category check by itself (S24); retiring it earlier would leave an unchecked expense with
+  no way to ask.
+- **The unlinked "Self"** was not traced to a writer — nothing in `src/`, the edge functions or
+  the migrations writes `'Self'` without a `patient_id`, so it is most likely old rows from
+  before the roster. The panel now **writes** "You" (the account holder's roster row) the first
+  time it opens an expense with no patient, so every expense opened is repaired and the
+  dependency check reads the same answer the field shows. Expenses nobody has opened are not
+  touched; a catch-up migration was left out because one locked row would abort the whole
+  statement.
 
 - **"Tell us who Self is so we can check whether their expenses qualify."** Some expenses carry
   `patient_name = 'Self'` with no `patient_id`, and `expense_dependency_gate`
@@ -331,4 +348,4 @@ Gathered 2026-09-30. Claims quoted above come from these pages.
 
 ---
 
-_Agreed 2026-09-30. Nothing in §2 is built yet; start at slice 1._
+_Agreed 2026-09-30. Slice 1 is built; start at slice 2._
