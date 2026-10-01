@@ -20,7 +20,8 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import { toast } from "sonner";
-import { FileText, Upload } from "lucide-react";
+import { FileText, FolderOpen, Upload } from "lucide-react";
+import { AttachDocumentDialog } from "@/components/documents/AttachDocumentDialog";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
 import { SubstantiationPanel } from "@/components/expense/SubstantiationPanel";
 import { logError } from "@/utils/errorHandler";
@@ -68,6 +69,7 @@ export default function BillDetail() {
   const [activeTab, setActiveTab] = useState("overview");
   const [newFiles, setNewFiles] = useState<UploadedFile[]>([]);
   const [isAnalyzing] = useState(false);
+  const [choosing, setChoosing] = useState(false);
   const [formData, setFormData] = useState({
     date: todayLocalISO(),
     vendor: "",
@@ -118,7 +120,9 @@ export default function BillDetail() {
       if (isNewBill || !id) return [];
       const { data, error } = await supabase
         .from("receipts")
-        .select("*, receipt_invoices!inner(invoice_id)")
+        .select(
+          "id, file_path, file_type, document_type, description, display_order, uploaded_at, receipt_invoices!inner(invoice_id)",
+        )
         .eq("receipt_invoices.invoice_id", id)
         .order("display_order");
 
@@ -127,6 +131,13 @@ export default function BillDetail() {
     },
     enabled: !isNewBill && !!id,
   });
+
+  // After a document is attached, removed, or put back: the expense's
+  // documentation_state is recomputed by a trigger, so re-read both.
+  const refreshDocuments = () => {
+    void refetchReceipts();
+    void refetch();
+  };
 
   // Bill review feature archived - removed error fetching
 
@@ -556,10 +567,30 @@ export default function BillDetail() {
                       <ReceiptGallery
                         expenseId={id!}
                         receipts={receipts}
-                        onReceiptDeleted={refetchReceipts}
+                        onReceiptDeleted={refreshDocuments}
                         onReceiptUpdated={refetchReceipts}
                       />
                     </div>
+                  )}
+
+                  {/* S1: reuse a document already on file, here as well as in
+                      the dialog, so the two surfaces offer the same ways in. */}
+                  {!isNewBill && id && (
+                    <>
+                      <Button
+                        variant="outline"
+                        onClick={() => setChoosing(true)}
+                      >
+                        <FolderOpen className="h-4 w-4 mr-2" />
+                        Choose from Documents
+                      </Button>
+                      <AttachDocumentDialog
+                        invoiceIds={[id]}
+                        open={choosing}
+                        onOpenChange={setChoosing}
+                        onAttached={refreshDocuments}
+                      />
+                    </>
                   )}
 
                   <div className="space-y-2">

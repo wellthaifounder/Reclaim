@@ -177,11 +177,15 @@ export const AttachDocumentDialog = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-auto">
         <DialogHeader>
-          <DialogTitle>Attach a document you've already uploaded</DialogTitle>
-          <DialogDescription>
+          <DialogTitle>Choose from Documents</DialogTitle>
+          {/* Said only when it is not obvious: a pick from the bulk bar lands
+              on every selected expense. */}
+          <DialogDescription
+            className={invoiceIds.length === 1 ? "sr-only" : undefined}
+          >
             {invoiceIds.length === 1
-              ? "Pick from the documents already in your library."
-              : `Pick from your library — whatever you choose is attached to all ${invoiceIds.length} selected expenses.`}
+              ? "Pick documents to attach to this expense."
+              : `Whatever you choose is attached to all ${invoiceIds.length} selected expenses.`}
           </DialogDescription>
         </DialogHeader>
 

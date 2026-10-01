@@ -10,7 +10,8 @@
 //   1. What the bank saw   -- immutable. Provider, amount, date. Shown, never
 //                             edited: this came from the transaction and is
 //                             the anchor everything else is checked against.
-//   2. Documents           -- attach a file, or reuse one already on file. An
+//   2. Documents           -- attach a file, or reuse one already on file
+//                             (DocumentAttachOptions, S1/S2). An
 //                             image can be read by OCR, which fills the fields
 //                             below as SUGGESTIONS the user accepts. The spec
 //                             is explicit that OCR never silently overwrites.
@@ -41,22 +42,16 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Money } from "@/components/ui/money";
-import {
-  Loader2,
-  Upload,
-  Camera,
-  Sparkles,
-  Check,
-  X,
-  FileText,
-} from "lucide-react";
+import { Loader2, Sparkles, Check, X, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { logError } from "@/utils/errorHandler";
-import { validateFiles, FILE_ACCEPT_ATTRIBUTE } from "@/utils/fileValidation";
+import { validateFiles } from "@/utils/fileValidation";
 import { toUploadableFile } from "@/utils/heicConversion";
 import { formatDateOnly } from "@/lib/dates";
 import { SubstantiationPanel } from "@/components/expense/SubstantiationPanel";
 import { ReceiptGallery } from "@/components/expense/ReceiptGallery";
+import { DocumentAttachOptions } from "@/components/expense/DocumentAttachOptions";
+import { AttachDocumentDialog } from "@/components/documents/AttachDocumentDialog";
 
 interface SubstantiateDialogProps {
   expenseId: string | null;
@@ -89,6 +84,7 @@ export function SubstantiateDialog({
   const [uploading, setUploading] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [suggestion, setSuggestion] = useState<OcrSuggestion | null>(null);
+  const [choosing, setChoosing] = useState(false);
 
   const { data: expense, isLoading } = useQuery({
     queryKey: ["substantiate-expense", expenseId],
@@ -125,6 +121,16 @@ export function SubstantiateDialog({
       return data ?? [];
     },
   });
+
+  // After anything that changes what is attached: an upload, a pick from the
+  // library, a removal or its undo. documentation_state is recomputed by a
+  // trigger on receipt_invoices, so anything showing this expense's status --
+  // the dialog, the queue row, the lists -- needs to re-read it.
+  const refreshDocuments = () => {
+    void refetchReceipts();
+    queryClient.invalidateQueries({ queryKey: ["substantiate-expense"] });
+    queryClient.invalidateQueries({ queryKey: ["bills"] });
+  };
 
   const handleUpload = async (files: FileList | null) => {
     if (!files || !expenseId) return;
@@ -184,11 +190,7 @@ export function SubstantiateDialog({
           ? "Document added"
           : `${uploadable.length} documents added`,
       );
-      await refetchReceipts();
-      // documentation_state is recomputed by a trigger when receipts change,
-      // so anything showing this expense's status needs to re-read it.
-      queryClient.invalidateQueries({ queryKey: ["substantiate-expense"] });
-      queryClient.invalidateQueries({ queryKey: ["bills"] });
+      refreshDocuments();
 
       // Offer to read the first image straight away -- that is the moment the
       // file is in hand and the user is still thinking about this expense.
@@ -315,55 +317,16 @@ export function SubstantiateDialog({
                 <ReceiptGallery
                   expenseId={expense.id}
                   receipts={receipts}
-                  onReceiptDeleted={() => void refetchReceipts()}
+                  onReceiptDeleted={refreshDocuments}
                   onReceiptUpdated={() => void refetchReceipts()}
                 />
               )}
 
-              <div className="grid grid-cols-2 gap-3">
-                <label className="cursor-pointer">
-                  <input
-                    type="file"
-                    multiple
-                    accept={FILE_ACCEPT_ATTRIBUTE}
-                    className="hidden"
-                    disabled={uploading}
-                    onChange={(e) => {
-                      void handleUpload(e.target.files);
-                      e.target.value = "";
-                    }}
-                  />
-                  <div className="flex flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed p-5 text-sm hover:border-primary hover:bg-accent/40 transition-colors">
-                    {uploading ? (
-                      <Loader2 className="h-5 w-5 animate-spin" />
-                    ) : (
-                      <Upload className="h-5 w-5" />
-                    )}
-                    <span>{uploading ? "Uploading…" : "Upload a file"}</span>
-                  </div>
-                </label>
-
-                <label className="cursor-pointer">
-                  {/* `capture` asks a phone for the camera directly. On desktop
-                      it degrades to a normal file picker, which is why this is
-                      a second input rather than a separate code path. */}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    className="hidden"
-                    disabled={uploading}
-                    onChange={(e) => {
-                      void handleUpload(e.target.files);
-                      e.target.value = "";
-                    }}
-                  />
-                  <div className="flex flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed p-5 text-sm hover:border-primary hover:bg-accent/40 transition-colors">
-                    <Camera className="h-5 w-5" />
-                    <span>Take a photo</span>
-                  </div>
-                </label>
-              </div>
+              <DocumentAttachOptions
+                uploading={uploading}
+                onFiles={(files) => void handleUpload(files)}
+                onChooseFromDocuments={() => setChoosing(true)}
+              />
 
               {scanning && (
                 <p className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -465,6 +428,17 @@ export function SubstantiateDialog({
               </Button>
             </div>
           </div>
+        )}
+
+        {/* Inside the content, not beside it, so the picker is a child layer
+            of this dialog: a click in it is not a click outside this one. */}
+        {expenseId && (
+          <AttachDocumentDialog
+            invoiceIds={[expenseId]}
+            open={choosing}
+            onOpenChange={setChoosing}
+            onAttached={refreshDocuments}
+          />
         )}
       </DialogContent>
     </Dialog>

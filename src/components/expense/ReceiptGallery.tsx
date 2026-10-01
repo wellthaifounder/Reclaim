@@ -35,6 +35,7 @@ interface Receipt {
 interface ReceiptGalleryProps {
   expenseId: string;
   receipts: Receipt[];
+  /** A document was removed from this expense, or put back by Undo. */
   onReceiptDeleted?: () => void;
   onReceiptUpdated?: () => void;
 }
@@ -59,7 +60,7 @@ const DOCUMENT_TYPE_COLORS = {
 };
 
 export function ReceiptGallery({
-  expenseId: _expenseId,
+  expenseId,
   receipts,
   onReceiptDeleted,
   onReceiptUpdated,
@@ -117,22 +118,54 @@ export function ReceiptGallery({
     }
   };
 
-  const handleDelete = async (receiptId: string) => {
+  // ✕ removes the document from THIS expense only (SUBSTANTIATE_SPEC S5).
+  //
+  // It used to delete the receipts row outright, with no confirmation, and the
+  // delete cascaded through receipt_invoices -- so the file vanished from every
+  // expense it backed, and its stored file was left behind with nothing
+  // pointing at it. One hospital bill routinely backs several instalments, so
+  // one misclick unproved all of them. Now only the link goes; the document
+  // stays in the library, and deleting it for good happens on the Documents
+  // page, which warns first.
+  const handleDetach = async (receiptId: string) => {
     try {
       const { error } = await supabase
-        .from("receipts")
+        .from("receipt_invoices")
         .delete()
-        .eq("id", receiptId);
-
+        .eq("receipt_id", receiptId)
+        .eq("invoice_id", expenseId);
       if (error) throw error;
 
-      toast.success("Success", { description: "Receipt deleted successfully" });
+      onReceiptDeleted?.();
+      toast("Removed from this expense", {
+        description: "It's still in Documents.",
+        action: { label: "Undo", onClick: () => void reattach(receiptId) },
+      });
+    } catch (error) {
+      logError("Error removing document from expense", error);
+      toast.error("We couldn't remove that document. Please try again.");
+    }
+  };
+
+  const reattach = async (receiptId: string) => {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+      const { error } = await supabase
+        .from("receipt_invoices")
+        .upsert(
+          { receipt_id: receiptId, invoice_id: expenseId, user_id: user.id },
+          { onConflict: "receipt_id,invoice_id", ignoreDuplicates: true },
+        );
+      if (error) throw error;
       onReceiptDeleted?.();
     } catch (error) {
-      logError("Error deleting receipt", error);
-      toast.error("Error", {
-        description: "Failed to delete receipt",
-      });
+      logError("Error re-attaching document", error);
+      toast.error(
+        "We couldn't put that document back. Attach it again from Documents.",
+      );
     }
   };
 
@@ -289,7 +322,9 @@ export function ReceiptGallery({
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                  onClick={() => handleDelete(receipt.id)}
+                  onClick={() => handleDetach(receipt.id)}
+                  aria-label="Remove from this expense"
+                  title="Remove from this expense"
                 >
                   <X className="h-4 w-4" />
                 </Button>

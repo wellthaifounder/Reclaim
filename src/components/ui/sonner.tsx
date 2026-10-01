@@ -9,7 +9,10 @@ const Toaster = ({ ...props }: ToasterProps) => {
   return (
     <Sonner
       theme={theme as ToasterProps["theme"]}
-      className="toaster group"
+      // pointer-events-auto: an open modal dialog sets pointer-events: none on
+      // <body>, which the toaster inherits -- so a toast's action button
+      // (Undo) could be seen but not pressed while any dialog was open.
+      className="toaster group pointer-events-auto"
       toastOptions={{
         classNames: {
           toast:

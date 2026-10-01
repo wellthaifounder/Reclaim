@@ -14,6 +14,18 @@ import { Badge } from "@/components/ui/badge";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
 import { PageHeader } from "@/components/PageHeader";
 import { logError } from "@/utils/errorHandler";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Money } from "@/components/ui/money";
+import { formatDateOnly } from "@/lib/dates";
 interface Receipt {
   id: string;
   file_path: string;
@@ -48,6 +60,13 @@ const Documents = () => {
   // Bumped after every upload attempt to remount the picker empty. It owns its
   // own file list, so clearing newFiles here would not clear what it shows.
   const [pickerKey, setPickerKey] = useState(0);
+  // The document awaiting delete confirmation, and the expenses it backs
+  // (null while those are still loading).
+  const [pendingDelete, setPendingDelete] = useState<{
+    receipt: Receipt;
+    backs:
+      { id: string; vendor: string; date: string; amount: number }[] | null;
+  } | null>(null);
   const loadReceipts = async () => {
     try {
       setLoading(true);
@@ -231,6 +250,32 @@ const Documents = () => {
     if (failures.length === 0) setShowUpload(false);
     loadReceipts();
   };
+  // Deleting here is the only way a file is deleted for good -- ✕ on an
+  // expense only detaches it (SUBSTANTIATE_SPEC S5) -- so it asks first, and
+  // names every expense that would lose its proof. One hospital bill can back
+  // several instalments; "Delete?" alone would not say that.
+  const askDelete = async (receiptId: string) => {
+    const receipt = receipts.find((r) => r.id === receiptId);
+    if (!receipt) return;
+    setPendingDelete({ receipt, backs: null });
+    const { data, error } = await supabase
+      .from("receipt_invoices")
+      .select("invoices!inner(id, vendor, date, amount)")
+      .eq("receipt_id", receiptId);
+    if (error) {
+      logError("Error loading a document's expenses", error);
+      toast.error("We couldn't check which expenses use this document.");
+      setPendingDelete(null);
+      return;
+    }
+    const backs = (data ?? [])
+      .map((row) => row.invoices)
+      .sort((a, b) => b.date.localeCompare(a.date));
+    setPendingDelete((p) =>
+      p?.receipt.id === receiptId ? { receipt, backs } : p,
+    );
+  };
+
   const handleDelete = async (receiptId: string) => {
     try {
       const receipt = receipts.find((r) => r.id === receiptId);
@@ -384,12 +429,68 @@ const Documents = () => {
                 receipt={receipt}
                 attachedCount={attachedCounts.get(receipt.id) ?? 0}
                 onEdit={() => setEditingReceipt(receipt)}
-                onDelete={handleDelete}
+                onDelete={(rid) => void askDelete(rid)}
               />
             ))
           )}
         </div>
       </div>
+      <AlertDialog
+        open={pendingDelete !== null}
+        onOpenChange={(open) => !open && setPendingDelete(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this document for good?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                {pendingDelete?.backs == null ? (
+                  <p className="flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Checking which expenses use it…
+                  </p>
+                ) : pendingDelete.backs.length === 0 ? (
+                  <p>It isn't attached to any expense. This can't be undone.</p>
+                ) : (
+                  <>
+                    <p>
+                      {pendingDelete.backs.length === 1
+                        ? "This expense will lose it:"
+                        : `These ${pendingDelete.backs.length} expenses will lose it:`}
+                    </p>
+                    <ul className="space-y-1 text-foreground">
+                      {pendingDelete.backs.map((inv) => (
+                        <li
+                          key={inv.id}
+                          className="flex justify-between gap-3 text-sm"
+                        >
+                          <span className="min-w-0 truncate">
+                            {inv.vendor} · {formatDateOnly(inv.date)}
+                          </span>
+                          <Money value={Number(inv.amount)} />
+                        </li>
+                      ))}
+                    </ul>
+                    <p>This can't be undone.</p>
+                  </>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep it</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={pendingDelete?.backs == null}
+              onClick={() => {
+                if (pendingDelete) void handleDelete(pendingDelete.receipt.id);
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       {editingReceipt && (
         <EditDocumentDialog
           receipt={editingReceipt}

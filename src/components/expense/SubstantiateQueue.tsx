@@ -49,7 +49,6 @@ import {
   XCircle,
   Receipt,
   Paperclip,
-  FolderOpen,
   AlertTriangle,
   Sparkles,
   CalendarDays,
@@ -477,26 +476,18 @@ export function SubstantiateQueue({
                 to claim.
               </p>
             )}
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <Button
-                variant="outline"
-                size="sm"
-                className="flex-1"
-                onClick={() => setSubstantiateId(e.id)}
-              >
-                <Paperclip className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
-                {hasDoc ? "Documents & details" : "Attach a document"}
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="flex-1"
-                onClick={() => setAttachTo([e.id])}
-              >
-                <FolderOpen className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
-                Use a file already on file
-              </Button>
-            </div>
+            {/* One button (S1). Reusing a document already on file is one of
+                the dialog's own options now, so it is there wherever the
+                dialog opens -- not a second button that exists only here. */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full"
+              onClick={() => setSubstantiateId(e.id)}
+            >
+              <Paperclip className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
+              {hasDoc ? "Documents & details" : "Attach a document"}
+            </Button>
           </div>
 
           <div className="flex flex-col gap-2 pt-1 sm:flex-row">
