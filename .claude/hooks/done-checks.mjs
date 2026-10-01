@@ -184,6 +184,21 @@ function checkSecrets(files, dir) {
   return errors.length ? { name: "secrets", errors } : null;
 }
 
+/**
+ * Blank out SQL comments, leaving every other character where it was so line
+ * numbers computed on the result still point at the right line.
+ *
+ * The checks below are text matches, and a comment that merely MENTIONS a
+ * keyword is not code: a migration that restates "SECURITY DEFINER bypasses
+ * RLS" in a comment, on a function that does pin its search_path, failed the
+ * SECURITY DEFINER check (2026-10-01). A commented-out ALTER TABLE ... ENABLE
+ * ROW LEVEL SECURITY must not satisfy the RLS check either.
+ */
+function stripSqlComments(sql) {
+  const blank = (m) => m.replace(/[^\n]/g, " ");
+  return sql.replace(/\/\*[\s\S]*?\*\//g, blank).replace(/--[^\n]*/g, blank);
+}
+
 /** CLAUDE.md's database rules, as greps. */
 function checkMigrations(files, dir) {
   const targets = files.filter(
@@ -193,8 +208,9 @@ function checkMigrations(files, dir) {
   const errors = [];
   const warnings = [];
   for (const rel of targets) {
-    const body = read(join(dir, rel));
-    if (body === null) continue;
+    const raw = read(join(dir, rel));
+    if (raw === null) continue;
+    const body = stripSqlComments(raw);
     const name = rel.split("/").pop();
     // Blocking, not advisory, since 2026-08-31: a short version prefix that
     // collides with a 14-digit one on the same date breaks the CLI's pairing
