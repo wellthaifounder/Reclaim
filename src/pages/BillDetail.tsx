@@ -44,6 +44,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { useHSA } from "@/contexts/HSAContext";
 import { HSAUpgradePrompt } from "@/components/HSAUpgradePrompt";
+import { SCAN_COLUMNS, useScanAttached } from "@/hooks/useDocumentScan";
+import { documentScanProps, qualifyingCategory } from "@/lib/documentScanProps";
+import { DEFAULT_DOCUMENT_TYPE } from "@/lib/documentTypes";
 
 interface UploadedFile {
   file: File;
@@ -73,6 +76,7 @@ export default function BillDetail() {
   const [newFiles, setNewFiles] = useState<UploadedFile[]>([]);
   const [isAnalyzing] = useState(false);
   const [choosing, setChoosing] = useState(false);
+  const scanAttached = useScanAttached();
   const documentsRef = useRef<HTMLDivElement>(null);
   const [formData, setFormData] = useState({
     date: todayLocalISO(),
@@ -102,7 +106,7 @@ export default function BillDetail() {
 
       const { data, error } = await supabase
         .from("invoices")
-        .select("*")
+        .select("*, pub_502_rules(name, eligibility_status)")
         .eq("id", id)
         .eq("user_id", user.id) // Explicit ownership check
         .single();
@@ -125,7 +129,7 @@ export default function BillDetail() {
       const { data, error } = await supabase
         .from("receipts")
         .select(
-          "id, file_path, file_type, document_type, description, display_order, uploaded_at, receipt_invoices!inner(invoice_id)",
+          `id, file_path, file_type, document_type, description, display_order, uploaded_at, receipt_invoices!inner(invoice_id), ${SCAN_COLUMNS}`,
         )
         .eq("receipt_invoices.invoice_id", id)
         .order("display_order");
@@ -198,6 +202,11 @@ export default function BillDetail() {
         category: formData.category,
         notes: formData.notes || null,
         invoice_number: formData.invoiceNumber || null,
+        // A provider name typed here is the person's: a later scan must not
+        // replace it (SUBSTANTIATE_SPEC S9).
+        ...(bill && formData.vendor !== bill.vendor
+          ? { vendor_source: { by: "person" } }
+          : {}),
         // Workstream B: is_hsa_eligible is derived from eligibility_state.
         // Ticking the box on this form IS an explicit user determination, so
         // it earns 'eligible'; unticking returns to 'unknown' rather than
@@ -235,6 +244,7 @@ export default function BillDetail() {
 
       // Upload new files if any
       if (newFiles.length > 0 && billId) {
+        const added: string[] = [];
         for (let i = 0; i < newFiles.length; i++) {
           const fileData = newFiles[i];
           const fileExt = fileData.file.name.split(".").pop();
@@ -247,9 +257,7 @@ export default function BillDetail() {
 
           if (uploadError) throw uploadError;
 
-          // Nothing consumes the inserted row — the only reader was the
-          // archived bill-review analysis — so skip the select round-trip.
-          const { error: receiptError } = await supabase
+          const { data: row, error: receiptError } = await supabase
             .from("receipts")
             .insert({
               user_id: user.id,
@@ -258,15 +266,27 @@ export default function BillDetail() {
               file_name: fileData.file.name,
               file_type: fileData.file.type,
               document_type: fileData.documentType,
+              // A type picked in the dropdown is the person's, and the scan
+              // leaves it alone. Left at the default, the scan may say what
+              // the document really is (S10).
+              document_type_source:
+                fileData.documentType === DEFAULT_DOCUMENT_TYPE
+                  ? null
+                  : "person",
               description: fileData.description || null,
               display_order: i,
-            });
+            })
+            .select("id")
+            .single();
 
           if (receiptError) throw receiptError;
+          added.push(row.id);
         }
 
         setNewFiles([]);
         refetchReceipts();
+        // Every attach is scanned, here as in the dialog (S7, S35).
+        scanAttached(added, [billId]);
 
         // Bill review feature archived — the AI analysis trigger and the
         // bill/EOB lookup that fed it were removed with it.
@@ -337,6 +357,7 @@ export default function BillDetail() {
               <SubstantiationPanel
                 invoiceId={bill.id}
                 vendor={bill.vendor}
+                vendorOriginal={bill.vendor_original}
                 paidDate={bill.date}
                 amountPaid={Number(bill.amount_paid ?? bill.amount ?? 0)}
                 claimState={bill.claim_state}
@@ -349,6 +370,9 @@ export default function BillDetail() {
                 serviceDate={bill.service_date ?? null}
                 serviceDateEnd={bill.service_date_end ?? null}
                 patientId={bill.patient_id ?? null}
+                serviceDateSource={bill.service_date_source}
+                patientSource={bill.patient_source}
+                {...documentScanProps(receipts)}
                 mileage={mileageFromInvoice(bill)}
                 onSaved={refetch}
                 footer={
@@ -359,6 +383,7 @@ export default function BillDetail() {
                     invoiceId={bill.id}
                     eligibilityState={bill.eligibility_state}
                     claimState={bill.claim_state}
+                    category={qualifyingCategory(bill.pub_502_rules)}
                     onDecided={() => void refetch()}
                   />
                 }
@@ -612,7 +637,10 @@ export default function BillDetail() {
                         invoiceIds={[id]}
                         open={choosing}
                         onOpenChange={setChoosing}
-                        onAttached={refreshDocuments}
+                        onAttached={(receiptIds) => {
+                          refreshDocuments();
+                          scanAttached(receiptIds, [id]);
+                        }}
                       />
                     </>
                   )}

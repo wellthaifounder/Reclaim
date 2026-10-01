@@ -245,8 +245,41 @@ without a finance team to approve it, and the record stays honest about what bac
 ## 3. Gap list — this spec versus what is built
 
 **Build status:** slices 1 and 2 are built (1a: S1, S2, S5; 1b: S15–S23, S26, S27, S29, S35, and
-the faults below; 2: S30–S34). Slices 3–4 are not. Beyond the decisions themselves, the session found these
-faults in the current code. Each is fixed in slice 1 unless marked otherwise.
+the faults below; 2: S30–S34). Slice 3 is split: **3a is built** (S7, S8, S10, S11, S12, S14,
+S24, S25, the fill-gaps half of S9, and the scan-driven parts of S18 and S20). **3b is not**
+(S9's "asks rather than choosing", S13, S28). Slice 4 is not. Beyond the decisions themselves,
+the session found these faults in the current code. Each is fixed in slice 1 unless marked
+otherwise.
+
+Slice 3a notes, for whoever builds 3b and 4:
+
+- **One path for every scan:** the `scan-document` edge function reads the stored file (images
+  and PDFs) by document id, so an upload, a photo, a pick from Documents, Undo and Scan again are
+  all the same call. It keeps one reading per document in `receipt_ocr_data` (now unique on
+  `receipt_id`, with `scan_status` read / unreadable and the S10 fields), fills the expense through
+  `apply_document_scan()`, then runs the category check over every attached document. A document
+  already read is not read again (S11). The browser-side `process-receipt-ocr` call is no longer
+  used by the dialog; manual entry (`ExpenseEntry`) still uses it.
+- **Who set each field** is recorded on the expense: `vendor_source`, `service_date_source`,
+  `patient_source` (NULL = a default; `{"by":"person"}`; `{"by":"scan","receipt_id"}`), each
+  stamped with a database time `at`. 3b's "asks rather than choosing" can compare a reading's
+  `processed_at` with that `at` to tell a scan that arrived after a person's edit. Until then, a
+  document that disagrees with a person is simply ignored.
+- **What the scan may fill:** a blank date of care; "You" when nobody picked it; the provider name
+  only over text that came with the payment (a bank or emailed charge, never a typed name or a
+  mileage log). It may also refill a value it put there itself, or one whose document has since
+  been removed. A pre-existing date or a patient other than "You" with no source is treated as a
+  person's. The bank's text is kept in `vendor_original` and shown in small print (S12).
+- **Document type** is now the scan's unless a person chose it (`receipts.document_type_source`).
+  A type changed to or from a letter of medical necessity re-checks every expense the document
+  backs (`trg_receipts_lmn_type`) — before, only an insert or delete did.
+- **Names** are matched by `match_family_member()`: full name, then the account holder by their
+  profile name (their roster row is usually "Me"), then a first name only if exactly one person
+  has it. A name matching nobody shows "Your receipt names … Add them to your family."
+- **Not done in 3a:** the queue row's own "Check eligibility" button stays (it serves expenses with
+  no document, which no scan will ever check); what was bought is shown on the document's row but
+  not yet printed on the Medical Expense Record; detaching a document leaves the values it filled
+  (they lose their marker, and the next document may replace them).
 
 Slice 2 notes, for whoever builds the slices that follow:
 
@@ -305,10 +338,11 @@ Slice 1b notes:
   storage (S5).
 - **HSA-card charges are asked "How much can you claim?"** (S16).
 - **The scanner reads only the first image of an upload**, never a PDF (S7), and its output is
-  discarded (S11). _Slice 3._
-- **Every upload from the dialog is labelled "receipt"** (S10). _Slice 3._
+  discarded (S11). _Fixed in slice 3a._
+- **Every upload from the dialog is labelled "receipt"** (S10). _Fixed in slice 3a: the scan
+  sets the type._
 - **Accepting a scan rewrites the bank's name** in a box labelled "From your bank" (S12).
-  _Slice 3._
+  _Fixed in slice 3a._
 
 ### Build order
 
@@ -375,4 +409,4 @@ Gathered 2026-09-30. Claims quoted above come from these pages.
 
 ---
 
-_Agreed 2026-09-30. Slices 1 and 2 are built; start at slice 3._
+_Agreed 2026-09-30. Slices 1, 2 and 3a are built; start at slice 3b._

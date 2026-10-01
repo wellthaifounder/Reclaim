@@ -18,6 +18,7 @@ import {
   getVertexAccessToken,
   vertexGenerateContentUrl,
 } from "./vertexAuth.ts";
+import type { AttachedScan } from "./documentScan.ts";
 
 export interface Pub502Rule {
   id: string;
@@ -49,6 +50,10 @@ export interface ExpenseInput {
     metadataConfidence?: number | null;
     extractionWarnings?: string[] | null;
   } | null;
+  // Every scanned document attached to the expense (SUBSTANTIATE_SPEC S24):
+  // above all, what each one says was bought or done. Without it the check
+  // judged a $3.48 Walmart charge from the bank's category "Shops" alone.
+  documents?: AttachedScan[] | null;
 }
 
 export interface ClassificationOutput {
@@ -83,6 +88,19 @@ async function loadRules(supabase: SupabaseClient): Promise<Pub502Rule[]> {
 export function _resetRulesCacheForTests(): void {
   rulesCacheLoaded = false;
   rulesCache = [];
+}
+
+function describeDocument(d: AttachedScan, i: number): string {
+  const dates = d.serviceDate
+    ? d.serviceDateEnd
+      ? `${d.serviceDate} to ${d.serviceDateEnd}`
+      : d.serviceDate
+    : "(none)";
+  return `${i + 1}. ${d.documentType ?? "document"} from ${d.vendor ?? "(unknown provider)"}; amount ${
+    d.amount == null ? "(none)" : `$${d.amount.toFixed(2)}`
+  }; date of care ${dates}; items: ${
+    d.items.length > 0 ? d.items.join("; ") : "(none listed)"
+  }${d.warnings.length > 0 ? `; warnings: ${d.warnings.join(", ")}` : ""}`;
 }
 
 function buildPrompt(input: ExpenseInput, rules: Pub502Rule[]): string {
@@ -134,7 +152,14 @@ OCR signal:
 - Extraction warnings: ${(input.ocr.extractionWarnings ?? []).join(", ") || "(none)"}
 `
     : ""
-}
+}${
+    input.documents && input.documents.length > 0
+      ? `
+Attached documents (what each one says -- the strongest signal of what was bought or done):
+${input.documents.map((d, i) => describeDocument(d, i)).join("\n")}
+`
+      : ""
+  }
 Pub 502 rule catalog:
 ${catalog}
 `;

@@ -57,10 +57,10 @@ export const DEFAULT_DOCUMENT_TYPE = "receipt";
  *
  * 'letter_of_medical_necessity' is deliberately not pickable. Attaching one is
  * what clears a conditionally-eligible expense, so offering it as a relabel
- * would let someone declare their own eligibility -- and `trg_receipts_lmn`
- * only fires on INSERT and DELETE, so a type changed to it in the edit dialog
- * would not even recompute anything. Making it pickable is a schema decision,
- * not a dropdown one.
+ * would let someone declare their own eligibility. The scan may set it, from
+ * what the document itself says (SUBSTANTIATE_SPEC S10), and
+ * `trg_receipts_lmn_type` re-checks every expense the document backs when it
+ * does.
  */
 export const LEGACY_DOCUMENT_TYPE_LABELS: Readonly<Record<string, string>> = {
   bill: "Bill",
@@ -95,6 +95,16 @@ export const DOCUMENT_TYPE_LABELS: Readonly<Record<string, string>> = {
 export function documentTypeLabel(type: string | null | undefined): string {
   if (!type) return "Document";
   return DOCUMENT_TYPE_LABELS[type] ?? type.replace(/_/g, " ");
+}
+
+/**
+ * The document named in a sentence: "From your receipt", "Your itemized
+ * statement names Maya" (SUBSTANTIATE_SPEC S9). The catch-alls read as plain
+ * "document" -- "from your other document" is not English.
+ */
+export function documentNoun(type: string | null | undefined): string {
+  if (!type || type === "other") return "document";
+  return documentTypeLabel(type).toLowerCase();
 }
 
 /** The dropdown's text for one option. */

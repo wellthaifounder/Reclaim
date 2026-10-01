@@ -77,6 +77,12 @@ export const EditDocumentDialog = ({
         .from("receipts")
         .update({
           document_type: documentType,
+          // A type changed here is the person's; the scan will not relabel
+          // it (SUBSTANTIATE_SPEC S10). A rename alone leaves that as it was.
+          ...(documentType !==
+          normalizeDocumentType(receipt.document_type ?? DEFAULT_DOCUMENT_TYPE)
+            ? { document_type_source: "person" }
+            : {}),
           // Renaming changes the title only. file_path is untouched on
           // purpose: it is what every signed URL, download and claim packet
           // resolves, and moving stored objects to follow a rename is how a

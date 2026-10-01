@@ -16,6 +16,7 @@ import {
   classifyAndPersist,
   type ExpenseInput,
 } from "../_shared/expenseClassifier.ts";
+import { loadAttachedScans } from "../_shared/documentScan.ts";
 
 const allowedOrigins = [
   "https://reclaim.health",
@@ -100,26 +101,10 @@ serve(async (req) => {
       });
     }
 
-    // Pull receipt_ocr_data via the receipts join so the classifier has the
-    // best signal available. Attachment lives in receipt_invoices now, not
-    // receipts.invoice_id -- a document shared with another expense still
-    // needs to feed the classifier here.
-    const { data: ocrRows } = await supabase
-      .from("receipts")
-      .select(
-        "id, receipt_ocr_data(extracted_vendor, extracted_date, extracted_service_date, extracted_invoice_number, extracted_insurance, metadata_confidence, extraction_warnings), receipt_invoices!inner(invoice_id)",
-      )
-      .eq("receipt_invoices.invoice_id", invoice.id)
-      .limit(1);
-    type OcrRow =
-      NonNullable<typeof ocrRows>[number]["receipt_ocr_data"] extends Array<
-        infer T
-      >
-        ? T
-        : NonNullable<typeof ocrRows>[number]["receipt_ocr_data"];
-    const ocrJoined = (ocrRows?.[0]?.receipt_ocr_data ?? null) as OcrRow | null;
-    const ocrItem = Array.isArray(ocrJoined) ? ocrJoined[0] : ocrJoined;
-
+    // What every attached document says, so the check rests on what was
+    // bought rather than on the bank's description (SUBSTANTIATE_SPEC S24).
+    // Attachment lives in receipt_invoices, not receipts.invoice_id -- a
+    // document shared with another expense still feeds the classifier here.
     const input: ExpenseInput = {
       invoiceId: invoice.id,
       vendor: invoice.vendor,
@@ -128,19 +113,7 @@ serve(async (req) => {
       category: invoice.category,
       notes: invoice.notes,
       patientName: invoice.patient_name,
-      ocr: ocrItem
-        ? {
-            extractedVendor: ocrItem.extracted_vendor,
-            extractedDate: ocrItem.extracted_date,
-            extractedServiceDate: ocrItem.extracted_service_date,
-            extractedInvoiceNumber: ocrItem.extracted_invoice_number,
-            extractedInsurance: ocrItem.extracted_insurance,
-            metadataConfidence: ocrItem.metadata_confidence,
-            extractionWarnings: Array.isArray(ocrItem.extraction_warnings)
-              ? (ocrItem.extraction_warnings as string[])
-              : null,
-          }
-        : null,
+      documents: await loadAttachedScans(supabase, invoice.id),
     };
 
     const result = await classifyAndPersist(supabase, input);

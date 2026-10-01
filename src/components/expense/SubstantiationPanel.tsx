@@ -19,9 +19,15 @@
 // Nothing here blocks. A missing receipt never stops anything, and the person
 // is the approver. What this surface reports are the facts: care before the HSA
 // opened, a patient who is not a tax dependent.
+//
+// The scan fills gaps and never overwrites a person (S9). Each fillable field
+// records who set it: a value a document supplied is marked "From your
+// receipt"; anything the person types or picks here is saved as theirs, so a
+// later scan leaves it alone. Clearing the date hands it back to the scan.
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,11 +50,28 @@ import { useHSAEstablishmentDate } from "@/hooks/useHSAEligibility";
 import { useFamilyRoster } from "@/hooks/useFamilyRoster";
 import { useAutosave } from "@/hooks/useAutosave";
 import type { MileageBreakdown } from "@/lib/mileageBreakdown";
+import type { Json } from "@/integrations/supabase/types";
+
+/** Written with every edit made here: the value is now the person's (S9). */
+const BY_PERSON = { by: "person" } as const;
+
+/** The document a field's value came from, if a scan put it there. */
+function scannedFrom(source: Json | null | undefined): string | null {
+  if (!source || typeof source !== "object" || Array.isArray(source)) {
+    return null;
+  }
+  return source.by === "scan" && typeof source.receipt_id === "string"
+    ? source.receipt_id
+    : null;
+}
 
 export interface SubstantiationPanelProps {
   invoiceId: string;
-  /** What the bank recorded. Shown, never edited here. */
+  /** The provider -- the bank's text until a document names them (S12).
+   *  Shown, never edited here. */
   vendor: string;
+  /** The name as it first arrived, kept when a document replaced it (S12). */
+  vendorOriginal?: string | null;
   paidDate: string;
   amountPaid: number;
   /** `not_reimbursable` marks a charge paid with the HSA card itself (S16). */
@@ -57,6 +80,15 @@ export interface SubstantiationPanelProps {
   serviceDate: string | null;
   serviceDateEnd: string | null;
   patientId: string | null;
+  /** Who set the date and the patient: null (a default), a person, or a
+   *  document (S9). */
+  serviceDateSource?: Json | null;
+  patientSource?: Json | null;
+  /** Each attached document's id, as a noun ("receipt", "itemized
+   *  statement"), for "From your receipt". */
+  documentNouns?: Record<string, string>;
+  /** Patients the attached documents name (S20). */
+  namedPatients?: { name: string; noun: string }[];
   mileage?: MileageBreakdown | null;
   /** Rendered between the payment and the date of care. */
   documents?: ReactNode;
@@ -83,9 +115,47 @@ function Saved({ show }: { show: boolean }) {
   );
 }
 
+/** "From your receipt", beside a field a document filled (S9). */
+function FromDocument({ noun }: { noun: string | null | undefined }) {
+  if (!noun) return null;
+  return (
+    <span className="text-xs text-muted-foreground">From your {noun}</span>
+  );
+}
+
+/**
+ * The first name an attached document gives that is on nobody's family list
+ * (S20), so the person can add them. Matched by the same rule the scan fills
+ * with (match_family_member), re-asked whenever the roster changes.
+ */
+function useUnlistedPatient(
+  named: { name: string; noun: string }[],
+  rosterKey: string,
+) {
+  const names = [...new Set(named.map((n) => n.name))];
+  const { data } = useQuery({
+    queryKey: ["unlisted-patient", names, rosterKey],
+    enabled: names.length > 0,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async () => {
+      for (const name of names) {
+        const { data: match, error } = await supabase.rpc(
+          "match_family_member",
+          { p_name: name },
+        );
+        if (error) throw error;
+        if (!match) return named.find((n) => n.name === name) ?? null;
+      }
+      return null;
+    },
+  });
+  return data ?? null;
+}
+
 export function SubstantiationPanel({
   invoiceId,
   vendor,
+  vendorOriginal,
   paidDate,
   amountPaid,
   claimState,
@@ -93,6 +163,10 @@ export function SubstantiationPanel({
   serviceDate,
   serviceDateEnd,
   patientId,
+  serviceDateSource,
+  patientSource,
+  documentNouns = {},
+  namedPatients = [],
   mileage,
   documents,
   footer,
@@ -104,7 +178,14 @@ export function SubstantiationPanel({
   const { tags: allTags } = useAllTags();
   const { gates } = useEligibilityGates(invoiceId);
   const { establishmentDate } = useHSAEstablishmentDate();
-  const { self } = useFamilyRoster();
+  const { self, members } = useFamilyRoster();
+  const unlisted = useUnlistedPatient(
+    namedPatients,
+    members.map((m) => `${m.id}:${m.name}`).join(","),
+  );
+  // A marker only while the document it came from is still attached.
+  const dateNoun = documentNouns[scannedFrom(serviceDateSource) ?? ""];
+  const patientNoun = documentNouns[scannedFrom(patientSource) ?? ""];
 
   const [tagDraft, setTagDraft] = useState("");
   // S18: a blank date of care is shown as the payment date, which is what the
@@ -212,11 +293,17 @@ export function SubstantiationPanel({
   // ── Date of care ────────────────────────────────────────────────────────
   const dateSaver = useAutosave(
     async (v: { start: string; end: string; multi: boolean }) => {
+      const nextEnd = v.multi && v.end && v.start ? v.end : null;
+      // "It spanned several days" with no end date yet changes nothing. Saving
+      // the pre-fill then would turn the payment date into a date the person
+      // chose, and the scan could no longer fill it.
+      if (!serviceDate && v.start === paidDate && !nextEnd) return;
       const ok = await save({
         // Cleared hands the field back: the date of care falls back to the
-        // payment date (and, with the scan, to what a document says).
+        // payment date, and the next document to name one fills it (S9).
         service_date: v.start || null,
-        service_date_end: v.multi && v.end && v.start ? v.end : null,
+        service_date_end: nextEnd,
+        service_date_source: v.start ? BY_PERSON : null,
       });
       if (ok) flash("date");
     },
@@ -308,6 +395,13 @@ export function SubstantiationPanel({
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="font-medium truncate">{vendor}</p>
+            {/* S12: the provider's name leads; the bank's text stays, small,
+                as the link back to the statement. */}
+            {vendorOriginal && vendorOriginal !== vendor && (
+              <p className="truncate text-xs text-muted-foreground">
+                {vendorOriginal}
+              </p>
+            )}
             <p className="text-sm text-muted-foreground">
               Paid {formatDateOnly(paidDate)}
             </p>
@@ -380,7 +474,10 @@ export function SubstantiationPanel({
 
       {/* 3. Date of care. */}
       <div className="space-y-2">
-        <Label htmlFor="service-start">Date of care</Label>
+        <div className="flex items-center gap-2">
+          <Label htmlFor="service-start">Date of care</Label>
+          <FromDocument noun={dateNoun} />
+        </div>
         <div className="flex flex-wrap items-end gap-2">
           <Input
             id="service-start"
@@ -449,6 +546,7 @@ export function SubstantiationPanel({
       <div className="space-y-2">
         <div className="flex items-center gap-2">
           <Label htmlFor="subst-patient">Who was it for?</Label>
+          <FromDocument noun={patientNoun} />
           <Saved show={saved === "patient"} />
         </div>
         <PatientPicker
@@ -456,9 +554,22 @@ export function SubstantiationPanel({
           value={patientId ?? self?.id ?? null}
           hideWarnings
           onChange={async (id) => {
-            if (await save({ patient_id: id })) flash("patient");
+            if (await save({ patient_id: id, patient_source: BY_PERSON })) {
+              flash("patient");
+            }
           }}
         />
+        {unlisted && (
+          <p className="text-sm text-muted-foreground">
+            Your {unlisted.noun} names {unlisted.name}.{" "}
+            <Link
+              to="/settings"
+              className="underline underline-offset-2 hover:opacity-80"
+            >
+              Add them to your family
+            </Link>
+          </p>
+        )}
         {dependencyProblem && (
           <p className="text-sm text-destructive">
             {dependencyProblem}{" "}
