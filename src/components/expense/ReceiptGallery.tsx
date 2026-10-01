@@ -18,9 +18,17 @@ import {
   Image as ImageIcon,
   Pencil,
   Check,
+  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import { documentTypeLabel } from "@/lib/documentTypes";
+import {
+  itemsOf,
+  scanOf,
+  useScanDocument,
+  useScanningIds,
+  type DocumentScan,
+} from "@/hooks/useDocumentScan";
 
 interface Receipt {
   id: string;
@@ -30,6 +38,73 @@ interface Receipt {
   description?: string | null;
   display_order: number | null;
   uploaded_at: string;
+  /** The kept reading (SUBSTANTIATE_SPEC S11), when the query asks for it. */
+  receipt_ocr_data?: DocumentScan | DocumentScan[] | null;
+}
+
+/** What was bought, short enough for one line under the document's name. */
+function itemsSummary(items: string[]): string {
+  if (items.length <= 3) return items.join(", ");
+  return `${items.slice(0, 3).join(", ")} and ${items.length - 3} more`;
+}
+
+/**
+ * The document's reading, on its own row (S7, S8): being read; couldn't be
+ * read; or what it says was bought. Scan again is always there -- a document
+ * the scan got wrong, or one attached before the scan existed, can be read
+ * afresh.
+ */
+function ScanLine({
+  reading,
+  scan,
+  onScan,
+}: {
+  reading: boolean;
+  scan: DocumentScan | null;
+  onScan: () => void;
+}) {
+  if (reading) {
+    return (
+      <p
+        role="status"
+        className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground"
+      >
+        <Sparkles className="h-3 w-3 animate-pulse" aria-hidden="true" />
+        Reading your document…
+      </p>
+    );
+  }
+
+  const again = (
+    <button
+      type="button"
+      onClick={onScan}
+      className="shrink-0 underline underline-offset-2 hover:opacity-80"
+    >
+      {scan ? "Scan again" : "Scan"}
+    </button>
+  );
+
+  if (scan?.scan_status === "unreadable") {
+    return (
+      <p className="mt-1 flex flex-wrap items-center gap-x-2 text-xs">
+        <span className="text-amber-700 dark:text-amber-500">
+          Couldn&rsquo;t read this
+        </span>
+        {again}
+      </p>
+    );
+  }
+
+  const items = itemsOf(scan);
+  return (
+    <p className="mt-1 flex items-center gap-x-2 text-xs text-muted-foreground">
+      {items.length > 0 && (
+        <span className="min-w-0 truncate">{itemsSummary(items)}</span>
+      )}
+      {again}
+    </p>
+  );
 }
 
 interface ReceiptGalleryProps {
@@ -70,6 +145,8 @@ export function ReceiptGallery({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
   const [savingId, setSavingId] = useState<string | null>(null);
+  const scan = useScanDocument();
+  const scanning = useScanningIds();
 
   const handleView = async (receipt: Receipt) => {
     try {
@@ -161,6 +238,9 @@ export function ReceiptGallery({
         );
       if (error) throw error;
       onReceiptDeleted?.();
+      // Put back is attached again: its kept reading refills the gaps and the
+      // category check reruns (S7). No second read of the file (S11).
+      scan.mutate({ receiptId, invoiceId: expenseId });
     } catch (error) {
       logError("Error re-attaching document", error);
       toast.error(
@@ -298,6 +378,17 @@ export function ReceiptGallery({
                     {new Date(receipt.uploaded_at).toLocaleDateString()}
                   </span>
                 </div>
+                <ScanLine
+                  reading={scanning.has(receipt.id)}
+                  scan={scanOf(receipt)}
+                  onScan={() =>
+                    scan.mutate({
+                      receiptId: receipt.id,
+                      invoiceId: expenseId,
+                      rescan: true,
+                    })
+                  }
+                />
               </div>
 
               {/* Actions */}

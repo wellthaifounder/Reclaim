@@ -13,6 +13,10 @@
 //     field by SubstantiationPanel.
 //   * An expense already inside a request, or reimbursed, is settled: nothing
 //     here would change it, so nothing is offered.
+//   * S25 -- when the IRS list says the category qualifies, one neutral line
+//     names it beside Confirm: it is what the Medical Expense Record cites as
+//     the reason the expense qualifies, so it is seen before confirming. The
+//     only "all good" line the spec keeps (S23).
 
 import { useState } from "react";
 import { CheckCircle2, Loader2, XCircle } from "lucide-react";
@@ -33,6 +37,8 @@ interface ExpenseDecisionProps {
   /** Working through the queue: "3 of 12", and a way past one without deciding. */
   position?: { current: number; total: number };
   onSkip?: () => void;
+  /** The Publication 502 category the expense was matched to, if any. */
+  category?: { name: string; status: string } | null;
 }
 
 export function ExpenseDecision({
@@ -42,6 +48,7 @@ export function ExpenseDecision({
   onDecided,
   position,
   onSkip,
+  category,
 }: ExpenseDecisionProps) {
   const { gates, isLoading } = useEligibilityGates(invoiceId);
   const { decide, pending } = useExpenseDecision();
@@ -101,35 +108,45 @@ export function ExpenseDecision({
     );
   }
 
+  const qualifiesUnder =
+    category?.status === "eligible" && !factRefuses ? category.name : null;
+
   return (
-    <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
-      {count}
-      {onSkip && (
-        <Button variant="ghost" disabled={pending} onClick={onSkip}>
-          Skip
-        </Button>
+    <div className="space-y-2">
+      {qualifiesUnder && (
+        <p className="text-sm text-muted-foreground sm:text-right">
+          {qualifiesUnder} (IRS Publication 502)
+        </p>
       )}
-      <Button
-        variant="outline"
-        disabled={pending || markedNot}
-        onClick={() => void run("ineligible")}
-      >
-        <XCircle className="mr-2 h-4 w-4" aria-hidden="true" />
-        {markedNot ? "Marked not eligible" : "Not eligible"}
-      </Button>
-      {!factRefuses && (
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
+        {count}
+        {onSkip && (
+          <Button variant="ghost" disabled={pending} onClick={onSkip}>
+            Skip
+          </Button>
+        )}
         <Button
-          disabled={pending || isLoading || confirmed}
-          onClick={() => void run("eligible")}
+          variant="outline"
+          disabled={pending || markedNot}
+          onClick={() => void run("ineligible")}
         >
-          {pending ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : (
-            <CheckCircle2 className="mr-2 h-4 w-4" aria-hidden="true" />
-          )}
-          {confirmed ? "Confirmed eligible" : "Confirm eligible"}
+          <XCircle className="mr-2 h-4 w-4" aria-hidden="true" />
+          {markedNot ? "Marked not eligible" : "Not eligible"}
         </Button>
-      )}
+        {!factRefuses && (
+          <Button
+            disabled={pending || isLoading || confirmed}
+            onClick={() => void run("eligible")}
+          >
+            {pending ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <CheckCircle2 className="mr-2 h-4 w-4" aria-hidden="true" />
+            )}
+            {confirmed ? "Confirmed eligible" : "Confirm eligible"}
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

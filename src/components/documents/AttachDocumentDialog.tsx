@@ -23,7 +23,8 @@ interface AttachDocumentDialogProps {
   invoiceIds: string[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onAttached: () => void;
+  /** Called with the documents just attached, so the caller can scan them. */
+  onAttached: (receiptIds: string[]) => void;
 }
 
 interface PickableReceipt {
@@ -157,7 +158,7 @@ export const AttachDocumentDialog = ({
           ? `${docs} attached.`
           : `${docs} attached to ${invoiceIds.length} expenses.`,
       );
-      onAttached();
+      onAttached(selectedIds);
       onOpenChange(false);
     } catch (error) {
       logError("Error attaching documents", error);

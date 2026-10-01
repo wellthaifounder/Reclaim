@@ -16,20 +16,20 @@
 //     later clears it by itself.
 //
 // A check that passes says nothing (S23). "Proper proof" is, for now, any
-// attached document; telling a bare card slip from an itemised receipt needs
-// what the scan reads, which arrives with the scan (S28).
+// attached document; telling a bare card slip from an itemised receipt reads
+// what the scan found was bought, and lands in slice 3b (S28).
+//
+// There is no "Work out if this qualifies" button any more (S24): the category
+// check runs by itself after every scan (scan-document), reading what the
+// documents say was bought.
 //
 // Used by the dialog and by the full expense page, which both render it so the
 // two cannot drift apart (S35).
 
 import { useState } from "react";
-import { FileWarning, Loader2, Sparkles } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { FileWarning } from "lucide-react";
 import { useExpenseDecision } from "@/hooks/useExpenseDecision";
-import {
-  useClassifyExpense,
-  useEligibilityGates,
-} from "@/hooks/useEligibilityGates";
+import { useEligibilityGates } from "@/hooks/useEligibilityGates";
 
 interface ProofNoticesProps {
   invoiceId: string;
@@ -59,7 +59,6 @@ export function ProofNotices({
   onAddDocument,
 }: ProofNoticesProps) {
   const { pub502 } = useEligibilityGates(invoiceId);
-  const classify = useClassifyExpense();
   const { setNoReceipt } = useExpenseDecision();
   const [showWhatCounts, setShowWhatCounts] = useState(false);
 
@@ -81,24 +80,6 @@ export function ProofNotices({
             </p>
           )}
         </div>
-      )}
-
-      {/* Still a button until the category check runs by itself after each
-          scan (S24); until then it is the only way to ask. */}
-      {pub502?.status === "unknown" && (
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => classify.mutate(invoiceId)}
-          disabled={classify.isPending}
-        >
-          {classify.isPending ? (
-            <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <Sparkles className="mr-1.5 h-3.5 w-3.5" />
-          )}
-          Work out if this qualifies
-        </Button>
       )}
 
       {needsProof && (

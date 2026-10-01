@@ -9,7 +9,11 @@ import { toUploadableFile } from "@/utils/heicConversion";
 import { DocumentCard } from "@/components/documents/DocumentCard";
 import { EditDocumentDialog } from "@/components/documents/EditDocumentDialog";
 import { MultiFileUpload } from "@/components/expense/MultiFileUpload";
-import { DOCUMENT_TYPES, documentTypeLabel } from "@/lib/documentTypes";
+import {
+  DEFAULT_DOCUMENT_TYPE,
+  DOCUMENT_TYPES,
+  documentTypeLabel,
+} from "@/lib/documentTypes";
 import { Badge } from "@/components/ui/badge";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
 import { PageHeader } from "@/components/PageHeader";
@@ -203,6 +207,12 @@ const Documents = () => {
               file_name: file.name,
               file_type: file.type,
               document_type: fileData.documentType,
+              // Picked in the dropdown, it is the person's; left at the
+              // default, a later scan may say what it is (SUBSTANTIATE_SPEC S10).
+              document_type_source:
+                fileData.documentType === DEFAULT_DOCUMENT_TYPE
+                  ? null
+                  : "person",
               description: fileData.description || null,
               display_order: i,
             });

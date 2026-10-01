@@ -36,6 +36,7 @@ import { BulkSubstantiateBar } from "@/components/expense/BulkSubstantiateBar";
 import { MerchantGroupCard } from "@/components/transactions/MerchantGroupCard";
 import { useFamilyRoster } from "@/hooks/useFamilyRoster";
 import { useClassifyExpense } from "@/hooks/useEligibilityGates";
+import { useScanAttached } from "@/hooks/useDocumentScan";
 import {
   CONFIRM_ANYWAY_PROMPT,
   useExpenseDecision,
@@ -139,6 +140,7 @@ export function SubstantiateQueue({
   const navigate = useNavigate();
   const { members } = useFamilyRoster();
   const classify = useClassifyExpense();
+  const scanAttached = useScanAttached();
   const { decide } = useExpenseDecision();
   const [actingId, setActingId] = useState<string | null>(null);
   // The row waiting on "Confirm anyway?" (S32).
@@ -249,8 +251,7 @@ export function SubstantiateQueue({
     void onRefresh();
   };
 
-  const walkIndex =
-    walk && substantiateId ? walk.indexOf(substantiateId) : -1;
+  const walkIndex = walk && substantiateId ? walk.indexOf(substantiateId) : -1;
   const goToNext = () => {
     const next = walkIndex >= 0 ? walk![walkIndex + 1] : undefined;
     if (next) setSubstantiateId(next);
@@ -520,7 +521,9 @@ export function SubstantiateQueue({
             <div className="flex flex-col gap-2 pt-1 sm:flex-row">
               <Button
                 onClick={() => act(e.id, "eligible")}
-                disabled={actingId === e.id || e.eligibility_state === "eligible"}
+                disabled={
+                  actingId === e.id || e.eligibility_state === "eligible"
+                }
                 className="flex-1"
               >
                 {actingId === e.id ? (
@@ -696,7 +699,9 @@ export function SubstantiateQueue({
         onOpenChange={(open) => {
           if (!open) setAttachTo(null);
         }}
-        onAttached={() => {
+        onAttached={(receiptIds) => {
+          // Each document is read once and fills every selected expense (S7).
+          scanAttached(receiptIds, attachTo ?? []);
           setSelected(new Set());
           void onRefresh();
         }}

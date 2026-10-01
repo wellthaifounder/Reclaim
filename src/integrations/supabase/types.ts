@@ -5,7 +5,6 @@ export type Json =
   | null
   | { [key: string]: Json | undefined }
   | Json[]
-
 export type Database = {
   graphql_public: {
     Tables: {
@@ -311,6 +310,7 @@ export type Database = {
           npi_number: string | null
           patient_id: string | null
           patient_name: string | null
+          patient_source: Json | null
           payment_plan_installments: number | null
           payment_plan_notes: string | null
           payment_plan_total_amount: number | null
@@ -322,6 +322,7 @@ export type Database = {
           reimbursement_strategy: string | null
           service_date: string | null
           service_date_end: string | null
+          service_date_source: Json | null
           source: string | null
           source_email_message_id: string | null
           source_email_received_at: string | null
@@ -335,6 +336,8 @@ export type Database = {
           user_id: string
           user_responsibility_amount: number | null
           vendor: string
+          vendor_original: string | null
+          vendor_source: Json | null
         }
         Insert: {
           amount: number
@@ -373,6 +376,7 @@ export type Database = {
           npi_number?: string | null
           patient_id?: string | null
           patient_name?: string | null
+          patient_source?: Json | null
           payment_plan_installments?: number | null
           payment_plan_notes?: string | null
           payment_plan_total_amount?: number | null
@@ -384,6 +388,7 @@ export type Database = {
           reimbursement_strategy?: string | null
           service_date?: string | null
           service_date_end?: string | null
+          service_date_source?: Json | null
           source?: string | null
           source_email_message_id?: string | null
           source_email_received_at?: string | null
@@ -397,6 +402,8 @@ export type Database = {
           user_id: string
           user_responsibility_amount?: number | null
           vendor: string
+          vendor_original?: string | null
+          vendor_source?: Json | null
         }
         Update: {
           amount?: number
@@ -435,6 +442,7 @@ export type Database = {
           npi_number?: string | null
           patient_id?: string | null
           patient_name?: string | null
+          patient_source?: Json | null
           payment_plan_installments?: number | null
           payment_plan_notes?: string | null
           payment_plan_total_amount?: number | null
@@ -446,6 +454,7 @@ export type Database = {
           reimbursement_strategy?: string | null
           service_date?: string | null
           service_date_end?: string | null
+          service_date_source?: Json | null
           source?: string | null
           source_email_message_id?: string | null
           source_email_received_at?: string | null
@@ -459,6 +468,8 @@ export type Database = {
           user_id?: string
           user_responsibility_amount?: number | null
           vendor?: string
+          vendor_original?: string | null
+          vendor_source?: Json | null
         }
         Relationships: [
           {
@@ -855,9 +866,13 @@ export type Database = {
           extracted_bill_date: string | null
           extracted_category: string | null
           extracted_date: string | null
+          extracted_document_type: string | null
           extracted_insurance: string | null
           extracted_invoice_number: string | null
+          extracted_items: Json
+          extracted_patient: string | null
           extracted_service_date: string | null
+          extracted_service_date_end: string | null
           extracted_vendor: string | null
           extraction_warnings: Json | null
           id: string
@@ -866,6 +881,7 @@ export type Database = {
           processed_at: string
           raw_response: string | null
           receipt_id: string
+          scan_status: string
         }
         Insert: {
           confidence_score?: number | null
@@ -873,9 +889,13 @@ export type Database = {
           extracted_bill_date?: string | null
           extracted_category?: string | null
           extracted_date?: string | null
+          extracted_document_type?: string | null
           extracted_insurance?: string | null
           extracted_invoice_number?: string | null
+          extracted_items?: Json
+          extracted_patient?: string | null
           extracted_service_date?: string | null
+          extracted_service_date_end?: string | null
           extracted_vendor?: string | null
           extraction_warnings?: Json | null
           id?: string
@@ -884,6 +904,7 @@ export type Database = {
           processed_at?: string
           raw_response?: string | null
           receipt_id: string
+          scan_status?: string
         }
         Update: {
           confidence_score?: number | null
@@ -891,9 +912,13 @@ export type Database = {
           extracted_bill_date?: string | null
           extracted_category?: string | null
           extracted_date?: string | null
+          extracted_document_type?: string | null
           extracted_insurance?: string | null
           extracted_invoice_number?: string | null
+          extracted_items?: Json
+          extracted_patient?: string | null
           extracted_service_date?: string | null
+          extracted_service_date_end?: string | null
           extracted_vendor?: string | null
           extraction_warnings?: Json | null
           id?: string
@@ -902,6 +927,7 @@ export type Database = {
           processed_at?: string
           raw_response?: string | null
           receipt_id?: string
+          scan_status?: string
         }
         Relationships: [
           {
@@ -918,6 +944,7 @@ export type Database = {
           description: string | null
           display_order: number | null
           document_type: string | null
+          document_type_source: string | null
           file_name: string | null
           file_path: string
           file_type: string
@@ -930,6 +957,7 @@ export type Database = {
           description?: string | null
           display_order?: number | null
           document_type?: string | null
+          document_type_source?: string | null
           file_name?: string | null
           file_path: string
           file_type: string
@@ -942,6 +970,7 @@ export type Database = {
           description?: string | null
           display_order?: number | null
           document_type?: string | null
+          document_type_source?: string | null
           file_name?: string | null
           file_path?: string
           file_type?: string
@@ -1509,6 +1538,10 @@ export type Database = {
         Args: { p_rule_id: string }
         Returns: number
       }
+      apply_document_scan: {
+        Args: { p_invoice_id: string; p_receipt_id: string }
+        Returns: string[]
+      }
       bulk_review_merchant: {
         Args: { p_is_medical: boolean; p_lane?: string; p_merchant_key: string }
         Returns: number
@@ -1664,6 +1697,7 @@ export type Database = {
           record_number: string
         }[]
       }
+      match_family_member: { Args: { p_name: string }; Returns: string }
       match_reimbursement_deposits: {
         Args: { p_lookback_days?: number; p_user_id?: string }
         Returns: number
@@ -1759,6 +1793,10 @@ export type Database = {
           txn_count: number
         }[]
       }
+      scan_may_refill: {
+        Args: { p_invoice_id: string; p_receipt_id: string; p_source: Json }
+        Returns: boolean
+      }
       substantiatable_expenses: {
         Args: never
         Returns: {
@@ -1820,7 +1858,11 @@ export type Database = {
         | "reimbursed"
         | "reimbursed_externally"
         | "not_reimbursable"
-      expense_documentation_state: "none" | "partial" | "complete" | "not_available"
+      expense_documentation_state:
+        | "none"
+        | "partial"
+        | "complete"
+        | "not_available"
       expense_eligibility_state:
         | "unknown"
         | "eligible"
@@ -1856,11 +1898,8 @@ export type Database = {
     }
   }
 }
-
 type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
-
 type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
-
 export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
@@ -1889,7 +1928,6 @@ export type Tables<
       ? R
       : never
     : never
-
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
@@ -1914,7 +1952,6 @@ export type TablesInsert<
       ? I
       : never
     : never
-
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
@@ -1939,7 +1976,6 @@ export type TablesUpdate<
       ? U
       : never
     : never
-
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
@@ -1956,7 +1992,6 @@ export type Enums<
   : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
     ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
     : never
-
 export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
@@ -1973,7 +2008,6 @@ export type CompositeTypes<
   : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
     ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
     : never
-
 export const Constants = {
   graphql_public: {
     Enums: {},
@@ -1990,7 +2024,12 @@ export const Constants = {
         "reimbursed_externally",
         "not_reimbursable",
       ],
-      expense_documentation_state: ["none", "partial", "complete", "not_available"],
+      expense_documentation_state: [
+        "none",
+        "partial",
+        "complete",
+        "not_available",
+      ],
       expense_eligibility_state: [
         "unknown",
         "eligible",
