@@ -22,7 +22,9 @@ const SCAN_KEY = ["scan-document"] as const;
 
 export interface ScanVars {
   receiptId: string;
-  invoiceId: string;
+  /** The expense to fill and re-check. Omitted -- an upload on the Documents
+   *  page -- the document is only read, so it can be matched later (S6). */
+  invoiceId?: string;
   /** Scan again: read the file even though a reading is kept. */
   rescan?: boolean;
 }
@@ -78,6 +80,11 @@ export function useScanDocument() {
       return data as ScanOutcome;
     },
     onSettled: (_data, _error, { invoiceId }) => {
+      if (!invoiceId) {
+        // Read only: the document's reading and type changed, nothing else.
+        queryClient.invalidateQueries({ queryKey: ["documents"] });
+        return;
+      }
       // The scan can change the document (its reading, its type), the expense
       // (date, patient, provider) and the category check, and every list that
       // shows any of them.
@@ -96,13 +103,17 @@ export function useScanDocument() {
         queryClient.invalidateQueries({ queryKey: key });
       }
     },
-    onError: (error) => {
+    onError: (error, { invoiceId }) => {
       // Not the document's fault -- the service is busy or unreachable. A
       // document the scan genuinely cannot read comes back as a success with
       // status "unreadable" and is marked on its own row instead.
       logError("Scanning a document failed", error);
       toast.error("We couldn't scan that document just now.", {
-        description: "It's attached. Use Scan again in a moment.",
+        // Unattached, it is read when it is first attached: the server reads
+        // any document it has no reading for.
+        description: invoiceId
+          ? "It's attached. Use Scan again in a moment."
+          : "It's saved, and will be read when you attach it.",
       });
     },
   });

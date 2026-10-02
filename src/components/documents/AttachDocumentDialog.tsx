@@ -1,4 +1,14 @@
-import { useState, useEffect, useCallback } from "react";
+// Choose from Documents (SUBSTANTIATE_SPEC S1, S3).
+//
+// The person's saved documents, with the ones whose scanned amount and date
+// line up with this charge listed first under "Likely matches", then
+// everything else, newest first. A search box and a thumbnail of each, so the
+// right bill can be picked out of a long library without opening every file.
+//
+// Matching is for one expense only. From the queue's bulk bar there is no one
+// payment to match, so the list is simply newest first.
+
+import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -8,13 +18,24 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { supabase } from "@/integrations/supabase/client";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { logError } from "@/utils/errorHandler";
-import { FileText, Calendar } from "lucide-react";
+import { Calendar, FileText, Search } from "lucide-react";
 import { format } from "date-fns";
 import { documentTypeLabel } from "@/lib/documentTypes";
+import {
+  useAttachDocuments,
+  usePickableDocuments,
+  useThumbnailUrls,
+  documentName,
+  type LibraryDocument,
+} from "@/hooks/useDocumentLibrary";
+import {
+  DocumentThumbnail,
+  ScannedFacts,
+} from "@/components/documents/DocumentSummary";
 
 interface AttachDocumentDialogProps {
   /** The expenses to attach to. One from an expense's own row; several when
@@ -27,21 +48,28 @@ interface AttachDocumentDialogProps {
   onAttached: (receiptIds: string[]) => void;
 }
 
-interface PickableReceipt {
-  id: string;
-  file_name: string | null;
-  document_type: string | null;
-  description: string | null;
-  uploaded_at: string;
-  file_type: string;
-  /** How many OTHER expenses this document is already attached to. A
-   * document can substantiate more than one expense (a hospital bill paid in
-   * instalments, say), so this is a hint, not an exclusion. */
-  attachedElsewhereCount: number;
+type PickableDocument = LibraryDocument & {
   /** How many of the expenses being attached to already have it. Only a
    *  document on ALL of them is hidden; one on some is still worth offering,
    *  because attaching fills the gaps. */
   attachedHereCount: number;
+  /** How many OTHER expenses it already backs. A document can substantiate
+   *  more than one expense (a hospital bill paid in instalments, say), so
+   *  this is a hint, not an exclusion. */
+  attachedElsewhere: number;
+};
+
+function matchesSearch(doc: LibraryDocument, query: string): boolean {
+  if (!query) return true;
+  const q = query.toLowerCase();
+  return [
+    doc.file_name,
+    doc.description,
+    doc.scan?.extracted_vendor,
+    // The name on the badge, not the stored value: someone searching "bill"
+    // is looking at a badge that says Bill over a row that says "invoice".
+    documentTypeLabel(doc.document_type),
+  ].some((s) => s?.toLowerCase().includes(q));
 }
 
 export const AttachDocumentDialog = ({
@@ -50,77 +78,32 @@ export const AttachDocumentDialog = ({
   onOpenChange,
   onAttached,
 }: AttachDocumentDialogProps) => {
-  const [receipts, setReceipts] = useState<PickableReceipt[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState("");
   const [attaching, setAttaching] = useState(false);
-
-  // The prop is an array, so a caller passing a fresh literal would re-run the
-  // load on every render. The joined key is what actually changes.
-  const invoiceKey = invoiceIds.join(",");
-
-  const loadPickableReceipts = useCallback(async () => {
-    try {
-      setLoading(true);
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
-
-      // Every document the user has, and separately, which of those are
-      // already attached to the expenses being attached to (hidden only when
-      // on all of them -- attaching twice is a no-op) or to some other expense
-      // (kept, and counted: a document can substantiate more than one expense,
-      // so being attached elsewhere is not a reason to hide it here).
-      const [{ data: allReceipts, error: receiptsError }, { data: links }] =
-        await Promise.all([
-          supabase
-            .from("receipts")
-            .select(
-              "id, file_name, document_type, description, uploaded_at, file_type",
-            )
-            .eq("user_id", user.id)
-            .order("uploaded_at", { ascending: false }),
-          supabase
-            .from("receipt_invoices")
-            .select("receipt_id, invoice_id")
-            .eq("user_id", user.id),
-        ]);
-
-      if (receiptsError) throw receiptsError;
-
-      const targets = new Set(invoiceKey.split(",").filter(Boolean));
-      const hereCounts = new Map<string, number>();
-      const elsewhereCounts = new Map<string, number>();
-      for (const l of links ?? []) {
-        const counts = targets.has(l.invoice_id) ? hereCounts : elsewhereCounts;
-        counts.set(l.receipt_id, (counts.get(l.receipt_id) ?? 0) + 1);
-      }
-
-      const pickable = (allReceipts ?? [])
-        .map((r) => ({
-          ...r,
-          attachedElsewhereCount: elsewhereCounts.get(r.id) ?? 0,
-          attachedHereCount: hereCounts.get(r.id) ?? 0,
-        }))
-        .filter((r) => r.attachedHereCount < targets.size);
-      setReceipts(pickable);
-    } catch (error) {
-      logError("Error loading documents to attach", error);
-      toast.error("Failed to load documents");
-    } finally {
-      setLoading(false);
-    }
-  }, [invoiceKey]);
+  const { matches, rest, isLoading, isError } = usePickableDocuments(
+    invoiceIds,
+    open,
+  );
+  const attach = useAttachDocuments();
+  const thumbnails = useThumbnailUrls(open ? [...matches, ...rest] : []);
 
   useEffect(() => {
     if (open) {
       // Cleared on open, not on close: reopening the dialog otherwise starts
-      // with the ticks from the last time it was used.
+      // with the ticks and the search from the last time it was used.
       setSelectedIds([]);
-      void loadPickableReceipts();
+      setSearch("");
     }
-  }, [open, loadPickableReceipts]);
+  }, [open]);
+
+  useEffect(() => {
+    if (isError) toast.error("Failed to load documents");
+  }, [isError]);
+
+  const shownMatches = matches.filter((d) => matchesSearch(d, search));
+  const shownRest = rest.filter((d) => matchesSearch(d, search));
+  const nothingSaved = matches.length + rest.length === 0;
 
   const handleAttach = async () => {
     if (selectedIds.length === 0) {
@@ -130,28 +113,7 @@ export const AttachDocumentDialog = ({
 
     try {
       setAttaching(true);
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
-
-      // Every (document, expense) pair. ignoreDuplicates carries the case
-      // where some of the selected expenses already had the document.
-      const links = invoiceIds.flatMap((invoiceId) =>
-        selectedIds.map((receiptId) => ({
-          receipt_id: receiptId,
-          invoice_id: invoiceId,
-          user_id: user.id,
-        })),
-      );
-
-      const { error } = await supabase.from("receipt_invoices").upsert(links, {
-        onConflict: "receipt_id,invoice_id",
-        ignoreDuplicates: true,
-      });
-
-      if (error) throw error;
-
+      await attach(selectedIds, invoiceIds);
       const docs = `${selectedIds.length} document${selectedIds.length === 1 ? "" : "s"}`;
       toast.success(
         invoiceIds.length === 1
@@ -174,9 +136,56 @@ export const AttachDocumentDialog = ({
     );
   };
 
+  const row = (doc: PickableDocument) => (
+    <div
+      key={doc.id}
+      className="flex cursor-pointer items-center gap-3 rounded-lg border p-3 hover:bg-muted/50"
+      onClick={() => toggleSelection(doc.id)}
+    >
+      <Checkbox
+        checked={selectedIds.includes(doc.id)}
+        onCheckedChange={() => toggleSelection(doc.id)}
+        onClick={(e) => e.stopPropagation()}
+        aria-label={documentName(doc)}
+      />
+      <DocumentThumbnail url={thumbnails?.get(doc.file_path)} />
+      <div className="min-w-0 flex-1 space-y-0.5">
+        <div className="flex items-center gap-2">
+          <Badge variant="secondary" className="text-xs">
+            {documentTypeLabel(doc.document_type)}
+          </Badge>
+        </div>
+        {/* Named, so the list reads the way the Documents page reads. */}
+        <p className="text-sm font-medium break-words">{documentName(doc)}</p>
+        {doc.file_name && doc.description && (
+          <p className="text-sm text-muted-foreground">{doc.description}</p>
+        )}
+        <ScannedFacts doc={doc} />
+        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+          <Calendar className="h-3 w-3" aria-hidden="true" />
+          {format(new Date(doc.uploaded_at), "MMM d, yyyy")}
+        </div>
+        {doc.attachedHereCount > 0 && (
+          <p className="text-xs text-muted-foreground">
+            Already on {doc.attachedHereCount} of the {invoiceIds.length}{" "}
+            selected
+          </p>
+        )}
+        {doc.attachedElsewhere > 0 && (
+          <p className="text-xs text-muted-foreground">
+            Already attached to{" "}
+            {doc.attachedElsewhere === 1
+              ? "1 other expense"
+              : `${doc.attachedElsewhere} other expenses`}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-auto">
+      <DialogContent className="flex max-h-[80vh] max-w-2xl flex-col">
         <DialogHeader>
           <DialogTitle>Choose from Documents</DialogTitle>
           {/* Said only when it is not obvious: a pick from the bulk bar lands
@@ -190,79 +199,63 @@ export const AttachDocumentDialog = ({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-3">
-          {loading ? (
-            <div className="flex flex-col items-center justify-center py-8 gap-2">
-              <div className="h-8 w-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+        {!isLoading && !nothingSaved && (
+          <div className="relative">
+            <Search
+              className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <Input
+              placeholder="Search documents"
+              aria-label="Search documents"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+        )}
+
+        <div className="-mx-1 flex-1 space-y-3 overflow-y-auto px-1">
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center gap-2 py-8">
+              <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
               <p className="text-sm text-muted-foreground">
                 Loading documents...
               </p>
             </div>
-          ) : receipts.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <FileText className="h-12 w-12 mx-auto mb-2 opacity-50" />
+          ) : nothingSaved ? (
+            <div className="py-8 text-center text-muted-foreground">
+              <FileText className="mx-auto mb-2 h-12 w-12 opacity-50" />
               <p>No documents available to attach</p>
-              <p className="text-sm mt-1">
+              <p className="mt-1 text-sm">
                 Upload documents first or check the Documents center
               </p>
             </div>
+          ) : shownMatches.length + shownRest.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              No documents match &ldquo;{search}&rdquo;
+            </p>
           ) : (
-            receipts.map((receipt) => (
-              <div
-                key={receipt.id}
-                className="flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/50 cursor-pointer"
-                onClick={() => toggleSelection(receipt.id)}
-              >
-                <Checkbox
-                  checked={selectedIds.includes(receipt.id)}
-                  onCheckedChange={() => toggleSelection(receipt.id)}
-                  onClick={(e) => e.stopPropagation()}
-                />
-                <FileText className="h-5 w-5 text-muted-foreground" />
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="secondary" className="text-xs">
-                      {documentTypeLabel(receipt.document_type)}
-                    </Badge>
-                  </div>
-                  {/* Named, so the list can be read the way the Documents page
-                      reads. Picking the right bill out of a dozen by
-                      description alone was guesswork. */}
-                  <p className="mt-1 text-sm font-medium break-words">
-                    {receipt.file_name ??
-                      receipt.description ??
-                      "Untitled document"}
-                  </p>
-                  {receipt.file_name && receipt.description && (
-                    <p className="text-sm text-muted-foreground">
-                      {receipt.description}
-                    </p>
+            <>
+              {shownMatches.length > 0 && (
+                <section className="space-y-2">
+                  <h3 className="text-sm font-medium">Likely matches</h3>
+                  {shownMatches.map(row)}
+                </section>
+              )}
+              {shownRest.length > 0 && (
+                <section className="space-y-2">
+                  {shownMatches.length > 0 && (
+                    <h3 className="text-sm font-medium">Other documents</h3>
                   )}
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
-                    <Calendar className="h-3 w-3" />
-                    {format(new Date(receipt.uploaded_at), "MMM d, yyyy")}
-                  </div>
-                  {receipt.attachedHereCount > 0 && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Already on {receipt.attachedHereCount} of the{" "}
-                      {invoiceIds.length} selected
-                    </p>
-                  )}
-                  {receipt.attachedElsewhereCount > 0 && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Already attached to{" "}
-                      {receipt.attachedElsewhereCount === 1
-                        ? "1 other expense"
-                        : `${receipt.attachedElsewhereCount} other expenses`}
-                    </p>
-                  )}
-                </div>
-              </div>
-            ))
+                  {shownRest.map(row)}
+                </section>
+              )}
+            </>
           )}
         </div>
 
-        <div className="flex gap-2 justify-end pt-4 border-t">
+        <div className="flex justify-end gap-2 border-t pt-4">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>

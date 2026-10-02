@@ -247,9 +247,34 @@ without a finance team to approve it, and the record stays honest about what bac
 **Build status:** slices 1 and 2 are built (1a: S1, S2, S5; 1b: S15–S23, S26, S27, S29, S35, and
 the faults below; 2: S30–S34). Slice 3 is split: **3a is built** (S7, S8, S10, S11, S12, S14,
 S24, S25, the fill-gaps half of S9, and the scan-driven parts of S18 and S20). **3b is not**
-(S9's "asks rather than choosing", S13, S28). Slice 4 is not. Beyond the decisions themselves,
-the session found these faults in the current code. Each is fixed in slice 1 unless marked
-otherwise.
+(S9's "asks rather than choosing", S13, S28). **Slice 4 is built** (S3, S4, S6), ahead of 3b,
+which it does not depend on. Beyond the decisions themselves, the session found these faults in
+the current code. Each is fixed in slice 1 unless marked otherwise.
+
+Slice 4 notes:
+
+- **What "lines up" means** (`src/lib/documentMatch.ts`, tested by `npm test`): the scanned amount
+  equals the payment to the cent — the bank's charge, or this expense's share of a split — and a
+  date on the document (receipt date, bill date, or date of care) falls between 90 days before the
+  payment and 7 days after it. A document already backing a different expense is never a likely
+  match: an equal amount there is explained by the expense it is on (two $25 copays at one clinic).
+  A document larger than the payment is not a match either; S13 is where that case belongs.
+- **The picker** lists likely matches first, nearest date first, under "Likely matches"; then
+  everything else, newest first. It has a search box (name, description, the scanned provider, the
+  type) and a thumbnail of each image. From the queue's bulk bar there is no one payment, so
+  nothing is ranked.
+- **"Looks like a match"** appears only when exactly one document matches — two equally good
+  candidates are a choice for the person, made in the picker — and only while nothing is attached:
+  once there is proof on the expense, a second suggestion is noise. It sits above the attach
+  options in the dialog, and under the amber label on the full expense page. ✕ hides it until the
+  expense is opened again. Mileage entries never get one.
+- **Scanning at upload** needed no server change: `scan-document` already read a document with no
+  expense. The Documents page reads each upload one at a time after it is saved, shows
+  "Reading your document…" on its card, and then what was read (provider · amount · date). A read
+  that fails is not lost: the server reads any document it has no reading for when it is attached.
+- **Not done:** documents uploaded on the Documents page **before** slice 4 have no reading, so
+  they cannot be matched until they are attached somewhere and read; no backfill was written. The
+  library loaded for matching is cut at the newest 1,000 documents.
 
 Slice 3a notes, for whoever builds 3b and 4:
 
@@ -409,4 +434,4 @@ Gathered 2026-09-30. Claims quoted above come from these pages.
 
 ---
 
-_Agreed 2026-09-30. Slices 1, 2 and 3a are built; start at slice 3b._
+_Agreed 2026-09-30. Slices 1, 2, 3a and 4 are built; slice 3b is what remains._

@@ -30,6 +30,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Money } from "@/components/ui/money";
 import { formatDateOnly } from "@/lib/dates";
+import { useScanDocument } from "@/hooks/useDocumentScan";
+import type { LibraryDocument } from "@/hooks/useDocumentLibrary";
 interface Receipt {
   id: string;
   file_path: string;
@@ -38,6 +40,8 @@ interface Receipt {
   document_type: string | null;
   description: string | null;
   uploaded_at: string;
+  /** What the scan read (SUBSTANTIATE_SPEC S6), once it has. */
+  scan: LibraryDocument["scan"];
 }
 
 /** A file chosen in the upload panel but not yet sent to storage. */
@@ -61,6 +65,7 @@ const Documents = () => {
   const [showUpload, setShowUpload] = useState(false);
   const [newFiles, setNewFiles] = useState<PendingUpload[]>([]);
   const [uploading, setUploading] = useState(false);
+  const scan = useScanDocument();
   // Bumped after every upload attempt to remount the picker empty. It owns its
   // own file list, so clearing newFiles here would not clear what it shows.
   const [pickerKey, setPickerKey] = useState(0);
@@ -71,9 +76,11 @@ const Documents = () => {
     backs:
       { id: string; vendor: string; date: string; amount: number }[] | null;
   } | null>(null);
-  const loadReceipts = async () => {
+  // quiet: refresh in place, without blanking the grid to "Loading" -- for
+  // the re-read after a scan, which nobody asked for and nobody waits on.
+  const loadReceipts = async ({ quiet = false } = {}) => {
     try {
-      setLoading(true);
+      if (!quiet) setLoading(true);
       const {
         data: { session },
       } = await supabase.auth.getSession();
@@ -87,7 +94,7 @@ const Documents = () => {
             // over time and a wildcard here would start shipping them to the
             // client the moment they land.
             .select(
-              "id, file_path, file_name, file_type, document_type, description, uploaded_at",
+              "id, file_path, file_name, file_type, document_type, description, uploaded_at, receipt_ocr_data(scan_status, extracted_amount, extracted_vendor, extracted_date, extracted_bill_date, extracted_service_date, extracted_service_date_end)",
             )
             .eq("user_id", user.id)
             .order("uploaded_at", { ascending: false }),
@@ -105,7 +112,14 @@ const Documents = () => {
         counts.set(l.receipt_id, (counts.get(l.receipt_id) ?? 0) + 1);
       }
       setAttachedCounts(counts);
-      setReceipts(data || []);
+      setReceipts(
+        (data ?? []).map(({ receipt_ocr_data, ...r }) => {
+          const joined = receipt_ocr_data as unknown;
+          const scan = (Array.isArray(joined) ? joined[0] : joined) as
+            Receipt["scan"] | undefined;
+          return { ...r, scan: scan ?? null };
+        }),
+      );
     } catch (error) {
       logError("Error loading receipts", error);
       toast.error("Failed to load documents");
@@ -168,6 +182,7 @@ const Documents = () => {
 
     const failures: string[] = [];
     let uploaded = 0;
+    const added: string[] = [];
 
     try {
       const {
@@ -196,7 +211,7 @@ const Documents = () => {
             .upload(filePath, file);
           if (uploadError) throw uploadError;
 
-          const { error: receiptError } = await supabase
+          const { data: row, error: receiptError } = await supabase
             .from("receipts")
             .insert({
               user_id: user.id,
@@ -215,13 +230,16 @@ const Documents = () => {
                   : "person",
               description: fileData.description || null,
               display_order: i,
-            });
+            })
+            .select("id")
+            .single();
           if (receiptError) {
             await supabase.storage.from("receipts").remove([filePath]);
             throw receiptError;
           }
 
           uploaded += 1;
+          added.push(row.id);
         } catch (error) {
           logError("Error uploading a document", error);
           const reason =
@@ -259,6 +277,19 @@ const Documents = () => {
     setPickerKey((k) => k + 1);
     if (failures.length === 0) setShowUpload(false);
     loadReceipts();
+    void readUploads(added);
+  };
+
+  // Read at upload (SUBSTANTIATE_SPEC S6), so a document saved here can be
+  // matched to the charge it proves (S3, S4) and fills the form when it is
+  // attached, without a second read (S11). One at a time: nobody waits on it,
+  // and a batch of bills fired at once is how the AI service's rate limit is
+  // reached. A failed read is not lost -- the document is read when attached.
+  const readUploads = async (receiptIds: string[]) => {
+    for (const receiptId of receiptIds) {
+      await scan.mutateAsync({ receiptId }).catch(() => undefined);
+    }
+    if (receiptIds.length > 0) loadReceipts({ quiet: true });
   };
   // Deleting here is the only way a file is deleted for good -- ✕ on an
   // expense only detaches it (SUBSTANTIATE_SPEC S5) -- so it asks first, and

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { logError } from "@/utils/errorHandler";
 import { Button } from "@/components/ui/button";
@@ -147,6 +148,7 @@ export function ReceiptGallery({
   const [savingId, setSavingId] = useState<string | null>(null);
   const scan = useScanDocument();
   const scanning = useScanningIds();
+  const queryClient = useQueryClient();
 
   const handleView = async (receipt: Receipt) => {
     try {
@@ -214,6 +216,8 @@ export function ReceiptGallery({
       if (error) throw error;
 
       onReceiptDeleted?.();
+      // Back in the library's pickable list (S3).
+      void queryClient.invalidateQueries({ queryKey: ["documents"] });
       toast("Removed from this expense", {
         description: "It's still in Documents.",
         action: { label: "Undo", onClick: () => void reattach(receiptId) },
