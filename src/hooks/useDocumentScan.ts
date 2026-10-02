@@ -27,6 +27,9 @@ export interface ScanVars {
   invoiceId?: string;
   /** Scan again: read the file even though a reading is kept. */
   rescan?: boolean;
+  /** Nobody asked for this read (the catch-up of older documents), so a
+   *  failure is not announced. */
+  quiet?: boolean;
 }
 
 export interface ScanOutcome {
@@ -103,11 +106,12 @@ export function useScanDocument() {
         queryClient.invalidateQueries({ queryKey: key });
       }
     },
-    onError: (error, { invoiceId }) => {
+    onError: (error, { invoiceId, quiet }) => {
       // Not the document's fault -- the service is busy or unreachable. A
       // document the scan genuinely cannot read comes back as a success with
       // status "unreadable" and is marked on its own row instead.
       logError("Scanning a document failed", error);
+      if (quiet) return;
       toast.error("We couldn't scan that document just now.", {
         // Unattached, it is read when it is first attached: the server reads
         // any document it has no reading for.

@@ -272,9 +272,13 @@ Slice 4 notes:
   expense. The Documents page reads each upload one at a time after it is saved, shows
   "Reading your document…" on its card, and then what was read (provider · amount · date). A read
   that fails is not lost: the server reads any document it has no reading for when it is attached.
-- **Not done:** documents uploaded on the Documents page **before** slice 4 have no reading, so
-  they cannot be matched until they are attached somewhere and read; no backfill was written. The
-  library loaded for matching is cut at the newest 1,000 documents.
+- **Older uploads catch up by themselves** (follow-up, 2026-10-01): a saved document that was
+  never read and is on no expense is read in the background whenever the Documents page, the
+  picker or "Looks like a match" loads the library (`useCatchUpReadings`). One at a time, oldest
+  first, at most 25 a visit, stopping silently at the first failure so a down service is not hit
+  repeatedly; the next visit tries again. An upload claims its own files first, so no file is read
+  twice. Documents already on an expense are left to Scan / attach, since they are never matches.
+- **Not done:** the library loaded for matching is cut at the newest 1,000 documents.
 
 Slice 3a notes, for whoever builds 3b and 4:
 

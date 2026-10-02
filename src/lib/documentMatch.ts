@@ -131,3 +131,37 @@ export function clearMatch<D extends MatchableDocument>(
   const { matches } = rankForPicker(docs, charge);
   return matches.length === 1 ? matches[0] : null;
 }
+
+/** How many older documents one visit may read in the background. */
+export const CATCH_UP_PER_SESSION = 25;
+
+/**
+ * Saved documents never read and on no expense, which the app reads in the
+ * background so they can be matched. Documents saved before reading at upload
+ * existed (S6) have no reading, and an unread document can never be a likely
+ * match. One on an expense is left alone: it is read when it is attached or
+ * when Scan is pressed on it, and an attached document is never a match.
+ *
+ * Oldest first, so a long backlog works through in a steady order; at most
+ * `limit` in all, counting those already tried.
+ */
+export function documentsToCatchUp<
+  D extends {
+    id: string;
+    uploaded_at: string;
+    scan: unknown;
+    invoiceIds: string[];
+  },
+>(
+  docs: readonly D[],
+  tried: ReadonlySet<string>,
+  limit = CATCH_UP_PER_SESSION,
+): D[] {
+  const room = Math.max(0, limit - tried.size);
+  return docs
+    .filter(
+      (d) => d.scan == null && d.invoiceIds.length === 0 && !tried.has(d.id),
+    )
+    .sort((a, b) => a.uploaded_at.localeCompare(b.uploaded_at))
+    .slice(0, room);
+}

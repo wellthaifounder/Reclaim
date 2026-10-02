@@ -4,6 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   clearMatch,
+  documentsToCatchUp,
   matchDistance,
   rankForPicker,
   type Charge,
@@ -166,4 +167,40 @@ test("offered only when exactly one document matches", () => {
   assert.equal(clearMatch([one, other], charge)?.id, "one");
   assert.equal(clearMatch([one, two], charge), null);
   assert.equal(clearMatch([other], charge), null);
+});
+
+test("catch-up: unread documents on no expense, oldest first, capped", () => {
+  const d = (
+    id: string,
+    day: string,
+    scan: unknown,
+    invoiceIds: string[] = [],
+  ) => ({
+    id,
+    uploaded_at: `2026-09-${day}T00:00:00Z`,
+    scan,
+    invoiceIds,
+  });
+  const docs = [
+    d("new", "20", null),
+    d("old", "01", null),
+    d("read", "02", { scan_status: "read" }),
+    d("unreadable", "03", { scan_status: "unreadable" }),
+    d("attached", "04", null, ["inv"]),
+    d("mid", "10", null),
+  ];
+  assert.deepEqual(
+    documentsToCatchUp(docs, new Set()).map((x) => x.id),
+    ["old", "mid", "new"],
+  );
+  // Already tried this visit: not again.
+  assert.deepEqual(
+    documentsToCatchUp(docs, new Set(["old"])).map((x) => x.id),
+    ["mid", "new"],
+  );
+  // The cap counts what was already tried.
+  assert.deepEqual(
+    documentsToCatchUp(docs, new Set(["x"]), 2).map((x) => x.id),
+    ["old"],
+  );
 });
