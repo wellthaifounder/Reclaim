@@ -11,12 +11,16 @@ import {
   FileText,
   Link2,
   FolderOpen,
+  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { logError } from "@/utils/errorHandler";
 import { format } from "date-fns";
 import { documentTypeLabel } from "@/lib/documentTypes";
+import { useScanningIds } from "@/hooks/useDocumentScan";
+import type { LibraryDocument } from "@/hooks/useDocumentLibrary";
+import { ScannedFacts } from "@/components/documents/DocumentSummary";
 
 interface DocumentCardProps {
   receipt: {
@@ -27,6 +31,7 @@ interface DocumentCardProps {
     document_type: string | null;
     description: string | null;
     uploaded_at: string;
+    scan: LibraryDocument["scan"];
   };
   /** How many expenses this document is attached to, via receipt_invoices. */
   attachedCount: number;
@@ -42,6 +47,7 @@ export const DocumentCard = ({
 }: DocumentCardProps) => {
   const [viewUrl, setViewUrl] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
+  const reading = useScanningIds().has(receipt.id);
 
   const handleView = async () => {
     try {
@@ -115,6 +121,24 @@ export const DocumentCard = ({
                   {receipt.description}
                 </p>
               )}
+              {/* What the scan read, which is what an expense is matched on
+                  (SUBSTANTIATE_SPEC S6). */}
+              <div className="mt-2">
+                {reading ? (
+                  <p
+                    role="status"
+                    className="flex items-center gap-1.5 text-xs text-muted-foreground"
+                  >
+                    <Sparkles
+                      className="h-3 w-3 animate-pulse"
+                      aria-hidden="true"
+                    />
+                    Reading your document…
+                  </p>
+                ) : (
+                  <ScannedFacts doc={receipt} />
+                )}
+              </div>
               <p className="mt-2 text-xs text-muted-foreground">
                 {format(new Date(receipt.uploaded_at), "MMM d, yyyy")}
               </p>

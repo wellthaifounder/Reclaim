@@ -26,6 +26,7 @@ import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
 import { SubstantiationPanel } from "@/components/expense/SubstantiationPanel";
 import { mileageFromInvoice } from "@/lib/mileageBreakdown";
 import { ProofNotices } from "@/components/expense/ProofNotices";
+import { LikelyMatchOffer } from "@/components/expense/LikelyMatchOffer";
 import { ExpenseDecision } from "@/components/expense/ExpenseDecision";
 import { logError } from "@/utils/errorHandler";
 import { todayLocalISO } from "@/lib/utils";
@@ -390,19 +391,32 @@ export default function BillDetail() {
                 documents={
                   // The attach options live on the Documents tab below; the
                   // label points there (S35: same notices as the dialog).
-                  <ProofNotices
-                    invoiceId={bill.id}
-                    hasDocuments={!!receipts && receipts.length > 0}
-                    isMileage={bill.mileage_miles != null}
-                    noReceipt={bill.documentation_state === "not_available"}
-                    onAddDocument={() => {
-                      setActiveTab("documents");
-                      documentsRef.current?.scrollIntoView({
-                        behavior: "smooth",
-                        block: "center",
-                      });
-                    }}
-                  />
+                  <>
+                    <ProofNotices
+                      invoiceId={bill.id}
+                      hasDocuments={!!receipts && receipts.length > 0}
+                      isMileage={bill.mileage_miles != null}
+                      noReceipt={bill.documentation_state === "not_available"}
+                      onAddDocument={() => {
+                        setActiveTab("documents");
+                        documentsRef.current?.scrollIntoView({
+                          behavior: "smooth",
+                          block: "center",
+                        });
+                      }}
+                    />
+                    {/* S4, as in the dialog: a saved document that clearly
+                      matches is offered here, beside the label. */}
+                    {receipts?.length === 0 && (
+                      <LikelyMatchOffer
+                        invoiceId={bill.id}
+                        onAttached={(receiptIds) => {
+                          refreshDocuments();
+                          scanAttached(receiptIds, [bill.id]);
+                        }}
+                      />
+                    )}
+                  </>
                 }
               />
             </div>

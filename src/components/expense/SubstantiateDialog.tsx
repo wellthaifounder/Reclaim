@@ -12,7 +12,9 @@
 //   1. The payment         -- provider, when paid, the amount, and Claiming.
 //                             What the bank recorded is shown, never edited.
 //   2. Documents           -- attach a file, or reuse one already on file
-//                             (DocumentAttachOptions, S1/S2). Every document
+//                             (DocumentAttachOptions, S1/S2), or take the
+//                             saved one that clearly matches the charge
+//                             (LikelyMatchOffer, S4). Every document
 //                             that arrives is scanned by itself, PDFs too
 //                             (S7): the scan fills the fields below where
 //                             they are blank or still a default, and never
@@ -51,6 +53,7 @@ import { mileageFromInvoice } from "@/lib/mileageBreakdown";
 import { ProofNotices } from "@/components/expense/ProofNotices";
 import { ReceiptGallery } from "@/components/expense/ReceiptGallery";
 import { DocumentAttachOptions } from "@/components/expense/DocumentAttachOptions";
+import { LikelyMatchOffer } from "@/components/expense/LikelyMatchOffer";
 import { AttachDocumentDialog } from "@/components/documents/AttachDocumentDialog";
 import { SCAN_COLUMNS, useScanAttached } from "@/hooks/useDocumentScan";
 import { documentScanProps, qualifyingCategory } from "@/lib/documentScanProps";
@@ -285,6 +288,19 @@ export function SubstantiateDialog({
                     isMileage={expense.mileage_miles != null}
                     noReceipt={expense.documentation_state === "not_available"}
                   />
+
+                  {/* A saved document that clearly matches is offered before
+                      the picker is opened (S4). */}
+                  {receipts?.length === 0 && (
+                    <LikelyMatchOffer
+                      key={expense.id}
+                      invoiceId={expense.id}
+                      onAttached={(receiptIds) => {
+                        refreshDocuments();
+                        scanAttached(receiptIds, [expense.id]);
+                      }}
+                    />
+                  )}
 
                   <DocumentAttachOptions
                     uploading={uploading}
