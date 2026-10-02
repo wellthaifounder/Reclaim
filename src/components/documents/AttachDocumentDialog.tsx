@@ -27,7 +27,6 @@ import { format } from "date-fns";
 import { documentTypeLabel } from "@/lib/documentTypes";
 import {
   useAttachDocuments,
-  useCatchUpReadings,
   usePickableDocuments,
   useThumbnailUrls,
   documentName,
@@ -47,6 +46,8 @@ interface AttachDocumentDialogProps {
   onOpenChange: (open: boolean) => void;
   /** Called with the documents just attached, so the caller can scan them. */
   onAttached: (receiptIds: string[]) => void;
+  /** Ticked when the picker opens: "N look like a match · Review" (S4). */
+  preselected?: string[];
 }
 
 type PickableDocument = LibraryDocument & {
@@ -57,7 +58,7 @@ type PickableDocument = LibraryDocument & {
   /** How many OTHER expenses it already backs. A document can substantiate
    *  more than one expense (a hospital bill paid in instalments, say), so
    *  this is a hint, not an exclusion. */
-  attachedElsewhere: number;
+  attachedElsewhereCount: number;
 };
 
 function matchesSearch(doc: LibraryDocument, query: string): boolean {
@@ -78,31 +79,35 @@ export const AttachDocumentDialog = ({
   open,
   onOpenChange,
   onAttached,
+  preselected,
 }: AttachDocumentDialogProps) => {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const [attaching, setAttaching] = useState(false);
-  const { matches, rest, isLoading, isError } = usePickableDocuments(
+  const { matches, rest, isLoading, error } = usePickableDocuments(
     invoiceIds,
     open,
   );
   const attach = useAttachDocuments();
-  // Older uploads were never read, so could never rank as likely (S6).
-  useCatchUpReadings(open);
   const thumbnails = useThumbnailUrls(open ? [...matches, ...rest] : []);
 
+  // The prop is an array, so a caller passing a fresh literal would re-run
+  // the reset on every render. The joined key is what actually changes.
+  const preselectedKey = (preselected ?? []).join(",");
   useEffect(() => {
     if (open) {
-      // Cleared on open, not on close: reopening the dialog otherwise starts
+      // Reset on open, not on close: reopening the dialog otherwise starts
       // with the ticks and the search from the last time it was used.
-      setSelectedIds([]);
+      setSelectedIds(preselectedKey ? preselectedKey.split(",") : []);
       setSearch("");
     }
-  }, [open]);
+  }, [open, preselectedKey]);
 
   useEffect(() => {
-    if (isError) toast.error("Failed to load documents");
-  }, [isError]);
+    if (!error) return;
+    logError("Error loading documents to attach", error);
+    toast.error("Failed to load documents");
+  }, [error]);
 
   const shownMatches = matches.filter((d) => matchesSearch(d, search));
   const shownRest = rest.filter((d) => matchesSearch(d, search));
@@ -139,7 +144,7 @@ export const AttachDocumentDialog = ({
     );
   };
 
-  const row = (doc: PickableDocument) => (
+  const renderRow = (doc: PickableDocument) => (
     <div
       key={doc.id}
       className="flex cursor-pointer items-center gap-3 rounded-lg border p-3 hover:bg-muted/50"
@@ -174,12 +179,12 @@ export const AttachDocumentDialog = ({
             selected
           </p>
         )}
-        {doc.attachedElsewhere > 0 && (
+        {doc.attachedElsewhereCount > 0 && (
           <p className="text-xs text-muted-foreground">
             Already attached to{" "}
-            {doc.attachedElsewhere === 1
+            {doc.attachedElsewhereCount === 1
               ? "1 other expense"
-              : `${doc.attachedElsewhere} other expenses`}
+              : `${doc.attachedElsewhereCount} other expenses`}
           </p>
         )}
       </div>
@@ -243,7 +248,7 @@ export const AttachDocumentDialog = ({
               {shownMatches.length > 0 && (
                 <section className="space-y-2">
                   <h3 className="text-sm font-medium">Likely matches</h3>
-                  {shownMatches.map(row)}
+                  {shownMatches.map(renderRow)}
                 </section>
               )}
               {shownRest.length > 0 && (
@@ -251,7 +256,7 @@ export const AttachDocumentDialog = ({
                   {shownMatches.length > 0 && (
                     <h3 className="text-sm font-medium">Other documents</h3>
                   )}
-                  {shownRest.map(row)}
+                  {shownRest.map(renderRow)}
                 </section>
               )}
             </>

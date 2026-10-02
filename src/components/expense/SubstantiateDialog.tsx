@@ -82,14 +82,16 @@ export function SubstantiateDialog({
 }: SubstantiateDialogProps) {
   const queryClient = useQueryClient();
   const [uploading, setUploading] = useState(false);
-  const [choosing, setChoosing] = useState(false);
+  // The picker: null when closed, else the documents it opens with ticked --
+  // none from "Choose from Documents", the matches from the offer's Review.
+  const [choosing, setChoosing] = useState<string[] | null>(null);
   const scanAttached = useScanAttached();
 
   // The queue moves this dialog from one expense to the next without closing
   // it, so anything belonging to the previous expense is dropped. A scan
   // already running carries on: it belongs to its own expense.
   useEffect(() => {
-    setChoosing(false);
+    setChoosing(null);
   }, [expenseId]);
 
   const { data: expense, isLoading } = useQuery({
@@ -289,23 +291,22 @@ export function SubstantiateDialog({
                     noReceipt={expense.documentation_state === "not_available"}
                   />
 
-                  {/* A saved document that clearly matches is offered before
-                      the picker is opened (S4). */}
-                  {receipts?.length === 0 && (
-                    <LikelyMatchOffer
-                      key={expense.id}
-                      invoiceId={expense.id}
-                      onAttached={(receiptIds) => {
-                        refreshDocuments();
-                        scanAttached(receiptIds, [expense.id]);
-                      }}
-                    />
-                  )}
+                  {/* Saved documents that look like the proof are offered
+                      before the picker is opened (S4). */}
+                  <LikelyMatchOffer
+                    key={expense.id}
+                    invoiceId={expense.id}
+                    onAttached={(receiptIds) => {
+                      refreshDocuments();
+                      scanAttached(receiptIds, [expense.id]);
+                    }}
+                    onReview={setChoosing}
+                  />
 
                   <DocumentAttachOptions
                     uploading={uploading}
                     onFiles={(files) => void handleUpload(files)}
-                    onChooseFromDocuments={() => setChoosing(true)}
+                    onChooseFromDocuments={() => setChoosing([])}
                   />
                 </section>
               }
@@ -336,8 +337,9 @@ export function SubstantiateDialog({
         {expenseId && (
           <AttachDocumentDialog
             invoiceIds={[expenseId]}
-            open={choosing}
-            onOpenChange={setChoosing}
+            open={choosing !== null}
+            onOpenChange={(open) => !open && setChoosing(null)}
+            preselected={choosing ?? undefined}
             onAttached={(receiptIds) => {
               refreshDocuments();
               // Chosen from the library is attached like any other (S7); a

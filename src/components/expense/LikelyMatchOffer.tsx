@@ -1,13 +1,15 @@
-// "Looks like a match: [document] · Attach" (SUBSTANTIATE_SPEC S4).
+// "Looks like a match" (SUBSTANTIATE_SPEC S4, amended 2026-10-02).
 //
-// When exactly one saved document's scanned amount and date line up with this
-// charge, it is offered before the picker is opened. It never attaches
-// anything on its own: the app suggests, the person decides -- the same rule
-// as everywhere else (spec §4).
+// Saved documents that look like the proof for this charge are offered before
+// the picker is opened: one by name, with Attach; several -- two photos of
+// one receipt, or an invoice and its payment record -- as "N saved documents
+// look like a match", with Review, which opens the picker with them ticked.
+// It never attaches anything on its own: the app suggests, the person decides
+// (spec §4).
 //
-// Shown only while nothing is attached yet. Once there is proof on the
-// expense, a second suggestion is noise; anything further is a pick from the
-// library, which lists the likely matches first (S3).
+// Shown whenever a matching document is not on this expense yet, even if
+// something else is: a card slip may already be attached when the itemised
+// receipt turns up.
 
 import { useState } from "react";
 import { Loader2, X } from "lucide-react";
@@ -16,8 +18,7 @@ import { Button } from "@/components/ui/button";
 import { logError } from "@/utils/errorHandler";
 import {
   useAttachDocuments,
-  useCatchUpReadings,
-  useClearMatch,
+  useLikelyMatches,
   useThumbnailUrls,
   documentName,
 } from "@/hooks/useDocumentLibrary";
@@ -30,29 +31,33 @@ interface LikelyMatchOfferProps {
   invoiceId: string;
   /** Called with the attached document, so the caller can refresh and scan. */
   onAttached: (receiptIds: string[]) => void;
+  /** Open the picker with these documents ticked. */
+  onReview: (receiptIds: string[]) => void;
 }
 
 export function LikelyMatchOffer({
   invoiceId,
   onAttached,
+  onReview,
 }: LikelyMatchOfferProps) {
-  const match = useClearMatch(invoiceId);
-  // Older uploads were never read, so could never be offered (S6).
-  useCatchUpReadings();
-  const thumbnails = useThumbnailUrls(match ? [match] : []);
+  const matches = useLikelyMatches(invoiceId);
+  const single = matches.length === 1 ? matches[0] : null;
+  const thumbnails = useThumbnailUrls(single ? [single] : []);
   const attach = useAttachDocuments();
   const [attaching, setAttaching] = useState(false);
-  // Not this one: hidden until the expense is opened again.
+  // ✕ hides this offer until the expense is opened again. Keyed on what was
+  // offered, so a different set of matches is offered afresh.
+  const offered = matches.map((d) => d.id).join(",");
   const [dismissed, setDismissed] = useState<string | null>(null);
 
-  if (!match || dismissed === match.id) return null;
+  if (matches.length === 0 || dismissed === offered) return null;
 
-  const handleAttach = async () => {
+  const handleAttach = async (receiptId: string) => {
     setAttaching(true);
     try {
-      await attach([match.id], [invoiceId]);
+      await attach([receiptId], [invoiceId]);
       toast.success("Document attached.");
-      onAttached([match.id]);
+      onAttached([receiptId]);
     } catch (error) {
       logError("Error attaching a matched document", error);
       toast.error("We couldn't attach that document. Please try again.");
@@ -64,31 +69,52 @@ export function LikelyMatchOffer({
   return (
     // Wraps on a phone: the buttons drop below the name rather than squeeze it.
     <div className="flex flex-wrap items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 p-3">
-      <DocumentThumbnail url={thumbnails?.get(match.file_path)} />
-      <div className="min-w-0 flex-1 basis-48">
-        <p className="text-sm">
-          <span className="text-muted-foreground">Looks like a match: </span>
-          <span className="font-medium break-words">{documentName(match)}</span>
+      {single ? (
+        <>
+          <DocumentThumbnail url={thumbnails?.get(single.file_path)} />
+          <div className="min-w-0 flex-1 basis-48">
+            <p className="text-sm">
+              <span className="text-muted-foreground">
+                Looks like a match:{" "}
+              </span>
+              <span className="font-medium break-words">
+                {documentName(single)}
+              </span>
+            </p>
+            <ScannedFacts doc={single} />
+          </div>
+        </>
+      ) : (
+        <p className="min-w-0 flex-1 basis-48 text-sm">
+          {matches.length} saved documents look like a match
         </p>
-        <ScannedFacts doc={match} />
-      </div>
+      )}
       <div className="ml-auto flex items-center gap-1">
-        <Button
-          size="sm"
-          onClick={() => void handleAttach()}
-          disabled={attaching}
-        >
-          {attaching && (
-            <Loader2 className="mr-1 h-4 w-4 animate-spin" aria-hidden="true" />
-          )}
-          Attach
-        </Button>
+        {single ? (
+          <Button
+            size="sm"
+            onClick={() => void handleAttach(single.id)}
+            disabled={attaching}
+          >
+            {attaching && (
+              <Loader2
+                className="mr-1 h-4 w-4 animate-spin"
+                aria-hidden="true"
+              />
+            )}
+            Attach
+          </Button>
+        ) : (
+          <Button size="sm" onClick={() => onReview(matches.map((d) => d.id))}>
+            Review
+          </Button>
+        )}
         <Button
           variant="ghost"
           size="icon"
           className="h-8 w-8 shrink-0"
           aria-label="Not this one"
-          onClick={() => setDismissed(match.id)}
+          onClick={() => setDismissed(offered)}
         >
           <X className="h-4 w-4" aria-hidden="true" />
         </Button>

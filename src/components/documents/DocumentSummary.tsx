@@ -8,20 +8,14 @@ import { FileText } from "lucide-react";
 import { Money } from "@/components/ui/money";
 import { formatDateOnly } from "@/lib/dates";
 import type { LibraryDocument } from "@/hooks/useDocumentLibrary";
+import { documentDates, isRead } from "@/lib/documentMatch";
 
 /** What the scan read, where a document is shown. */
 type Scanned = Pick<LibraryDocument, "scan">;
 
 /** The date a person would recognise the document by. */
 function scannedDate(doc: Scanned): string | null {
-  const s = doc.scan;
-  if (!s || s.scan_status !== "read") return null;
-  return (
-    s.extracted_date ??
-    s.extracted_bill_date ??
-    s.extracted_service_date ??
-    null
-  );
+  return documentDates(doc.scan)[0] ?? null;
 }
 
 /** An image's thumbnail; a PDF, or an image that will not load, shows the
@@ -51,7 +45,7 @@ export function DocumentThumbnail({ url }: { url: string | undefined }) {
 /** "Smile Dental Group · $85.00 · Sep 12, 2026", from what the scan read. */
 export function ScannedFacts({ doc }: { doc: Scanned }) {
   const s = doc.scan;
-  if (!s || s.scan_status !== "read") return null;
+  if (!isRead(s)) return null;
   const date = scannedDate(doc);
   const amount = s.extracted_amount == null ? null : Number(s.extracted_amount);
   const parts = [
