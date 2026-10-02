@@ -92,10 +92,18 @@ export function useCharge(invoiceId: string | null) {
     enabled: !!invoiceId,
     staleTime: 5 * 60 * 1000,
     queryFn: async (): Promise<Charge | null> => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      // Row-level security already limits this to the caller's expenses;
+      // user_id is checked as well so the ownership rule is visible here.
       const { data, error } = await supabase
         .from("invoices")
         .select("date, amount, amount_paid, mileage_miles")
         .eq("id", invoiceId!)
+        .eq("user_id", user.id)
         .single();
       if (error) throw error;
       // A mileage log is proved by its own working; no document matches it.
