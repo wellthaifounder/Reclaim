@@ -1,19 +1,21 @@
 // The person's saved documents, with what the scan read from each and which
-// expenses each one backs -- what "Choose from Documents" lists and what
-// "Looks like a match" is chosen from (SUBSTANTIATE_SPEC S3, S4).
+// expenses each one backs -- what "Choose from Documents" lists, what
+// "Looks like a match" is chosen from (SUBSTANTIATE_SPEC S3, S4), and what the
+// Documents page shows.
 //
-// One query, shared by the picker and the offer, so the two can never
-// disagree about what matches. Under the ["documents"] key, which the scan and
-// every attach invalidate.
+// One query, shared by all three, so they can never disagree about what
+// matches. Under the ["documents"] key, which the scan and every attach
+// invalidate.
 
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useScanDocument } from "@/hooks/useDocumentScan";
 import {
-  clearMatch,
   documentsToCatchUp,
+  likelyMatches,
   rankForPicker,
+  type Backing,
   type Charge,
   type MatchableScan,
 } from "@/lib/documentMatch";
@@ -26,9 +28,10 @@ export interface LibraryDocument {
   document_type: string | null;
   description: string | null;
   uploaded_at: string;
-  scan: (MatchableScan & { extracted_vendor: string | null }) | null;
-  /** Every expense this document is attached to. */
-  invoiceIds: string[];
+  scan: MatchableScan | null;
+  /** Every expense this document is attached to, with what matching needs
+   *  to know about it (a payment plan is recognised by these, S3/S4). */
+  backs: Backing[];
 }
 
 /** The name the person knows a document by. */
@@ -41,6 +44,12 @@ export function documentName(
 /** A long library is cut at the newest thousand (CLAUDE.md: 500-1000). */
 const LIBRARY_LIMIT = 1000;
 
+/** One joined row, whichever shape PostgREST returned it in. */
+function one<T>(joined: T | T[] | null | undefined): T | null {
+  if (!joined) return null;
+  return Array.isArray(joined) ? (joined[0] ?? null) : joined;
+}
+
 export function useDocumentLibrary(enabled = true) {
   return useQuery({
     queryKey: ["documents", "library"],
@@ -52,38 +61,34 @@ export function useDocumentLibrary(enabled = true) {
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
-      const [{ data: docs, error }, { data: links, error: linksError }] =
-        await Promise.all([
-          supabase
-            .from("receipts")
-            .select(
-              "id, file_path, file_name, file_type, document_type, description, uploaded_at, receipt_ocr_data(scan_status, extracted_amount, extracted_vendor, extracted_date, extracted_bill_date, extracted_service_date, extracted_service_date_end)",
-            )
-            .eq("user_id", user.id)
-            .order("uploaded_at", { ascending: false })
-            .limit(LIBRARY_LIMIT),
-          supabase
-            .from("receipt_invoices")
-            .select("receipt_id, invoice_id")
-            .eq("user_id", user.id),
-        ]);
+      // The expenses each document backs come embedded, so they are bounded
+      // by the same limit as the documents themselves.
+      const { data, error } = await supabase
+        .from("receipts")
+        .select(
+          "id, file_path, file_name, file_type, document_type, description, uploaded_at, receipt_ocr_data(scan_status, extracted_amount, extracted_vendor, extracted_date, extracted_bill_date, extracted_service_date, extracted_service_date_end), receipt_invoices(invoice_id, invoices(vendor, vendor_original, amount, amount_paid))",
+        )
+        .eq("user_id", user.id)
+        .order("uploaded_at", { ascending: false })
+        .limit(LIBRARY_LIMIT);
       if (error) throw error;
-      if (linksError) throw linksError;
 
-      const backs = new Map<string, string[]>();
-      for (const l of links ?? []) {
-        backs.set(l.receipt_id, [
-          ...(backs.get(l.receipt_id) ?? []),
-          l.invoice_id,
-        ]);
-      }
-
-      return (docs ?? []).map(({ receipt_ocr_data, ...d }) => {
-        const joined = receipt_ocr_data as unknown;
-        const scan = (Array.isArray(joined) ? joined[0] : joined) as
-          LibraryDocument["scan"] | undefined;
-        return { ...d, scan: scan ?? null, invoiceIds: backs.get(d.id) ?? [] };
-      });
+      return (data ?? []).map(
+        ({ receipt_ocr_data, receipt_invoices, ...d }) => ({
+          ...d,
+          scan: one(receipt_ocr_data as unknown as MatchableScan | null),
+          backs: (receipt_invoices ?? []).map((link) => {
+            const inv = one(link.invoices);
+            const paid = inv?.amount_paid ?? inv?.amount;
+            return {
+              invoiceId: link.invoice_id,
+              vendor: inv?.vendor ?? null,
+              vendorOriginal: inv?.vendor_original ?? null,
+              amount: paid == null ? null : Number(paid),
+            };
+          }),
+        }),
+      );
     },
   });
 }
@@ -104,17 +109,30 @@ export function useCharge(invoiceId: string | null) {
       // user_id is checked as well so the ownership rule is visible here.
       const { data, error } = await supabase
         .from("invoices")
-        .select("date, amount, amount_paid, mileage_miles")
+        .select(
+          "date, amount, amount_paid, mileage_miles, vendor, vendor_original, transactions!invoices_source_transaction_id_fkey(amount, transaction_date)",
+        )
         .eq("id", invoiceId!)
         .eq("user_id", user.id)
         .single();
       if (error) throw error;
       // A mileage log is proved by its own working; no document matches it.
       if (data.mileage_miles != null) return null;
-      const amounts = [data.amount, data.amount_paid]
+
+      // One share of a split carries only its share and its date of care; the
+      // receipt shows the whole bank charge, on the day it was paid.
+      const txn = one(data.transactions);
+      const amounts = [data.amount, data.amount_paid, txn?.amount]
         .filter((a): a is number => a != null)
-        .map(Number);
-      return { paidDate: data.date, amounts };
+        .map((a) => Math.abs(Number(a)));
+      return {
+        invoiceId: invoiceId!,
+        paidDate: txn?.transaction_date ?? data.date,
+        amounts,
+        providerNames: [data.vendor_original, data.vendor].filter(
+          (n): n is string => !!n,
+        ),
+      };
     },
   });
 }
@@ -133,11 +151,11 @@ export function usePickableDocuments(invoiceIds: string[], enabled: boolean) {
   const targets = new Set(invoiceIds);
   const pickable = (library.data ?? [])
     .map((d) => {
-      const here = d.invoiceIds.filter((id) => targets.has(id)).length;
+      const here = d.backs.filter((b) => targets.has(b.invoiceId)).length;
       return {
         ...d,
         attachedHereCount: here,
-        attachedElsewhere: d.invoiceIds.length - here,
+        attachedElsewhereCount: d.backs.length - here,
       };
     })
     .filter((d) => d.attachedHereCount < targets.size);
@@ -145,76 +163,69 @@ export function usePickableDocuments(invoiceIds: string[], enabled: boolean) {
   return {
     ...rankForPicker(pickable, charge.data ?? null),
     isLoading: library.isLoading || (!!single && charge.isLoading),
-    isError: library.isError,
+    error: library.error,
   };
 }
 
-/** The one saved document that clearly matches this expense, if any (S4). */
-export function useClearMatch(invoiceId: string) {
+/** Saved documents that look like the proof for this expense (S4). */
+export function useLikelyMatches(invoiceId: string): LibraryDocument[] {
   const library = useDocumentLibrary();
   const charge = useCharge(invoiceId);
-  const candidates = (library.data ?? [])
-    .filter((d) => !d.invoiceIds.includes(invoiceId))
-    .map((d) => ({ ...d, attachedElsewhere: d.invoiceIds.length }));
-  return clearMatch(candidates, charge.data ?? null);
+  return likelyMatches(library.data ?? [], charge.data ?? null);
 }
 
-// Documents already tried this visit, and whether a catch-up is under way.
-// Module-level, not per component: the offer, the picker and the Documents
-// page can all be mounted at once, and must not read the same file twice.
+// This visit's catch-up. Module-level, not per component, so a remount of the
+// Documents page does not start a second reader over the same files.
 const caughtUp = new Set<string>();
+/** Uploads reading themselves: skipped, but not counted against the cap. */
+const claimed = new Set<string>();
 let catchingUp = false;
+/** Set on the first failure: nothing more is tried until the next visit. */
+let catchUpStopped = false;
 
 /** Documents another path is reading right now (a fresh upload): the
  *  catch-up leaves them alone, so no file is read twice. */
 export function claimForReading(receiptIds: string[]) {
-  for (const id of receiptIds) caughtUp.add(id);
+  for (const id of receiptIds) claimed.add(id);
 }
 
 /**
  * Read, in the background, saved documents that were never read and are on no
  * expense -- uploads from before reading at upload existed (S6) -- so they can
- * be matched (S3, S4). One at a time, at most CATCH_UP_PER_SESSION a visit,
- * stopping at the first failure: if the service is down, firing the rest only
- * repeats the failure. A failure is silent (nobody asked for this read); the
- * next visit tries again.
+ * be matched (S3, S4). Used by the Documents page only (founder's call,
+ * 2026-10-02): reading happens while the person is looking at their
+ * documents, never just because an expense was opened.
+ *
+ * One at a time, at most CATCH_UP_PER_SESSION a visit. The first failure ends
+ * it for the visit -- if the service is down, the rest would only repeat the
+ * failure -- silently, since nobody asked for this read. A reload tries again.
  */
-export function useCatchUpReadings(
-  enabled = true,
-  /** Called once a catch-up has read anything, for pages that keep their own
-   *  copy of the documents. */
-  onRead?: () => void,
-) {
-  const library = useDocumentLibrary(enabled);
-  const scan = useScanDocument();
-  const onReadRef = useRef(onRead);
-  onReadRef.current = onRead;
-  const { mutateAsync } = scan;
+export function useCatchUpReadings() {
+  const library = useDocumentLibrary();
+  const { mutateAsync } = useScanDocument();
 
   useEffect(() => {
-    if (!enabled || catchingUp || !library.data) return;
-    const todo = documentsToCatchUp(library.data, caughtUp);
+    if (catchingUp || catchUpStopped || !library.data) return;
+    const todo = documentsToCatchUp(library.data, caughtUp, claimed);
     if (todo.length === 0) return;
 
     catchingUp = true;
     void (async () => {
-      let read = 0;
       try {
         for (const doc of todo) {
           caughtUp.add(doc.id);
           try {
             await mutateAsync({ receiptId: doc.id, quiet: true });
-            read += 1;
           } catch {
+            catchUpStopped = true;
             break;
           }
         }
       } finally {
         catchingUp = false;
       }
-      if (read > 0) onReadRef.current?.();
     })();
-  }, [enabled, library.data, mutateAsync]);
+  }, [library.data, mutateAsync]);
 }
 
 /**

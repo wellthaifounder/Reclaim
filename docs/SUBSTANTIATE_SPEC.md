@@ -77,6 +77,25 @@ date and currency match; Ramp matches an emailed receipt when the amount matches
 or the merchant. S4 borrows the idea and stops short of attaching: the app suggests, the user
 decides — the same rule as the rest of the product.
 
+**Amended 2026-10-02**, after a review of the first build, by the founder:
+
+- **Payment plans match by provider.** One hospital statement routinely backs dozens of
+  instalments over months, none equal to its total. A document already being paid off in parts —
+  it backs a payment to the same provider for less than its total, and what it backs adds up to
+  less than that total — is a likely match for later payments to that provider, with no date limit.
+- **A document on another expense can still match.** The rule above depends on it.
+- **Several matches are offered together:** _"N saved documents look like a match · Review,"_ where
+  Review opens the picker with them ticked — two photos of one receipt, or an invoice and its
+  payment record. One match keeps _"Looks like a match: [document] · Attach."_
+- **The offer does not wait for an empty expense.** It shows whenever a matching document is not
+  on this expense yet: a card slip may be attached before the itemised receipt turns up.
+- **Same-amount matches** look up to a year before the payment and a week after it (was 90 days),
+  so a year-old copay receipt is not offered on today's copay.
+- **Older documents are read in the background on the Documents page only**, never because an
+  expense was opened.
+- **PDFs keep a document icon** in the picker; drawing their first page would add a large library
+  for every visitor.
+
 **On S5.** Until now the ✕ deleted the `receipts` row outright, with no confirmation, and the
 delete cascades through `receipt_invoices`, so the file vanished from every expense it backed
 (`src/components/expense/ReceiptGallery.tsx:120-137`). Once reuse is easy, one hospital bill
@@ -253,32 +272,34 @@ the current code. Each is fixed in slice 1 unless marked otherwise.
 
 Slice 4 notes:
 
-- **What "lines up" means** (`src/lib/documentMatch.ts`, tested by `npm test`): the scanned amount
-  equals the payment to the cent — the bank's charge, or this expense's share of a split — and a
-  date on the document (receipt date, bill date, or date of care) falls between 90 days before the
-  payment and 7 days after it. A document already backing a different expense is never a likely
-  match: an equal amount there is explained by the expense it is on (two $25 copays at one clinic).
-  A document larger than the payment is not a match either; S13 is where that case belongs.
-- **The picker** lists likely matches first, nearest date first, under "Likely matches"; then
-  everything else, newest first. It has a search box (name, description, the scanned provider, the
-  type) and a thumbnail of each image. From the queue's bulk bar there is no one payment, so
-  nothing is ranked.
-- **"Looks like a match"** appears only when exactly one document matches — two equally good
-  candidates are a choice for the person, made in the picker — and only while nothing is attached:
-  once there is proof on the expense, a second suggestion is noise. It sits above the attach
-  options in the dialog, and under the amber label on the full expense page. ✕ hides it until the
-  expense is opened again. Mileage entries never get one.
+- **What "lines up" means** (`src/lib/documentMatch.ts`, tested by `npm test`; rules as amended
+  2026-10-02 under "On S3, S4 and S6"). _Same amount:_ the scanned total equals, to the cent, the
+  expense's paid or billed amount or the **bank transaction's** amount — a split share carries only
+  its share, and its own date is its date of care, so the bank's charge and date are fetched
+  through `source_transaction_id`. _Payment plan:_ names are compared after dropping digits,
+  punctuation and bank noise words (`providerKey`), so "MERCY HOSP PMT 0923" and "MERCY HOSP PMT
+  1023" are one provider. A receipt backing the one charge it equals is never a payment plan, so a
+  CVS receipt is not offered on the next CVS purchase.
+- **The picker** lists same-amount matches first, nearest date first, then payment plans, under
+  "Likely matches"; then everything else, newest first. It has a search box (name, description,
+  the scanned provider, the type) and a thumbnail of each image. From the queue's bulk bar there is
+  no one payment, so nothing is ranked. On the full expense page it sits outside the tabs, so
+  Review can open it from the Overview.
+- **The offer** sits above the attach options in the dialog, and under the amber label on the full
+  expense page. ✕ hides it until the expense is opened again, or until the set of matches changes.
+  Mileage entries never get one.
 - **Scanning at upload** needed no server change: `scan-document` already read a document with no
   expense. The Documents page reads each upload one at a time after it is saved, shows
   "Reading your document…" on its card, and then what was read (provider · amount · date). A read
   that fails is not lost: the server reads any document it has no reading for when it is attached.
-- **Older uploads catch up by themselves** (follow-up, 2026-10-01): a saved document that was
-  never read and is on no expense is read in the background whenever the Documents page, the
-  picker or "Looks like a match" loads the library (`useCatchUpReadings`). One at a time, oldest
-  first, at most 25 a visit, stopping silently at the first failure so a down service is not hit
-  repeatedly; the next visit tries again. An upload claims its own files first, so no file is read
-  twice. Documents already on an expense are left to Scan / attach, since they are never matches.
-- **Not done:** the library loaded for matching is cut at the newest 1,000 documents.
+- **Older uploads catch up on the Documents page** (`useCatchUpReadings`): a saved document never
+  read and on no expense is read in the background, one at a time, oldest first, at most 25 a
+  visit. The first failure ends it for the visit, silently; a reload tries again. Uploads claim
+  their own files so nothing is read twice, and those do not count toward the 25.
+- **One list everywhere:** the Documents page, the picker and the offer read the same query
+  (`useDocumentLibrary`), with each document's expenses embedded rather than fetched separately.
+- **Not done:** the library — and since 2026-10-02 the Documents page, which reads it — is cut at
+  the newest 1,000 documents.
 
 Slice 3a notes, for whoever builds 3b and 4:
 

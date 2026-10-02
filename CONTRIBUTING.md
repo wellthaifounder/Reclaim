@@ -298,7 +298,7 @@ const { data } = await supabase.from("expenses").select("*");
 ### Unit Tests
 
 - Write unit tests for utility functions
-- Use Vitest for testing
+- Use Node's built-in test runner (`node:test`); tests live beside the code as `*.test.ts`
 - Aim for >80% coverage on business logic
 
 ### Integration Tests
@@ -317,9 +317,7 @@ const { data } = await supabase.from("expenses").select("*");
 ### Running Tests
 
 ```bash
-npm run test          # Run all tests
-npm run test:watch    # Watch mode
-npm run test:coverage # Coverage report
+npm test              # Run all tests (node --test src/lib/*.test.ts)
 ```
 
 ## Pull Request Process

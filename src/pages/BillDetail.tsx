@@ -76,7 +76,9 @@ export default function BillDetail() {
   const [activeTab, setActiveTab] = useState("overview");
   const [newFiles, setNewFiles] = useState<UploadedFile[]>([]);
   const [isAnalyzing] = useState(false);
-  const [choosing, setChoosing] = useState(false);
+  // The picker: null when closed, else the documents it opens with ticked --
+  // none from "Choose from Documents", the matches from the offer's Review.
+  const [choosing, setChoosing] = useState<string[] | null>(null);
   const scanAttached = useScanAttached();
   const documentsRef = useRef<HTMLDivElement>(null);
   const [formData, setFormData] = useState({
@@ -405,17 +407,16 @@ export default function BillDetail() {
                         });
                       }}
                     />
-                    {/* S4, as in the dialog: a saved document that clearly
-                      matches is offered here, beside the label. */}
-                    {receipts?.length === 0 && (
-                      <LikelyMatchOffer
-                        invoiceId={bill.id}
-                        onAttached={(receiptIds) => {
-                          refreshDocuments();
-                          scanAttached(receiptIds, [bill.id]);
-                        }}
-                      />
-                    )}
+                    {/* S4, as in the dialog: saved documents that look like
+                      the proof are offered here, beside the label. */}
+                    <LikelyMatchOffer
+                      invoiceId={bill.id}
+                      onAttached={(receiptIds) => {
+                        refreshDocuments();
+                        scanAttached(receiptIds, [bill.id]);
+                      }}
+                      onReview={setChoosing}
+                    />
                   </>
                 }
               />
@@ -639,24 +640,10 @@ export default function BillDetail() {
                   {/* S1: reuse a document already on file, here as well as in
                       the dialog, so the two surfaces offer the same ways in. */}
                   {!isNewBill && id && (
-                    <>
-                      <Button
-                        variant="outline"
-                        onClick={() => setChoosing(true)}
-                      >
-                        <FolderOpen className="h-4 w-4 mr-2" />
-                        Choose from Documents
-                      </Button>
-                      <AttachDocumentDialog
-                        invoiceIds={[id]}
-                        open={choosing}
-                        onOpenChange={setChoosing}
-                        onAttached={(receiptIds) => {
-                          refreshDocuments();
-                          scanAttached(receiptIds, [id]);
-                        }}
-                      />
-                    </>
+                    <Button variant="outline" onClick={() => setChoosing([])}>
+                      <FolderOpen className="h-4 w-4 mr-2" />
+                      Choose from Documents
+                    </Button>
                   )}
 
                   <div className="space-y-2">
@@ -705,6 +692,21 @@ export default function BillDetail() {
           </Card>
         </div>
       </div>
+
+      {/* Outside the tabs: an inactive tab's content is not rendered, and the
+          offer's Review opens the picker from the Overview (S4). */}
+      {!isNewBill && id && (
+        <AttachDocumentDialog
+          invoiceIds={[id]}
+          open={choosing !== null}
+          onOpenChange={(open) => !open && setChoosing(null)}
+          preselected={choosing ?? undefined}
+          onAttached={(receiptIds) => {
+            refreshDocuments();
+            scanAttached(receiptIds, [id]);
+          }}
+        />
+      )}
     </AuthenticatedLayout>
   );
 }

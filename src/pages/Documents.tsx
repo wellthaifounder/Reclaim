@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -34,19 +35,12 @@ import { useScanDocument } from "@/hooks/useDocumentScan";
 import {
   claimForReading,
   useCatchUpReadings,
+  useDocumentLibrary,
   type LibraryDocument,
 } from "@/hooks/useDocumentLibrary";
-interface Receipt {
-  id: string;
-  file_path: string;
-  file_name: string | null;
-  file_type: string;
-  document_type: string | null;
-  description: string | null;
-  uploaded_at: string;
-  /** What the scan read (SUBSTANTIATE_SPEC S6), once it has. */
-  scan: LibraryDocument["scan"];
-}
+
+/** A saved document, with what the scan read and the expenses it backs. */
+type Receipt = LibraryDocument;
 
 /** A file chosen in the upload panel but not yet sent to storage. */
 interface PendingUpload {
@@ -55,14 +49,14 @@ interface PendingUpload {
   description?: string;
 }
 const Documents = () => {
-  const [receipts, setReceipts] = useState<Receipt[]>([]);
-  const [filteredReceipts, setFilteredReceipts] = useState<Receipt[]>([]);
-  // How many expenses each document is attached to, via receipt_invoices.
-  // A document with no entry here is unattached.
-  const [attachedCounts, setAttachedCounts] = useState<Map<string, number>>(
-    new Map(),
-  );
-  const [loading, setLoading] = useState(true);
+  // The same list "Choose from Documents" and "Looks like a match" read
+  // (useDocumentLibrary), so the three never disagree. Every change below
+  // invalidates ["documents"] rather than reloading by hand.
+  const queryClient = useQueryClient();
+  const library = useDocumentLibrary();
+  const loading = library.isLoading;
+  const refreshDocuments = () =>
+    void queryClient.invalidateQueries({ queryKey: ["documents"] });
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedType, setSelectedType] = useState<string>("all");
   const [editingReceipt, setEditingReceipt] = useState<Receipt | null>(null);
@@ -71,8 +65,9 @@ const Documents = () => {
   const [uploading, setUploading] = useState(false);
   const scan = useScanDocument();
   // Uploads from before reading at upload existed are read in the background
-  // (S6), and the cards refreshed once any has been.
-  useCatchUpReadings(true, () => void loadReceipts({ quiet: true }));
+  // (S6). Only here: the founder ruled (2026-10-02) that reading happens while
+  // the person is looking at their documents, not when an expense is opened.
+  useCatchUpReadings();
   // Bumped after every upload attempt to remount the picker empty. It owns its
   // own file list, so clearing newFiles here would not clear what it shows.
   const [pickerKey, setPickerKey] = useState(0);
@@ -83,58 +78,15 @@ const Documents = () => {
     backs:
       { id: string; vendor: string; date: string; amount: number }[] | null;
   } | null>(null);
-  // quiet: refresh in place, without blanking the grid to "Loading" -- for
-  // the re-read after a scan, which nobody asked for and nobody waits on.
-  const loadReceipts = async ({ quiet = false } = {}) => {
-    try {
-      if (!quiet) setLoading(true);
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const user = session?.user;
-      if (!user) throw new Error("Not authenticated");
-      const [{ data, error }, { data: links, error: linksError }] =
-        await Promise.all([
-          supabase
-            .from("receipts")
-            // Columns enumerated rather than `*`: `receipts` gains columns
-            // over time and a wildcard here would start shipping them to the
-            // client the moment they land.
-            .select(
-              "id, file_path, file_name, file_type, document_type, description, uploaded_at, receipt_ocr_data(scan_status, extracted_amount, extracted_vendor, extracted_date, extracted_bill_date, extracted_service_date, extracted_service_date_end)",
-            )
-            .eq("user_id", user.id)
-            .order("uploaded_at", { ascending: false }),
-          // Attachment now lives in receipt_invoices, not receipts.invoice_id
-          // -- a document can be attached to more than one expense.
-          supabase
-            .from("receipt_invoices")
-            .select("receipt_id")
-            .eq("user_id", user.id),
-        ]);
-      if (error) throw error;
-      if (linksError) throw linksError;
-      const counts = new Map<string, number>();
-      for (const l of links ?? []) {
-        counts.set(l.receipt_id, (counts.get(l.receipt_id) ?? 0) + 1);
-      }
-      setAttachedCounts(counts);
-      setReceipts(
-        (data ?? []).map(({ receipt_ocr_data, ...r }) => {
-          const joined = receipt_ocr_data as unknown;
-          const scan = (Array.isArray(joined) ? joined[0] : joined) as
-            Receipt["scan"] | undefined;
-          return { ...r, scan: scan ?? null };
-        }),
-      );
-    } catch (error) {
-      logError("Error loading receipts", error);
-      toast.error("Failed to load documents");
-    } finally {
-      setLoading(false);
-    }
-  };
-  const filterReceipts = useCallback(() => {
+
+  useEffect(() => {
+    if (!library.error) return;
+    logError("Error loading receipts", library.error);
+    toast.error("Failed to load documents");
+  }, [library.error]);
+
+  const receipts = useMemo(() => library.data ?? [], [library.data]);
+  const filteredReceipts = useMemo(() => {
     let filtered = receipts;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
@@ -150,22 +102,15 @@ const Documents = () => {
     }
     if (selectedType !== "all") {
       if (selectedType === "unattached") {
-        filtered = filtered.filter((r) => !attachedCounts.get(r.id));
+        filtered = filtered.filter((r) => r.backs.length === 0);
       } else if (selectedType === "attached") {
-        filtered = filtered.filter((r) => attachedCounts.get(r.id));
+        filtered = filtered.filter((r) => r.backs.length > 0);
       } else {
         filtered = filtered.filter((r) => r.document_type === selectedType);
       }
     }
-    setFilteredReceipts(filtered);
-  }, [receipts, attachedCounts, searchQuery, selectedType]);
-
-  useEffect(() => {
-    loadReceipts();
-  }, []);
-  useEffect(() => {
-    filterReceipts();
-  }, [filterReceipts]);
+    return filtered;
+  }, [receipts, searchQuery, selectedType]);
 
   /**
    * Upload a batch, one file at a time, with each file's fate independent of
@@ -283,7 +228,7 @@ const Documents = () => {
     setNewFiles([]);
     setPickerKey((k) => k + 1);
     if (failures.length === 0) setShowUpload(false);
-    loadReceipts();
+    refreshDocuments();
     void readUploads(added);
   };
 
@@ -292,12 +237,12 @@ const Documents = () => {
   // attached, without a second read (S11). One at a time: nobody waits on it,
   // and a batch of bills fired at once is how the AI service's rate limit is
   // reached. A failed read is not lost -- the document is read when attached.
+  // Each read refreshes the list itself (useScanDocument invalidates it).
   const readUploads = async (receiptIds: string[]) => {
     claimForReading(receiptIds);
     for (const receiptId of receiptIds) {
       await scan.mutateAsync({ receiptId }).catch(() => undefined);
     }
-    if (receiptIds.length > 0) loadReceipts({ quiet: true });
   };
   // Deleting here is the only way a file is deleted for good -- ✕ on an
   // expense only detaches it (SUBSTANTIATE_SPEC S5) -- so it asks first, and
@@ -341,7 +286,7 @@ const Documents = () => {
         .eq("id", receiptId);
       if (dbError) throw dbError;
       toast.success("Document deleted successfully");
-      loadReceipts();
+      refreshDocuments();
     } catch (error) {
       logError("Error deleting document", error);
       toast.error("Failed to delete document");
@@ -476,7 +421,7 @@ const Documents = () => {
               <DocumentCard
                 key={receipt.id}
                 receipt={receipt}
-                attachedCount={attachedCounts.get(receipt.id) ?? 0}
+                attachedCount={receipt.backs.length}
                 onEdit={() => setEditingReceipt(receipt)}
                 onDelete={(rid) => void askDelete(rid)}
               />
@@ -546,7 +491,7 @@ const Documents = () => {
           open={!!editingReceipt}
           onOpenChange={(open) => !open && setEditingReceipt(null)}
           onSaved={() => {
-            loadReceipts();
+            refreshDocuments();
             setEditingReceipt(null);
           }}
         />
