@@ -31,7 +31,11 @@ import {
 import { Money } from "@/components/ui/money";
 import { formatDateOnly } from "@/lib/dates";
 import { useScanDocument } from "@/hooks/useDocumentScan";
-import type { LibraryDocument } from "@/hooks/useDocumentLibrary";
+import {
+  claimForReading,
+  useCatchUpReadings,
+  type LibraryDocument,
+} from "@/hooks/useDocumentLibrary";
 interface Receipt {
   id: string;
   file_path: string;
@@ -66,6 +70,9 @@ const Documents = () => {
   const [newFiles, setNewFiles] = useState<PendingUpload[]>([]);
   const [uploading, setUploading] = useState(false);
   const scan = useScanDocument();
+  // Uploads from before reading at upload existed are read in the background
+  // (S6), and the cards refreshed once any has been.
+  useCatchUpReadings(true, () => void loadReceipts({ quiet: true }));
   // Bumped after every upload attempt to remount the picker empty. It owns its
   // own file list, so clearing newFiles here would not clear what it shows.
   const [pickerKey, setPickerKey] = useState(0);
@@ -286,6 +293,7 @@ const Documents = () => {
   // and a batch of bills fired at once is how the AI service's rate limit is
   // reached. A failed read is not lost -- the document is read when attached.
   const readUploads = async (receiptIds: string[]) => {
+    claimForReading(receiptIds);
     for (const receiptId of receiptIds) {
       await scan.mutateAsync({ receiptId }).catch(() => undefined);
     }

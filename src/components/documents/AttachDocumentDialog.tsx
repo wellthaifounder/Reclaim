@@ -27,6 +27,7 @@ import { format } from "date-fns";
 import { documentTypeLabel } from "@/lib/documentTypes";
 import {
   useAttachDocuments,
+  useCatchUpReadings,
   usePickableDocuments,
   useThumbnailUrls,
   documentName,
@@ -86,6 +87,8 @@ export const AttachDocumentDialog = ({
     open,
   );
   const attach = useAttachDocuments();
+  // Older uploads were never read, so could never rank as likely (S6).
+  useCatchUpReadings(open);
   const thumbnails = useThumbnailUrls(open ? [...matches, ...rest] : []);
 
   useEffect(() => {

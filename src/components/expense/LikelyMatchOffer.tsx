@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { logError } from "@/utils/errorHandler";
 import {
   useAttachDocuments,
+  useCatchUpReadings,
   useClearMatch,
   useThumbnailUrls,
   documentName,
@@ -36,6 +37,8 @@ export function LikelyMatchOffer({
   onAttached,
 }: LikelyMatchOfferProps) {
   const match = useClearMatch(invoiceId);
+  // Older uploads were never read, so could never be offered (S6).
+  useCatchUpReadings();
   const thumbnails = useThumbnailUrls(match ? [match] : []);
   const attach = useAttachDocuments();
   const [attaching, setAttaching] = useState(false);

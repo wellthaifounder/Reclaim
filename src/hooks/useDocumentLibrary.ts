@@ -6,10 +6,13 @@
 // disagree about what matches. Under the ["documents"] key, which the scan and
 // every attach invalidate.
 
+import { useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useScanDocument } from "@/hooks/useDocumentScan";
 import {
   clearMatch,
+  documentsToCatchUp,
   rankForPicker,
   type Charge,
   type MatchableScan,
@@ -154,6 +157,64 @@ export function useClearMatch(invoiceId: string) {
     .filter((d) => !d.invoiceIds.includes(invoiceId))
     .map((d) => ({ ...d, attachedElsewhere: d.invoiceIds.length }));
   return clearMatch(candidates, charge.data ?? null);
+}
+
+// Documents already tried this visit, and whether a catch-up is under way.
+// Module-level, not per component: the offer, the picker and the Documents
+// page can all be mounted at once, and must not read the same file twice.
+const caughtUp = new Set<string>();
+let catchingUp = false;
+
+/** Documents another path is reading right now (a fresh upload): the
+ *  catch-up leaves them alone, so no file is read twice. */
+export function claimForReading(receiptIds: string[]) {
+  for (const id of receiptIds) caughtUp.add(id);
+}
+
+/**
+ * Read, in the background, saved documents that were never read and are on no
+ * expense -- uploads from before reading at upload existed (S6) -- so they can
+ * be matched (S3, S4). One at a time, at most CATCH_UP_PER_SESSION a visit,
+ * stopping at the first failure: if the service is down, firing the rest only
+ * repeats the failure. A failure is silent (nobody asked for this read); the
+ * next visit tries again.
+ */
+export function useCatchUpReadings(
+  enabled = true,
+  /** Called once a catch-up has read anything, for pages that keep their own
+   *  copy of the documents. */
+  onRead?: () => void,
+) {
+  const library = useDocumentLibrary(enabled);
+  const scan = useScanDocument();
+  const onReadRef = useRef(onRead);
+  onReadRef.current = onRead;
+  const { mutateAsync } = scan;
+
+  useEffect(() => {
+    if (!enabled || catchingUp || !library.data) return;
+    const todo = documentsToCatchUp(library.data, caughtUp);
+    if (todo.length === 0) return;
+
+    catchingUp = true;
+    void (async () => {
+      let read = 0;
+      try {
+        for (const doc of todo) {
+          caughtUp.add(doc.id);
+          try {
+            await mutateAsync({ receiptId: doc.id, quiet: true });
+            read += 1;
+          } catch {
+            break;
+          }
+        }
+      } finally {
+        catchingUp = false;
+      }
+      if (read > 0) onReadRef.current?.();
+    })();
+  }, [enabled, library.data, mutateAsync]);
 }
 
 /**
