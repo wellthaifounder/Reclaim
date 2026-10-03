@@ -66,28 +66,36 @@ export function LikelyMatchOffer({
     }
   };
 
+  // Dashed and labelled "Suggested": with a thumbnail and the scan's facts it
+  // otherwise read as a document already attached, and an expense was
+  // confirmed believing it had proof it did not.
+  const suggested = (
+    <p className="text-xs font-semibold uppercase tracking-wide text-primary">
+      Suggested &middot; not attached
+    </p>
+  );
+
   return (
     // Wraps on a phone: the buttons drop below the name rather than squeeze it.
-    <div className="flex flex-wrap items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 p-3">
+    <div className="flex flex-wrap items-center gap-3 rounded-lg border border-dashed border-primary/60 bg-primary/5 p-3">
       {single ? (
         <>
           <DocumentThumbnail url={thumbnails?.get(single.file_path)} />
           <div className="min-w-0 flex-1 basis-48">
-            <p className="text-sm">
-              <span className="text-muted-foreground">
-                Looks like a match:{" "}
-              </span>
-              <span className="font-medium break-words">
-                {documentName(single)}
-              </span>
+            {suggested}
+            <p className="text-sm font-medium break-words">
+              {documentName(single)}
             </p>
             <ScannedFacts doc={single} />
           </div>
         </>
       ) : (
-        <p className="min-w-0 flex-1 basis-48 text-sm">
-          {matches.length} saved documents look like a match
-        </p>
+        <div className="min-w-0 flex-1 basis-48">
+          {suggested}
+          <p className="text-sm">
+            {matches.length} saved documents look like a match
+          </p>
+        </div>
       )}
       <div className="ml-auto flex items-center gap-1">
         {single ? (

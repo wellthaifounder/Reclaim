@@ -53,6 +53,8 @@ type ClaimState = Database["public"]["Enums"]["expense_claim_state"];
 
 export interface LedgerExpense {
   id: string;
+  /** The name the person gave it; null shows the provider (S36). */
+  title: string | null;
   vendor: string;
   category: string;
   amount: number;
@@ -167,7 +169,7 @@ export function ExpenseLedger({
     return expenses.filter((e) => {
       if (
         q &&
-        !e.vendor.toLowerCase().includes(q) &&
+        !`${e.title ?? ""} ${e.vendor}`.toLowerCase().includes(q) &&
         !(e.patient_name ?? "").toLowerCase().includes(q) &&
         !e.category.toLowerCase().includes(q)
       ) {
@@ -242,7 +244,7 @@ export function ExpenseLedger({
       >
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
           <div className="min-w-0 flex-1">
-            <p className="truncate font-medium">{e.vendor}</p>
+            <p className="truncate font-medium">{e.title || e.vendor}</p>
             <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
               <span className="inline-flex items-center gap-1">
                 <CalendarDays className="h-3 w-3" aria-hidden="true" />

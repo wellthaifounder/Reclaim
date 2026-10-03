@@ -3,14 +3,15 @@
 // One component for the dialog and the full expense page, so the two cannot
 // drift apart (S35). Top to bottom:
 //
-//   1. The payment   -- provider, when it was paid, what was paid, and
-//                       Claiming. What the bank recorded is shown and never
-//                       edited; Claiming is the one editable part.
+//   1. The payment   -- the expense's name, when it was paid, what was paid,
+//                       and Claiming. The name is the person's to change
+//                       (S36); the date and amount the bank recorded are not.
 //   2. `documents`   -- a slot the host fills, so Documents sits between the
 //                       payment and the questions it answers.
-//   3. Date of care  -- pre-filled with the payment date, saved as it changes.
-//   4. Who for       -- the family list with "You" pre-selected.
-//   5. Tags          -- always visible.
+//   3. Provider      -- pre-filled from the transaction, editable (S36).
+//   4. Date of care  -- pre-filled with the payment date, saved as it changes.
+//   5. Who for       -- the family list with "You" pre-selected.
+//   6. Tags, Notes   -- always visible.
 //
 // Every field already holds a sensible value before it is touched; the work is
 // correcting exceptions. Nothing is explained unless something is wrong, and
@@ -32,6 +33,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Money } from "@/components/ui/money";
@@ -67,11 +69,16 @@ function scannedFrom(source: Json | null | undefined): string | null {
 
 export interface SubstantiationPanelProps {
   invoiceId: string;
-  /** The provider -- the bank's text until a document names them (S12).
-   *  Shown, never edited here. */
+  /** The provider -- the bank's text until a document or the person names
+   *  them (S12, S36). */
   vendor: string;
-  /** The name as it first arrived, kept when a document replaced it (S12). */
+  /** The name as it first arrived, kept when the provider was replaced (S12). */
   vendorOriginal?: string | null;
+  /** Who set the provider: null (the bank), a person, or a document (S9). */
+  vendorSource?: Json | null;
+  /** The expense's own name; null shows the provider instead (S36). */
+  title?: string | null;
+  notes?: string | null;
   paidDate: string;
   amountPaid: number;
   /** `not_reimbursable` marks a charge paid with the HSA card itself (S16). */
@@ -100,7 +107,8 @@ export interface SubstantiationPanelProps {
   hideHeader?: boolean;
 }
 
-type SavedField = "claim" | "date" | "patient" | "tags";
+type SavedField =
+  "name" | "provider" | "claim" | "date" | "patient" | "tags" | "notes";
 
 /** The small confirmation beside a field that just saved (S22). */
 function Saved({ show }: { show: boolean }) {
@@ -156,6 +164,9 @@ export function SubstantiationPanel({
   invoiceId,
   vendor,
   vendorOriginal,
+  vendorSource,
+  title,
+  notes,
   paidDate,
   amountPaid,
   claimState,
@@ -184,6 +195,7 @@ export function SubstantiationPanel({
     members.map((m) => `${m.id}:${m.name}`).join(","),
   );
   // A marker only while the document it came from is still attached.
+  const providerNoun = documentNouns[scannedFrom(vendorSource) ?? ""];
   const dateNoun = documentNouns[scannedFrom(serviceDateSource) ?? ""];
   const patientNoun = documentNouns[scannedFrom(patientSource) ?? ""];
 
@@ -254,6 +266,77 @@ export function SubstantiationPanel({
       return false;
     }
   };
+
+  // ── Provider (S36) ──────────────────────────────────────────────────────
+  // Pre-filled with whoever the transaction or a document named. Typed here it
+  // is the person's, so a later scan leaves it alone (S9); the bank's text is
+  // kept as vendor_original, the link back to the statement (S12).
+  const [provider, setProvider] = useState(vendor);
+  const [providerError, setProviderError] = useState<string | null>(null);
+  const providerSaver = useAutosave(async (next: string) => {
+    if (next === vendor) return;
+    const ok = await save({
+      vendor: next,
+      vendor_source: BY_PERSON,
+      ...(vendorOriginal ? {} : { vendor_original: vendor }),
+    });
+    if (ok) flash("provider");
+  });
+
+  const onProviderChange = (raw: string) => {
+    setProvider(raw);
+    if (!raw.trim()) {
+      providerSaver.cancel();
+      setProviderError("Provider can’t be blank.");
+      return;
+    }
+    setProviderError(null);
+    providerSaver.schedule(raw.trim());
+  };
+
+  useEffect(() => {
+    if (providerSaver.hasPending()) return;
+    setProvider(vendor);
+    setProviderError(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vendor]);
+
+  // ── Name (S36) ──────────────────────────────────────────────────────────
+  // With no name of its own, the field shows the provider and keeps following
+  // it. Cleared, it goes back to that.
+  const [name, setName] = useState(title ?? vendor);
+  const nameSaver = useAutosave(async (next: string) => {
+    const stored = next === "" ? null : next;
+    if (stored === (title ?? null)) return;
+    // Typed back to exactly the provider: nothing of its own to keep.
+    if (title == null && stored === provider.trim()) return;
+    if (await save({ title: stored })) flash("name");
+  });
+
+  const onNameChange = (raw: string) => {
+    setName(raw);
+    nameSaver.schedule(raw.trim().slice(0, 120));
+  };
+
+  useEffect(() => {
+    if (nameSaver.hasPending()) return;
+    setName(title ?? provider);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [title, provider]);
+
+  // ── Notes (S36) ─────────────────────────────────────────────────────────
+  const [noteText, setNoteText] = useState(notes ?? "");
+  const notesSaver = useAutosave(async (next: string) => {
+    const stored = next.trim() === "" ? null : next;
+    if (stored === (notes ?? null)) return;
+    if (await save({ notes: stored })) flash("notes");
+  }, 900);
+
+  useEffect(() => {
+    if (notesSaver.hasPending()) return;
+    setNoteText(notes ?? "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notes]);
 
   // ── Claiming ────────────────────────────────────────────────────────────
   const claimSaver = useAutosave(async (amount: number) => {
@@ -392,20 +475,29 @@ export function SubstantiationPanel({
     <>
       {/* 1. The payment. */}
       <div className="rounded-lg border bg-muted/40 p-4 space-y-3">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <p className="font-medium truncate">{vendor}</p>
-            {/* S12: the provider's name leads; the bank's text stays, small,
-                as the link back to the statement. */}
-            {vendorOriginal && vendorOriginal !== vendor && (
-              <p className="truncate text-xs text-muted-foreground">
-                {vendorOriginal}
-              </p>
-            )}
-            <p className="text-sm text-muted-foreground">
-              Paid {formatDateOnly(paidDate)}
-            </p>
-          </div>
+        {/* The name on a line of its own, so a phone never squeezes it
+            against the amount. */}
+        <div className="flex items-center gap-2">
+          <Label htmlFor="expense-name" className="text-sm">
+            Name
+          </Label>
+          <Input
+            id="expense-name"
+            value={name}
+            maxLength={120}
+            onChange={(e) => onNameChange(e.target.value)}
+            onBlur={() => {
+              nameSaver.flush();
+              if (!name.trim()) setName(provider);
+            }}
+            className="h-9 min-w-0 flex-1 font-medium"
+          />
+          <Saved show={saved === "name"} />
+        </div>
+        <div className="flex items-baseline justify-between gap-4">
+          <p className="text-sm text-muted-foreground">
+            Paid {formatDateOnly(paidDate)}
+          </p>
           <Money
             value={amountPaid}
             className="text-lg font-semibold shrink-0"
@@ -472,7 +564,41 @@ export function SubstantiationPanel({
       {/* 2. Documents, placed by the host. */}
       {documents}
 
-      {/* 3. Date of care. */}
+      {/* 3. Provider. */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <Label htmlFor="subst-provider">Provider</Label>
+          <FromDocument noun={providerNoun} />
+          <Saved show={saved === "provider"} />
+        </div>
+        <Input
+          id="subst-provider"
+          value={provider}
+          maxLength={200}
+          onChange={(e) => onProviderChange(e.target.value)}
+          onBlur={() => {
+            providerSaver.flush();
+            if (!provider.trim()) {
+              setProvider(vendor);
+              setProviderError(null);
+            }
+          }}
+          className="max-w-sm"
+          aria-invalid={!!providerError}
+        />
+        {/* S12: the bank's text stays, small, as the link back to the
+            statement. */}
+        {vendorOriginal && vendorOriginal !== provider.trim() && (
+          <p className="truncate text-xs text-muted-foreground">
+            {vendorOriginal}
+          </p>
+        )}
+        {providerError && (
+          <p className="text-sm text-destructive">{providerError}</p>
+        )}
+      </div>
+
+      {/* 4. Date of care. */}
       <div className="space-y-2">
         <div className="flex items-center gap-2">
           <Label htmlFor="service-start">Date of care</Label>
@@ -542,7 +668,7 @@ export function SubstantiationPanel({
 
       <Separator />
 
-      {/* 4. Who it was for. */}
+      {/* 5. Who it was for. */}
       <div className="space-y-2">
         <div className="flex items-center gap-2">
           <Label htmlFor="subst-patient">Who was it for?</Label>
@@ -586,7 +712,7 @@ export function SubstantiationPanel({
 
       <Separator />
 
-      {/* 5. Tags -- visible, not folded away behind "More" (S21). */}
+      {/* 6. Tags -- visible, not folded away behind "More" (S21). */}
       <div className="space-y-2">
         <div className="flex items-center gap-2">
           <Label htmlFor="tag-input">Tags</Label>
@@ -676,6 +802,25 @@ export function SubstantiationPanel({
             ))}
           </div>
         )}
+      </div>
+
+      {/* 7. Notes -- whatever context the person wants to keep (S36). */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <Label htmlFor="subst-notes">Notes</Label>
+          <Saved show={saved === "notes"} />
+        </div>
+        <Textarea
+          id="subst-notes"
+          value={noteText}
+          rows={3}
+          maxLength={2000}
+          onChange={(e) => {
+            setNoteText(e.target.value);
+            notesSaver.schedule(e.target.value);
+          }}
+          onBlur={notesSaver.flush}
+        />
       </div>
 
       {footer && (

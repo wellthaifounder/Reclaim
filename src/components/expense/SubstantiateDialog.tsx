@@ -9,8 +9,9 @@
 // component the full expense page uses, so the two surfaces cannot drift apart
 // (SUBSTANTIATE_SPEC S35). In the order the work happens:
 //
-//   1. The payment         -- provider, when paid, the amount, and Claiming.
-//                             What the bank recorded is shown, never edited.
+//   1. The payment         -- the name, when paid, the amount, and Claiming.
+//                             The date and amount the bank recorded are
+//                             shown, never edited.
 //   2. Documents           -- attach a file, or reuse one already on file
 //                             (DocumentAttachOptions, S1/S2), or take the
 //                             saved one that clearly matches the charge
@@ -19,8 +20,9 @@
 //                             (S7): the scan fills the fields below where
 //                             they are blank or still a default, and never
 //                             overwrites what the person entered (S9).
-//   3. Date of care, who it was for, tags -- every field already holds a
-//                             sensible value and saves as it changes.
+//   3. Provider, date of care, who it was for, tags, notes -- every field
+//                             already holds a sensible value and saves as it
+//                             changes.
 //   4. The decision        -- pinned in the footer: Confirm eligible / Not
 //                             eligible (ExpenseDecision, S30-S33). Opened from
 //                             the Substantiate queue, either button moves
@@ -101,7 +103,7 @@ export function SubstantiateDialog({
       const { data, error } = await supabase
         .from("invoices")
         .select(
-          "id, vendor, vendor_original, amount, amount_paid, date, service_date, service_date_end, service_date_source, patient_id, patient_source, reimbursable_amount, claim_state, eligibility_state, documentation_state, mileage_miles, mileage_rate, mileage_trips, mileage_parking_tolls, pub_502_rules(name, eligibility_status)",
+          "id, title, notes, vendor, vendor_original, vendor_source, amount, amount_paid, date, service_date, service_date_end, service_date_source, patient_id, patient_source, reimbursable_amount, claim_state, eligibility_state, documentation_state, mileage_miles, mileage_rate, mileage_trips, mileage_parking_tolls, pub_502_rules(name, eligibility_status)",
         )
         .eq("id", expenseId!)
         .single();
@@ -243,13 +245,19 @@ export function SubstantiateDialog({
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : (
-          <div className="flex-1 overflow-y-auto px-6 pb-6">
+          // Keyed on the expense so the queue's next one opens at the top. Kept
+          // where the last one was scrolled to, the next expense's name sat
+          // out of view and it read as the same expense with its documents
+          // gone.
+          <div key={expense.id} className="flex-1 overflow-y-auto px-6 pb-6">
             <SubstantiationPanel
               hideHeader
-              key={expense.id}
               invoiceId={expense.id}
               vendor={expense.vendor}
               vendorOriginal={expense.vendor_original}
+              vendorSource={expense.vendor_source}
+              title={expense.title}
+              notes={expense.notes}
               paidDate={expense.date}
               amountPaid={amountPaid}
               claimState={expense.claim_state}
@@ -270,6 +278,11 @@ export function SubstantiateDialog({
                   queryKey: ["substantiate-expense"],
                 });
                 queryClient.invalidateQueries({ queryKey: ["bills"] });
+                // The lists behind the dialog show the name (S36).
+                queryClient.invalidateQueries({
+                  queryKey: ["substantiate-queue"],
+                });
+                queryClient.invalidateQueries({ queryKey: ["all-expenses"] });
               }}
               documents={
                 <section className="space-y-3">

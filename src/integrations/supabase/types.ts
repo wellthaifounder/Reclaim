@@ -331,6 +331,7 @@ export type Database = {
           status: Database["public"]["Enums"]["invoice_status"]
           submitted_at: string | null
           submitted_record_id: string | null
+          title: string | null
           total_amount: number | null
           updated_at: string
           user_id: string
@@ -397,6 +398,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["invoice_status"]
           submitted_at?: string | null
           submitted_record_id?: string | null
+          title?: string | null
           total_amount?: number | null
           updated_at?: string
           user_id: string
@@ -463,6 +465,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["invoice_status"]
           submitted_at?: string | null
           submitted_record_id?: string | null
+          title?: string | null
           total_amount?: number | null
           updated_at?: string
           user_id?: string
