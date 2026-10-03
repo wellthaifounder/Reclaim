@@ -192,9 +192,12 @@ patient (`src/lib/substantiationRecord.ts:314`, `src/lib/claimPacket.ts:269`).
 had their own Save button, and a value typed without pressing it was lost when the dialog
 closed.
 
-| #   | Decision (added 2026-10-03)                                                                                                                                                                                                                                                                                                                         |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| S36 | Three more fields, all editable and saved as they change (S22). **Name**, at the top of the payment box: the expense's own name (`invoices.title`), showing and following the provider until one is typed. **Provider**, after Documents: pre-filled from the transaction or a document (S12); typed here it is the person's (S9). **Notes**, last. |
+| #   | Decision (added 2026-10-03)                                                                                                                                                                                                                                                                                                                                                                                              |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| S36 | Three more fields, all editable and saved as they change (S22). **Name**, at the top of the payment box: the expense's own name (`invoices.title`), showing and following the provider until one is typed. **Provider**, after Documents: pre-filled from the transaction or a document (S12); typed here it is the person's (S9). **Notes**, last, and blank until the person writes in it: the app puts nothing there. |
+
+**On S15, amended 2026-10-03.** Claiming is a plain text box that takes digits and two
+decimal places, with no up/down arrows: the founder wants the amount typed exactly, not nudged.
 
 **On S36.** The founder's call, amending S15 and §4's "the bank's record is the anchor": the
 date and amount the bank recorded stay fixed, but who was paid and what the expense is called

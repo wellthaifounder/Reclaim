@@ -335,7 +335,9 @@ serve(async (req) => {
           source: "email",
           source_email_message_id: dedupeKey,
           source_email_received_at: receivedAt,
-          notes: data.subject ? `Emailed receipt: ${data.subject}` : null,
+          // Notes are the person's and start blank (SUBSTANTIATE_SPEC S36);
+          // source: "email" already says where this came from.
+          notes: null,
         })
         .select("id")
         .single();
