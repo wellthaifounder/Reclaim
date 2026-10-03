@@ -199,17 +199,14 @@ export default function BillDetail() {
       const billData = {
         user_id: user.id,
         date: formData.date,
-        vendor: formData.vendor,
         amount: amount,
         total_amount: amount,
         category: formData.category,
-        notes: formData.notes || null,
         invoice_number: formData.invoiceNumber || null,
-        // A provider name typed here is the person's: a later scan must not
-        // replace it (SUBSTANTIATE_SPEC S9).
-        ...(bill && formData.vendor !== bill.vendor
-          ? { vendor_source: { by: "person" } }
-          : {}),
+        // Provider and notes are only written when creating: an existing
+        // expense's are edited in the substantiation panel above, which saves
+        // as you type (S36), and writing this form's copy back on Save would
+        // undo an edit made there.
         // Workstream B: is_hsa_eligible is derived from eligibility_state.
         // Ticking the box on this form IS an explicit user determination, so
         // it earns 'eligible'; unticking returns to 'unknown' rather than
@@ -224,7 +221,11 @@ export default function BillDetail() {
       if (isNewBill) {
         const { data, error } = await supabase
           .from("invoices")
-          .insert(billData)
+          .insert({
+            ...billData,
+            vendor: formData.vendor,
+            notes: formData.notes || null,
+          })
           .select()
           .single();
 
@@ -334,7 +335,9 @@ export default function BillDetail() {
             <BreadcrumbSeparator />
             <BreadcrumbItem>
               <BreadcrumbPage className="truncate max-w-[260px]">
-                {isNewBill ? "Add New Bill" : bill?.vendor || "Expense details"}
+                {isNewBill
+                  ? "Add New Bill"
+                  : bill?.title || bill?.vendor || "Expense details"}
               </BreadcrumbPage>
             </BreadcrumbItem>
           </BreadcrumbList>
@@ -361,6 +364,9 @@ export default function BillDetail() {
                 invoiceId={bill.id}
                 vendor={bill.vendor}
                 vendorOriginal={bill.vendor_original}
+                vendorSource={bill.vendor_source}
+                title={bill.title}
+                notes={bill.notes}
                 paidDate={bill.date}
                 amountPaid={Number(bill.amount_paid ?? bill.amount ?? 0)}
                 claimState={bill.claim_state}
@@ -430,7 +436,7 @@ export default function BillDetail() {
                   <CardTitle className="text-2xl">
                     {isNewBill
                       ? "Add New Bill"
-                      : bill?.vendor || "Bill Details"}
+                      : bill?.title || bill?.vendor || "Bill Details"}
                   </CardTitle>
                   <CardDescription>
                     {isNewBill
@@ -495,18 +501,20 @@ export default function BillDetail() {
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="vendor">Provider/Vendor</Label>
-                    <Input
-                      id="vendor"
-                      placeholder="e.g., City Hospital"
-                      value={formData.vendor}
-                      onChange={(e) =>
-                        setFormData({ ...formData, vendor: e.target.value })
-                      }
-                      required
-                    />
-                  </div>
+                  {isNewBill && (
+                    <div className="space-y-2">
+                      <Label htmlFor="vendor">Provider/Vendor</Label>
+                      <Input
+                        id="vendor"
+                        placeholder="e.g., City Hospital"
+                        value={formData.vendor}
+                        onChange={(e) =>
+                          setFormData({ ...formData, vendor: e.target.value })
+                        }
+                        required
+                      />
+                    </div>
+                  )}
 
                   <div className="grid gap-4 md:grid-cols-2">
                     <div className="space-y-2">
@@ -560,18 +568,20 @@ export default function BillDetail() {
                     <Label htmlFor="hsaEligible">HSA Eligible</Label>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="notes">Notes</Label>
-                    <Textarea
-                      id="notes"
-                      placeholder="Additional notes..."
-                      value={formData.notes}
-                      onChange={(e) =>
-                        setFormData({ ...formData, notes: e.target.value })
-                      }
-                      rows={4}
-                    />
-                  </div>
+                  {isNewBill && (
+                    <div className="space-y-2">
+                      <Label htmlFor="notes">Notes</Label>
+                      <Textarea
+                        id="notes"
+                        placeholder="Additional notes..."
+                        value={formData.notes}
+                        onChange={(e) =>
+                          setFormData({ ...formData, notes: e.target.value })
+                        }
+                        rows={4}
+                      />
+                    </div>
+                  )}
 
                   {/* Show HSA upgrade prompt for non-HSA users when expense is HSA-eligible */}
                   {!hasHSA &&

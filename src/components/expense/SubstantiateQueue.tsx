@@ -65,6 +65,8 @@ import { logError } from "@/utils/errorHandler";
 
 export interface QueueExpense {
   id: string;
+  /** The name the person gave it; null shows the provider (S36). */
+  title: string | null;
   vendor: string;
   amount: number;
   date: string;
@@ -187,7 +189,7 @@ export function SubstantiateQueue({
     return scoped.filter((e) => {
       if (
         q &&
-        !e.vendor.toLowerCase().includes(q) &&
+        !`${e.title ?? ""} ${e.vendor}`.toLowerCase().includes(q) &&
         !(e.patient_name ?? "").toLowerCase().includes(q)
       ) {
         return false;
@@ -374,10 +376,10 @@ export function SubstantiateQueue({
               className="mt-1 shrink-0"
               checked={selected.has(e.id)}
               onCheckedChange={(v) => toggleOne(e.id, v === true)}
-              aria-label={`Select ${e.vendor}`}
+              aria-label={`Select ${e.title || e.vendor}`}
             />
             <div className="min-w-0 flex-1">
-              <p className="truncate font-semibold">{e.vendor}</p>
+              <p className="truncate font-semibold">{e.title || e.vendor}</p>
               <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
                 <Money value={e.amount} />
                 <span className="inline-flex items-center gap-1">

@@ -122,7 +122,7 @@ export default function Substantiate() {
       const { data, error } = await supabase
         .from("invoices")
         .select(
-          `id, vendor, amount, date, patient_id, patient_name,
+          `id, title, vendor, amount, date, patient_id, patient_name,
            lifecycle_status, eligibility_state, documentation_state, confirmed_at,
            classification_confidence, classification_reasoning,
            classification_warnings,
@@ -148,6 +148,7 @@ export default function Substantiate() {
           : (row.rule ?? null);
         return {
           id: row.id as string,
+          title: (row.title as string | null) ?? null,
           vendor: row.vendor as string,
           amount: Number(row.amount),
           date: row.date as string,
@@ -191,7 +192,7 @@ export default function Substantiate() {
       const { data, error } = await supabase
         .from("invoices")
         .select(
-          `id, vendor, category, amount, date, patient_id, patient_name,
+          `id, title, vendor, category, amount, date, patient_id, patient_name,
            lifecycle_status, claim_state, reimbursed_at,
            receipt_invoices ( receipt_id )`,
         )
@@ -203,6 +204,7 @@ export default function Substantiate() {
 
       return (data ?? []).map((r) => ({
         id: r.id,
+        title: r.title,
         vendor: r.vendor,
         category: r.category,
         amount: Number(r.amount),

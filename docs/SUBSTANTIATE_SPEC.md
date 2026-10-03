@@ -192,6 +192,19 @@ patient (`src/lib/substantiationRecord.ts:314`, `src/lib/claimPacket.ts:269`).
 had their own Save button, and a value typed without pressing it was lost when the dialog
 closed.
 
+| #   | Decision (added 2026-10-03)                                                                                                                                                                                                                                                                                                                         |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| S36 | Three more fields, all editable and saved as they change (S22). **Name**, at the top of the payment box: the expense's own name (`invoices.title`), showing and following the provider until one is typed. **Provider**, after Documents: pre-filled from the transaction or a document (S12); typed here it is the person's (S9). **Notes**, last. |
+
+**On S36.** The founder's call, amending S15 and §4's "the bank's record is the anchor": the
+date and amount the bank recorded stay fixed, but who was paid and what the expense is called
+are the person's. A name is not a provider — three instalments to one orthodontist all read
+"Smile Dental" — so the lists and the expense page show the name, while the Medical Expense
+Record keeps citing the provider. Editing the provider keeps the bank's text in
+`vendor_original`, still shown small under it as the link back to the statement. The full
+expense page's older Overview form no longer edits provider or notes for an existing expense:
+two places to edit one field is what S22 removed for the date.
+
 ### 2.4 Messages
 
 | #   | Decision                                                                                                                                                                                                                                                                                                                                                                  |
@@ -419,6 +432,7 @@ that have already been scanned, so it comes last.
   until then.
 - **Attaching a matched document automatically.** S4 suggests; the user decides.
 - **Editing what was paid, or when, from the dialog.** The bank's record is the anchor (§1).
+  Who was paid and the expense's name are editable (S36).
 
 ---
 
