@@ -35,7 +35,6 @@ import { ThemeToggleGroup } from "@/components/ThemeToggle";
 import { FamilyRosterCard } from "@/components/family/FamilyRosterCard";
 import { useRecomputeTiming } from "@/hooks/useHSAEligibility";
 import { SubscriptionManagement } from "@/components/settings/SubscriptionManagement";
-import { EmailForwardingCard } from "@/components/settings/EmailForwardingCard";
 import { useSetOnboardingComplete } from "@/hooks/useOnboardingStatus";
 import {
   Dialog,
@@ -116,7 +115,6 @@ const SECTION_FOR_ANCHOR: Record<string, SettingsSection> = {
   "hsa-accounts": "household",
   "bank-accounts": "banks",
   "categorization-rules": "banks",
-  "email-forwarding": "banks",
   appearance: "app",
   install: "app",
   notifications: "app",
@@ -781,9 +779,15 @@ const Settings = () => {
               <CategorizationRulesManager />
             </div>
 
-            <div id="email-forwarding" className="scroll-mt-20">
-              <EmailForwardingCard />
-            </div>
+            {/* Email forwarding is hidden for v1 (founder decision,
+                2026-10-06). The receiving domain and Resend keys were never
+                set up in production, so the card handed people an address
+                that bounced. And as built, each forwarded email creates a new
+                expense -- for anyone with a connected bank, a duplicate of the
+                charge already there. It returns once forwarded attachments
+                land in Documents and are matched like any other (S3, S4).
+                EmailForwardingCard and inbound-email-webhook are kept for
+                that. */}
           </TabsContent>
 
           <TabsContent value="app" className="space-y-6">
