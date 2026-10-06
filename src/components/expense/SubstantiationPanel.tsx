@@ -533,15 +533,21 @@ export function SubstantiationPanel({
               </Label>
               <div className="flex items-center gap-1">
                 <span className="text-sm text-muted-foreground">$</span>
+                {/* Text, not a number field: no up/down arrows nudging the
+                    amount by a cent, and no scroll wheel changing it by
+                    accident. inputMode still brings up the number pad. */}
                 <Input
                   id="reimbursable"
-                  type="number"
+                  type="text"
                   inputMode="decimal"
-                  step="0.01"
-                  min="0"
-                  max={amountPaid}
+                  autoComplete="off"
                   value={claim}
-                  onChange={(e) => onClaimChange(e.target.value)}
+                  onChange={(e) => {
+                    // Digits and up to two decimal places; anything else is
+                    // ignored as it is typed. A pasted "$1,234.50" is cleaned.
+                    const raw = e.target.value.replace(/[$,\s]/g, "");
+                    if (/^\d*\.?\d{0,2}$/.test(raw)) onClaimChange(raw);
+                  }}
                   onBlur={claimSaver.flush}
                   className="w-[130px]"
                   aria-invalid={!!claimError}
