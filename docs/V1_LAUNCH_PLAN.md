@@ -6,7 +6,12 @@ several were real, several were misdiagnosed, and one bug the audit never saw tu
 way (Batch 0). **Where this document and the code disagree, this document is the intent and the
 code is the gap.**
 
-Decisions are numbered **L1–L12** so they cannot be confused with the transaction review spec's
+**Amended 2026-10-09.** The founder approved a change of positioning: Reclaim leads with the
+shoebox approach (pay out of pocket, let the HSA grow, reimburse later) and setup starts with a
+receipt, not a bank. That added decisions L13–L18 and Batches 1b and 8, changed L5, L7, L9 and L12,
+and reverses Step 0 of `.claude/plans/bank-sync-workflow-spec.md`.
+
+Decisions are numbered **L1–L18** so they cannot be confused with the transaction review spec's
 D-numbers or the Substantiate spec's S-numbers. Cite them in code comments.
 
 Each batch is sized for one working session, ends in its own pull request, and is shown working
@@ -22,39 +27,48 @@ lock and mileage all worked under audit. What breaks is the **start** (signup an
 the numbers. Separately, bank sync has been fetching only 90 days of history instead of two years,
 and the paid plans unlock nothing.
 
-| #   | Batch                        | What a user gets                                                                     |
-| --- | ---------------------------- | ------------------------------------------------------------------------------------ |
-| 0   | Full bank history            | Connecting a bank finds up to two years of spending, not three months                |
-| 1   | Setup works                  | Setup finishes instead of looping; one HSA date everywhere; dates show the right day |
-| 2   | Claims can finish            | An "I got paid" button; every screen agrees on where a claim stands                  |
-| 3   | Signup and save errors       | Clear errors next to the field; a real "check your email" screen                     |
-| 4   | Every expense gets checked   | Nothing is confirmed without its IRS-category check                                  |
-| 5   | Copy and pricing consistency | Every screen describes the product and the plans the same, true way                  |
-| 6   | Paid plans                   | Checkout works; bank sync, claims and exports are paid; a free look-back sells it    |
-| 7   | Backfill for older years     | Years of old receipts become expenses without typing each one in                     |
+| #   | Batch                        | What a user gets                                                                        |
+| --- | ---------------------------- | --------------------------------------------------------------------------------------- |
+| 0   | Full bank history            | Connecting a bank finds up to two years of spending, not three months                   |
+| 1   | Setup works                  | Setup finishes instead of looping; one HSA date everywhere; dates show the right day    |
+| 1b  | Receipt-first setup          | Setup starts with a first receipt; the bank is optional and comes last                  |
+| 2   | Claims can finish            | An "I got paid" button; every screen agrees on where a claim stands                     |
+| 3   | Signup and save errors       | Clear errors next to the field; a real "check your email" screen                        |
+| 4   | Every expense gets checked   | Nothing is confirmed without its IRS-category check, or at the billed amount by mistake |
+| 5   | Copy and pricing consistency | Every screen describes the product and the plans the same, true way                     |
+| 6   | Paid plans                   | Checkout works; bank sync, claims and exports are paid; a free look-back sells it       |
+| 7   | Backfill for older years     | Years of old receipts become expenses without typing each one in                        |
+| 8   | Landing page                 | The shoebox pitch up front, with real screenshots of the record and the export          |
 
 Waiting on the domain and brand decision (deferred since 2026-09-08), so **not** in any batch:
-auth emails sent from your own domain with Reclaim branding, the contact address on the Privacy and
-Terms pages (currently the founder's Gmail), and the landing-page redesign.
+auth emails sent from your own domain with Reclaim branding, and the contact address on the Privacy
+and Terms pages (currently the founder's Gmail). The landing page no longer waits: its positioning
+is decided (L13) and only the address it lives at is open.
 
 ---
 
 ## 2. Decisions
 
-| #   | Decision                                                                                                                                                                                                                                                                     |
-| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| L1  | **Ask Plaid for the full history.** Every new bank connection requests 730 days, the most Plaid allows. Copy says "up to two years, depending on your bank".                                                                                                                 |
-| L2  | **One HSA opening date.** `profiles.hsa_opened_date` is the date that counts. Onboarding, the Settings profile field and the Settings HSA-account form all write it.                                                                                                         |
-| L3  | **"I got paid" closes a claim by hand.** It shows the claim total, pre-filled and editable. If less arrived, the shortfall goes back to "ready to claim". Deposit matching from a connected bank stays and is offered first.                                                 |
-| L4  | **Paid:** ongoing bank sync, the claim packet, the yearly Medical Expense Record, the tax export, and any other finished deliverable.                                                                                                                                        |
-| L5  | **Free one-time bank look-back.** A free user connects a bank, Reclaim pulls the history and shows "We found N likely medical charges, $X". Keeping the connection syncing, and acting on what was found, is paid.                                                           |
-| L6  | **Your own records are always yours.** Downloading your own documents and a plain list of your expenses is free forever, including after cancelling. Only the finished deliverables are paid.                                                                                |
-| L7  | **Annual billing.** Monthly and annual prices. A free user can keep adding expenses and documents indefinitely and pays when they want a deliverable, which suits someone saving receipts to claim years from now.                                                           |
-| L8  | **One paid plan.** Free and one paid plan. Premium is withdrawn until it has real features: priority support, custom reports and API access are advertised and none exist.                                                                                                   |
-| L9  | **Free AI reads have a monthly allowance.** Receipt reading and the eligibility check each cost an AI call; free accounts get a monthly allowance, paid accounts are unlimited. The backfill in Batch 7 does not count against it (L12).                                     |
-| L10 | **Checkout is fixed before anything is locked**, or nobody can pay.                                                                                                                                                                                                          |
-| L11 | **The paywall is enforced on the server.** The claim packet is built in the browser today, so hiding a button would stop no one.                                                                                                                                             |
-| L12 | **Older years come from documents.** Bank history ends at about two years, but HSA claims have no deadline. Uploaded documents that match no existing expense become draft expenses the user confirms. Setup offers this when the HSA opened before the bank history begins. |
+| #   | Decision                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| L1  | **Ask Plaid for the full history.** Every new bank connection requests 730 days, the most Plaid allows. Copy says "up to two years, depending on your bank".                                                                                                                                                                                                                                                                                                                             |
+| L2  | **One HSA opening date.** `profiles.hsa_opened_date` is the date that counts. Onboarding, the Settings profile field and the Settings HSA-account form all write it.                                                                                                                                                                                                                                                                                                                     |
+| L3  | **"I got paid" closes a claim by hand.** It shows the claim total, pre-filled and editable. If less arrived, the shortfall goes back to "ready to claim". Deposit matching from a connected bank stays and is offered first.                                                                                                                                                                                                                                                             |
+| L4  | **Paid:** ongoing bank sync, the claim packet, the yearly Medical Expense Record, the tax export, and any other finished deliverable.                                                                                                                                                                                                                                                                                                                                                    |
+| L5  | **Free one-time bank look-back.** A free user connects a bank, Reclaim pulls the history and shows "We found N likely medical charges, $X". Keeping the connection syncing, and acting on what was found, is paid. Offered as the last, optional step of setup (L14) and from Settings.                                                                                                                                                                                                  |
+| L6  | **Your own records are always yours.** Downloading your own documents and a plain list of your expenses is free forever, including after cancelling. Only the finished deliverables are paid.                                                                                                                                                                                                                                                                                            |
+| L7  | **Annual billing.** Monthly and annual prices. A free user can keep adding expenses indefinitely, and documents up to the free limit (L16), and pays when they want a deliverable or more room.                                                                                                                                                                                                                                                                                          |
+| L8  | **One paid plan.** Free and one paid plan. Premium is withdrawn until it has real features: priority support, custom reports and API access are advertised and none exist.                                                                                                                                                                                                                                                                                                               |
+| L9  | **Free AI reads have a monthly allowance.** Receipt reading and the eligibility check each cost an AI call; free accounts get a monthly allowance, paid accounts are unlimited. For a free account the 10-document limit (L16) bounds this in practice.                                                                                                                                                                                                                                  |
+| L10 | **Checkout is fixed before anything is locked**, or nobody can pay.                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| L11 | **The paywall is enforced on the server.** The claim packet is built in the browser today, so hiding a button would stop no one.                                                                                                                                                                                                                                                                                                                                                         |
+| L12 | **Older years come from documents.** Bank history ends at about two years, but HSA claims have no deadline. Uploaded documents that match no existing expense become draft expenses the user confirms. Offered wherever the HSA opened before the earliest expense on file.                                                                                                                                                                                                              |
+| L13 | **Lead with the shoebox approach.** The pitch is long-term, audit-ready records for people who pay out of pocket and reimburse later. Finding what was already paid is the supporting line. Headline direction: "Pay now. Reimburse yourself anytime. Keep IRS-ready records the whole way." Supporting: "We'll also find what you've already paid." Two audiences: people who already shoebox (worry-free records) and people learning it (a short explanation and an easy first step). |
+| L14 | **Setup starts with a receipt.** The first step is "Add your first receipt". Connecting a bank is optional, comes last, and is framed as finding what was already paid. This reverses Step 0 of the workflow spec ("Connect first, configure second").                                                                                                                                                                                                                                   |
+| L15 | **The first setup question sets the dashboard's view.** "I already save receipts to claim later" and "I'm new to this" both select the shoebox view; "I reimburse as I go" selects the regular view. "New to this" gets one short screen explaining the approach, with a growth example calculated from `regulatoryLimits.ts` and labelled as an illustration. Changeable in Settings at any time. (Partly restores the question removed from setup on 2026-08-30.)                      |
+| L16 | **A free account stores up to 10 documents.** Past that, adding more needs the paid plan. Nothing is ever deleted, and downloading stays free (L6). Expenses without a document (mileage, bank charges) are not counted.                                                                                                                                                                                                                                                                 |
+| L17 | **The landing page shows proof.** Screenshots of a finished expense record (the eligibility check with its IRS Publication 502 citation) and of the export package (README, PDF, spreadsheet, receipts), taken from a demo account with made-up data. A section on the expenses insurance never sees (drugstore purchases, glasses and contacts, over-the-counter medicine, mileage, cash-pay visits) pointing to receipt reading and "Driving to care".                                 |
+| L18 | **Guard against claiming the billed amount.** An expense entered from a receipt has no bank payment behind it, so nothing shows what was paid after insurance. When the document read shows an insurance payment or adjustment, a problem appears beside Claiming: claim only what you paid yourself. Reported as a problem only, beside its field (S23). Not the same as S13, which flags documents that cover less than the payment.                                                   |
 
 ---
 
@@ -123,6 +137,33 @@ screens say the same thing.
 entered anywhere shows the same day everywhere; the checklist reaches 100% whichever screen the
 date was entered on.
 
+### Batch 1b — Receipt-first setup (L14, L15)
+
+**Why.** Setup opens by asking for bank credentials, which is the largest trust hurdle in the
+product and is now a paid feature (L4). The product's pitch is the shoebox (L13), and the first
+thing a shoebox holder does is put a receipt in it.
+
+**Build.** Batch 1's fixes land first, in the current flow; this batch then reorders it
+(`src/pages/Welcome.tsx`).
+
+1. **One question:** "I already save receipts to claim later" / "I'm new to this" / "I reimburse
+   as I go". Sets `reimbursement_strategy_preference` (L15).
+2. **For "new to this" only:** one short screen on how the shoebox works, with a growth example
+   calculated from `regulatoryLimits.ts` (never a typed-in IRS figure; the 2026-09-19 lesson) and
+   labelled as an illustration, not a forecast.
+3. **Add your first receipt:** camera or file, read by the scan, confirmed by the user. Skippable.
+4. **Household**, then **HSA opening date**, both unchanged.
+5. **Optional, last:** "Find what you've already paid" is the bank connection with the free
+   look-back (L5). `/onboarding/import` keeps its focused layout when reached from here.
+
+Also in this batch: amend CLAUDE.md's `<FocusedLayout>` section. It says the top bar's "Snap a
+receipt" button competes with the one screen arguing for a bank; that reasoning is now reversed.
+The layout rules themselves (setup only, always a way out, exiting completes setup) stand.
+
+**Done when.** A fresh account can finish setup having added one receipt and never been asked for
+bank credentials; the dashboard opens in the view the first answer chose; skipping at any step
+still completes setup.
+
 ### Batch 2 — Claims can finish (L3)
 
 **What's wrong.** After a claim is sent, "In a claim" on Expenses and "Submitted" on the dashboard
@@ -176,7 +217,7 @@ browser before anything is changed:
   the user can fix (`src/pages/ExpenseEntry.tsx:398`).
 - Whatever the three reproductions turn up.
 
-### Batch 4 — Every expense gets checked
+### Batch 4 — Every expense gets checked (L18)
 
 **What's wrong.** The IRS-category check runs by itself whenever a document is read (S24). An
 expense with no document, or one entered through the "add an expense" form (which uses the older
@@ -187,13 +228,23 @@ required" with no warning.
 if the check says no, the existing "Confirm anyway?" question appears. If the check itself fails,
 say so and let them confirm unclassified knowingly.
 
+**Also (L18).** With setup now starting from receipts, more expenses will have no bank payment
+behind them. A provider's bill shows what was charged, not what the patient paid after insurance.
+When the scan finds an insurance payment or adjustment on the document, show a problem beside
+Claiming so the user claims only their own share. Retail receipts (a pharmacy, an optician) show
+what was paid and raise nothing.
+
 ### Batch 5 — Copy and pricing consistency (L4, L8)
 
 Make every screen describe the product and the plans the same, true way. Written to match Batch 6.
 
+- **Positioning (L13):** wording inside the app that frames Reclaim as a one-time recovery tool
+  moves to the shoebox framing, including the dashboard's empty state and "Snap a receipt" as the
+  first action. The landing page itself is Batch 8.
+
 - **Plans:** one name for the free plan everywhere ("Starter" in Settings and Pricing, "Free Plan"
-  in the sidebar); drop the claim that receipt reading is paid; drop the unenforced "up to 50
-  expenses"; remove Premium (L8); replace "14-day free trial" with the free look-back (L5); show
+  in the sidebar); drop the claim that receipt reading is paid; replace the unenforced "up to 50
+  expenses" with the 10-document limit (L16); remove Premium (L8); replace "14-day free trial" with the free look-back (L5); show
   annual pricing (L7). (`src/components/Pricing.tsx`,
   `src/components/settings/SubscriptionManagement.tsx`, `src/components/AppSidebar.tsx`,
   `src/components/subscription/UpgradePrompt.tsx`)
@@ -230,10 +281,14 @@ failed in September for a reason still unknown.
 5. **Always yours (L6).** "Download my documents and expense list" in Settings, free, and still
    available after cancelling.
 6. **AI allowance (L9).** Count reads for free accounts; at the limit, explain and offer the
-   upgrade. Backfill reads are not counted (L12).
+   upgrade.
+7. **Document limit (L16).** A free account's eleventh document is refused on the server with an
+   upgrade offer. Existing documents stay viewable and downloadable. Nothing is deleted on
+   downgrade or cancellation.
 
 **Done when.** A free account can connect once, sees its total, cannot generate a claim or record
-(and cannot get round it by calling the database directly), can always download its own files;
+or store an eleventh document (and cannot get round any of these by calling the database
+directly), can always download its own files;
 a paid test account can do everything; checkout succeeds end to end with Stripe's test mode.
 
 ### Batch 7 — Backfill for older years (L12)
@@ -251,13 +306,32 @@ v1.1 on 2026-08-12; it is now a launch need.
   confirms each one, as everywhere else.
 - The existing match rules (`src/lib/documentMatch.ts`) run first, so a document for a charge the
   bank already delivered attaches to it rather than creating a duplicate.
-- In setup, and on the dashboard after it: if the HSA opened before the bank history begins, offer
-  "Your HSA opened in 2016, but your bank only reached back to 2024. Have older receipts? Upload
-  them." — leading to bulk upload.
-- Reads done for the backfill do not count against the free allowance (L9).
+- On the dashboard after setup: if the HSA opened before the earliest expense on file, offer
+  "Your HSA opened in 2016. Have receipts from before 2024? Upload them.", leading to bulk upload.
+- A free account's backfill stops at the 10-document limit (L16), so a real backfill is a reason
+  to upgrade.
 
 **Later, not v1:** importing old bank statements (most banks let you download them as a
 spreadsheet) to recover what was actually paid in years Plaid cannot reach.
+
+### Batch 8 — Landing page (L13, L17)
+
+Built last so the screenshots and the pricing section show finished features.
+
+- **Headline and supporting line** per L13, replacing "Connect your bank and Reclaim finds what
+  you already paid for" (`src/components/Hero.tsx`).
+- **How it works** rewritten around the shoebox: add a receipt, Reclaim checks it and keeps the
+  record, reimburse whenever you choose (`src/components/HowItWorks.tsx`).
+- **"The receipts insurance never sees are the ones you lose."** Drugstore purchases, glasses and
+  contacts, over-the-counter medicine, mileage to appointments, cash-pay visits, pointing to
+  receipt reading and "Driving to care".
+- **Screenshots** of a finished expense record and of the export package, from a demo account
+  holding made-up data only. Light and dark.
+- **Pricing section** matches Batch 6: free with 10 documents, one paid plan.
+- Tighten the spacing the audit read as blank gaps.
+
+Wording to keep honest: "IRS-ready" describes the records, not an IRS endorsement; "reimburse
+yourself anytime" holds only for care received after the HSA was opened.
 
 ---
 
@@ -268,7 +342,6 @@ Small enough to settle inside the batch that needs them:
 - Monthly and annual prices for the one paid plan (Batch 6). Today's paid price is $9.99/month and
   the pricing page advertises 20% off annually.
 - The free AI allowance — how many reads a month (Batch 6).
-- A ceiling on backfill reads, so the exemption cannot be used for unlimited free reading (Batch 7).
 - Whether the free look-back keeps the connection open for a short grace period before removing
   it, rather than removing it at once (Batch 6).
 
@@ -284,8 +357,8 @@ Audit findings that turned out not to need work:
   2026-09-19.
 - **Landing page gaps from scroll animations.** There are no scroll animations; the gaps are large
   spacing and no product imagery, which belongs to the landing redesign.
-- **"The strategy is the shoebox approach."** The product is bank-sync-first by the 2026-08-12
-  decision; the shoebox is a supported way to use it.
+- **"The strategy is the shoebox approach."** Set aside on 2026-10-08 as a guess that contradicted
+  the 2026-08-12 bank-sync-first decision; **adopted on 2026-10-09** by the founder (L13, L14).
 
 ## 6. Housekeeping
 

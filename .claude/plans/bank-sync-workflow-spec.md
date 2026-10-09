@@ -17,21 +17,27 @@ After evaluating competing HSA apps, the decision is to **rebuild the product ar
 
 The user-facing spine is three steps: **Categorize → Substantiate → Reimburse.**
 
+> **Amended 2026-10-09** (`docs/V1_LAUNCH_PLAN.md`, L13–L14): the product now _leads_ with the
+> shoebox approach and receipt capture; bank sync is an optional, paid way to find what was already
+> paid. The three-step spine, the object model and the money model below are unchanged. Where a
+> bank payment exists it is still the best evidence of what was actually paid; where it does not,
+> L18 guards against claiming a billed amount.
+
 This document defines the finalized workflow. It is the input to a subsequent in-depth codebase review and implementation plan; it deliberately describes behavior, not schema.
 
 ---
 
 ## Locked decisions
 
-| Decision                                    | Choice                                                                                                                        |
-| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| Organization model                          | Tags + rich filters + saved views + search. **No folder tree.** Auto-grouping into care events where clustering is confident. |
-| Where eligibility is decided                | **Substantiation step**, not categorization. Categorization is Medical / Non-medical only.                                    |
-| Review feed scope                           | **Likely-medical only** by default. Pre-decided transactions remain fully accessible with bulk actions and rules.             |
-| Partial reimbursement                       | **Editable reimbursable amount + transaction splitting.** No partial-payment ledger.                                          |
-| Bidirectional document→transaction matching | **Deferred to v1.1.** Expense-first in v1; manual entry covers the receipt-first case.                                        |
-| Legacy surfaces                             | **Aggressive removal.** One canonical path. The old flow does not constrain the new one.                                      |
-| Shoebox strategy                            | **First-class terminal success state**, not an incomplete one.                                                                |
+| Decision                                    | Choice                                                                                                                                            |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Organization model                          | Tags + rich filters + saved views + search. **No folder tree.** Auto-grouping into care events where clustering is confident.                     |
+| Where eligibility is decided                | **Substantiation step**, not categorization. Categorization is Medical / Non-medical only.                                                        |
+| Review feed scope                           | **Likely-medical only** by default. Pre-decided transactions remain fully accessible with bulk actions and rules.                                 |
+| Partial reimbursement                       | **Editable reimbursable amount + transaction splitting.** No partial-payment ledger.                                                              |
+| Bidirectional document→transaction matching | **Deferred to v1.1.** Expense-first in v1; manual entry covers the receipt-first case. _Brought into v1 on 2026-10-08: launch plan L12, Batch 7._ |
+| Legacy surfaces                             | **Aggressive removal.** One canonical path. The old flow does not constrain the new one.                                                          |
+| Shoebox strategy                            | **First-class terminal success state**, not an incomplete one.                                                                                    |
 
 ---
 
@@ -75,6 +81,13 @@ Rather than one mega-status enum, an expense carries three orthogonal facets. Th
 ---
 
 ## Step 0 — Connect first, configure second
+
+> [!IMPORTANT]
+> **Reversed 2026-10-09** by `docs/V1_LAUNCH_PLAN.md`, decisions L13–L16. Setup now starts with
+> a receipt; connecting a bank is optional and comes last, offered as "find what you've already
+> paid". The first setup question sets the reimbursement strategy. What follows is kept as the
+> record of the earlier design. The notes on the HSA establishment date, the family roster and
+> custodian coverage still hold.
 
 **This reorders the original step 1 and step 2, and is a proposal open to reversal.**
 
