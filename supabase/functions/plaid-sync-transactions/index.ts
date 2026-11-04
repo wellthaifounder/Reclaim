@@ -35,6 +35,7 @@ import {
   type PlaidCreds,
 } from "../_shared/plaidSync.ts";
 import { plaidBaseUrl } from "../_shared/plaidEnv.ts";
+import { PLAID_HISTORY_DAYS } from "../_shared/plaidHistory.ts";
 import Resend from "https://esm.sh/resend@2.0.0";
 
 const allowedOrigins = [
@@ -314,11 +315,12 @@ serve(async (req) => {
     const transferPairs = await detectTransfers(supabase, {
       userId: user.id,
       requestId,
-      // The initial import reaches back 18 months, so transfer detection has
-      // to sweep the same ground or the history it just pulled arrives with
-      // its card payments still counted as spending. Routine syncs keep the
-      // 45-day default: only the last few days are ever new.
-      lookbackDays: is_initial ? 550 : undefined,
+      // The initial import reaches back as far as Plaid allows (L1), so
+      // transfer detection has to sweep the same ground or the history it just
+      // pulled arrives with its card payments still counted as spending.
+      // Routine syncs keep the 45-day default: only the last few days are ever
+      // new.
+      lookbackDays: is_initial ? PLAID_HISTORY_DAYS : undefined,
     });
 
     // ── 4. Capture ────────────────────────────────────────────────────────

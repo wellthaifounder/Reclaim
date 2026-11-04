@@ -209,8 +209,8 @@ function ConnectStep({ onSkip }: { onSkip: () => void }) {
         </h1>
         <p className="text-muted-foreground">
           Connect the accounts you pay medical bills from. Reclaim reads up to
-          18 months of history and finds the healthcare spending you can still
-          reimburse yourself for.
+          two years of history, depending on your bank, and finds the healthcare
+          spending you can still reimburse yourself for.
         </p>
       </div>
 

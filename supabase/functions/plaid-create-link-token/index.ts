@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { plaidBaseUrl } from "../_shared/plaidEnv.ts";
+import { PLAID_HISTORY_DAYS } from "../_shared/plaidHistory.ts";
 
 const allowedOrigins = [
   "https://reclaim.health",
@@ -104,6 +105,9 @@ serve(async (req) => {
         },
         client_name: "Reclaim",
         products: ["transactions"],
+        // L1: without this Plaid defaults to 90 days, and the amount cannot be
+        // raised after the bank is connected.
+        transactions: { days_requested: PLAID_HISTORY_DAYS },
         country_codes: ["US"],
         language: "en",
         // Omitted entirely when there is no public URL — Plaid rejects a

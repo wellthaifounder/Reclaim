@@ -58,8 +58,8 @@ function buildWelcomeEmail(userName: string): {
     reimburse yourself for — and keeps the paper trail the IRS would want.</p>
     <p>Three steps:</p>
     <ol>
-      <li><strong>Connect your bank.</strong> Reclaim reads up to 18 months of
-      history and picks out the likely medical spending. It is read-only and
+      <li><strong>Connect your bank.</strong> Reclaim reads up to two years of
+      history, depending on your bank, and picks out the likely medical spending. It is read-only and
       never sees your bank password.</li>
       <li><strong>Confirm what's medical.</strong> You decide; nothing is
       claimed without you.</li>

@@ -61,7 +61,7 @@ export function PlaidLink({ onSuccess }: PlaidLinkProps) {
       if (error) throw error;
 
       // Reclaim Phase 2 W3: route into the historical-import flow. The
-      // /onboarding/import page kicks off the 18-month sync and renders
+      // /onboarding/import page kicks off the full-history sync and renders
       // the activation moment ("We found N transactions..."). The optional
       // onSuccess prop still fires for callers that want a side-effect
       // (refresh a list, etc.) but the user's next view is the import page.
