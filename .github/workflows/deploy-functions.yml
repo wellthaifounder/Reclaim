@@ -131,7 +131,10 @@ jobs:
             fi
 
             echo "── deploying $fn ${args:+($args)}"
-            if ! supabase functions deploy "$fn" --project-ref "$PROJECT_ID" $args; then
+            # --yes: the CLI now asks "Deploy 1 Function to production?" and, with
+            # no terminal to answer, refuses and changes nothing. That silently
+            # blocked every deploy on 2026-11-03 (the L1 / Batch 0 merge).
+            if ! supabase functions deploy "$fn" --project-ref "$PROJECT_ID" --yes $args; then
               failed="$failed $fn"
             fi
           done <<< "${{ steps.pick.outputs.targets }}"
