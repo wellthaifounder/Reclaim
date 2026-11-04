@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { logError } from "@/utils/errorHandler";
 import { useAuthUser } from "@/hooks/useAuthUser";
 import { useReimbursementStrategy } from "@/hooks/useReimbursementStrategy";
+import { remainingOf } from "@/lib/claimClose";
 
 export interface AttentionSummary {
   totalCount: number;
@@ -90,7 +91,10 @@ export function useAttentionItems(): AttentionSummary {
           // badge needs; see readyToClaim.
           supabase
             .from("invoices")
-            .select("amount", { count: "exact" })
+            .select(
+              "amount, amount_paid, reimbursable_amount, reimbursed_amount",
+              { count: "exact" },
+            )
             .eq("user_id", userId!)
             .eq("eligibility_state", "eligible")
             .eq("claim_state", "unclaimed"),
@@ -103,8 +107,11 @@ export function useAttentionItems(): AttentionSummary {
       if (hsaClaimableResult.error)
         logError("Attention: HSA query", hsaClaimableResult.error);
 
+      // What is still owed, not the billed amount. After a claim is paid
+      // short (L3) only the remainder is claimable, and the Reimburse page
+      // already counts it that way.
       const hsaClaimable = (hsaClaimableResult.data || []).reduce(
-        (sum, inv) => sum + Number(inv.amount),
+        (sum, inv) => sum + remainingOf(inv),
         0,
       );
 

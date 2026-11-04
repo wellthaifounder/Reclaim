@@ -58,6 +58,11 @@ export interface LedgerExpense {
   vendor: string;
   category: string;
   amount: number;
+  /**
+   * What is still owed (reimbursable less reimbursed). Equals `amount` until a
+   * claim is paid short (L3), when only the remainder is ready to claim.
+   */
+  remaining: number;
   date: string;
   patient_id: string | null;
   patient_name: string | null;
@@ -201,7 +206,9 @@ export function ExpenseLedger({
     for (const e of visible) {
       total += e.amount;
       if (e.lifecycle_status === "eligible" && e.claim_state === "unclaimed") {
-        ready += e.amount;
+        // What is still owed, not the billed amount: after a short payment
+        // (L3) only the remainder is ready, and the Reimburse page says so.
+        ready += e.remaining;
       }
       if (
         e.claim_state === "reimbursed" ||
@@ -257,6 +264,16 @@ export function ExpenseLedger({
               <Badge variant="outline" className={`text-xs ${stage.className}`}>
                 {stage.label}
               </Badge>
+              {/* L3: part of this was already paid on a claim that came back
+                  short. The badge says "Ready to claim"; this says for how
+                  much, so it matches the Reimburse page. */}
+              {e.claim_state === "unclaimed" &&
+                e.remaining > 0 &&
+                e.remaining < e.amount - 0.005 && (
+                  <span className="text-xs">
+                    {formatCurrency(e.remaining)} left to claim
+                  </span>
+                )}
               <span className="inline-flex items-center gap-1 text-xs">
                 <Paperclip className="h-3 w-3" aria-hidden="true" />
                 {e.receipt_count === 0

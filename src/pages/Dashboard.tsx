@@ -47,6 +47,7 @@ import {
 } from "lucide-react";
 import { logError } from "@/utils/errorHandler";
 import { formatCurrency } from "@/lib/utils";
+import { remainingOf } from "@/lib/claimClose";
 
 interface BucketCounts {
   count: number;
@@ -137,13 +138,30 @@ export default function Dashboard() {
         // claim screen cannot disagree about which one the user chose.
         const { data: invoiceRows } = await supabase
           .from("invoices")
-          .select("lifecycle_status, amount, date, reimbursed_at")
+          .select(
+            "lifecycle_status, amount, amount_paid, reimbursable_amount, reimbursed_amount, date, reimbursed_at",
+          )
           .eq("user_id", user.id);
 
         const fresh: DashboardData = emptyDashboardData();
 
         for (const row of invoiceRows ?? []) {
           const amount = Number(row.amount) || 0;
+          const reimbursed = Number(row.reimbursed_amount) || 0;
+          // L3: money that arrived this year counts as reclaimed whether or
+          // not it settled the expense. A claim paid short leaves the expense
+          // "eligible" again for its remainder, but what did arrive is real.
+          const arrivedThisYear =
+            !!row.reimbursed_at &&
+            new Date(row.reimbursed_at as string).getFullYear() ===
+              CURRENT_YEAR;
+          if (
+            arrivedThisYear &&
+            row.lifecycle_status !== "reimbursed" &&
+            reimbursed > 0
+          ) {
+            fresh.reclaimedYtd += reimbursed;
+          }
           switch (row.lifecycle_status) {
             // 'captured' counts as needing a receipt (2026-09-06). It means no
             // document and no eligibility decision, which is exactly the work
@@ -162,7 +180,9 @@ export default function Dashboard() {
               break;
             case "eligible":
               fresh.eligible.count++;
-              fresh.eligible.total += amount;
+              // What is still owed, not the billed amount -- the same figure
+              // the Reimburse page and the menu badge use (remainingOf).
+              fresh.eligible.total += remainingOf(row);
               break;
             case "submitted":
               fresh.submitted.count++;
@@ -359,7 +379,8 @@ export default function Dashboard() {
               total={data.submitted.total}
               copy="Waiting for HSA deposit"
               ctaLabel="Track"
-              onClick={() => navigate("/substantiation")}
+              // Lands on the sent claims, where "I got paid" is (L3).
+              onClick={() => navigate("/substantiation#sent-claims")}
             />
 
             {/* Reclaimed YTD footer */}

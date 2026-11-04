@@ -37,6 +37,7 @@ import {
   type QueueExpense,
 } from "@/components/expense/SubstantiateQueue";
 import { SUBSTANTIATE_STATES } from "@/lib/expenseLifecycle";
+import { remainingOf } from "@/lib/claimClose";
 import {
   ExpenseLedger,
   type LedgerExpense,
@@ -192,8 +193,9 @@ export default function Substantiate() {
       const { data, error } = await supabase
         .from("invoices")
         .select(
-          `id, title, vendor, category, amount, date, patient_id, patient_name,
-           lifecycle_status, claim_state, reimbursed_at,
+          `id, title, vendor, category, amount, amount_paid,
+           reimbursable_amount, reimbursed_amount, date, patient_id,
+           patient_name, lifecycle_status, claim_state, reimbursed_at,
            receipt_invoices ( receipt_id )`,
         )
         .eq("user_id", userId!)
@@ -208,6 +210,9 @@ export default function Substantiate() {
         vendor: r.vendor,
         category: r.category,
         amount: Number(r.amount),
+        // L3: after a claim is paid short, only the remainder is ready to
+        // claim. Same arithmetic as the Reimburse page (remainingOf).
+        remaining: remainingOf(r),
         date: r.date,
         patient_id: r.patient_id,
         patient_name: r.patient_name,
