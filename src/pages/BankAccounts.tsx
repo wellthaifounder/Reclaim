@@ -270,7 +270,10 @@ export default function BankAccounts() {
               • You can manually review and adjust categorization in the
               Transactions page
             </p>
-            <p>• Transactions sync up to 2 years of history</p>
+            <p>
+              • Transactions sync up to two years of history, depending on your
+              bank
+            </p>
           </CardContent>
         </Card>
       </div>

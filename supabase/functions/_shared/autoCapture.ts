@@ -35,7 +35,7 @@ export async function detectTransfers(
     p_user_id: opts.userId,
     // The SQL default is 45 days, which is right for a routine sync where only
     // the last few days are new. It is wrong for the initial import, which
-    // pulls up to 18 months: every credit-card payment older than 45 days was
+    // pulls up to two years: every credit-card payment older than 45 days was
     // left unmatched and counted as spending, inflating the "we found $X"
     // figure on the one screen where the number has to be trustworthy — and
     // risking a phantom medical expense for money that only moved between the

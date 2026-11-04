@@ -1,7 +1,7 @@
 // Reclaim Phase 2 W3 — Historical-import activation moment.
 //
 // Renders the "wow moment" the brief calls brand-defining: after a user
-// connects their first Plaid item, we pull 18 months of transactions, run
+// connects their first Plaid item, we pull up to two years of transactions, run
 // them through the medical classifier, auto-capture invoices for high-
 // confidence medical merchants, and surface the count on screen.
 //
@@ -49,7 +49,7 @@ interface RouteState {
 
 const LOADING_COPY = [
   { text: "Securely connecting to your bank…", min_ms: 0 },
-  { text: "Pulling up to 18 months of transactions…", min_ms: 3_000 },
+  { text: "Pulling up to two years of transactions…", min_ms: 3_000 },
   { text: "Scanning for medical merchants and pharmacies…", min_ms: 9_000 },
   { text: "Checking each against IRS Pub 502…", min_ms: 18_000 },
   { text: "Almost done — assembling your reclaim list…", min_ms: 30_000 },

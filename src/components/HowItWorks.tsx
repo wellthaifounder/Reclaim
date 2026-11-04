@@ -42,8 +42,8 @@ export const HowItWorks = () => {
               <p className="text-sm font-semibold">First, connect your bank</p>
               <p className="text-sm text-muted-foreground">
                 Link your bank, credit cards, and HSA through Plaid. Reclaim
-                scans up to two years of transactions and shows you what it
-                found — no manual upload required.
+                scans up to two years of transactions, depending on your bank,
+                and shows you what it found — no manual upload required.
               </p>
             </div>
           </div>
