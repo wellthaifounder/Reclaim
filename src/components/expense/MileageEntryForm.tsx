@@ -38,7 +38,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { Money } from "@/components/ui/money";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, todayLocalISO } from "@/lib/utils";
 import { Car, Info, Loader2, TriangleAlert } from "lucide-react";
 import { logError } from "@/utils/errorHandler";
 import { PatientPicker } from "@/components/family/PatientPicker";
@@ -49,7 +49,11 @@ import {
   formatMileageRate,
 } from "@/lib/regulatoryLimits";
 
-const today = () => new Date().toISOString().slice(0, 10);
+// The viewer's own calendar day. Was `new Date().toISOString().slice(0, 10)`,
+// which is the UTC date: from 4-8pm onward in US time zones it is already
+// tomorrow in UTC, so the trip date defaulted to a day that had not happened
+// yet, and the date picker's upper limit allowed it (V1 launch plan, Batch 1).
+const today = () => todayLocalISO();
 
 export function MileageEntryForm() {
   const navigate = useNavigate();

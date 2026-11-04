@@ -33,7 +33,6 @@ import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
 import { PageHeader } from "@/components/PageHeader";
 import { ThemeToggleGroup } from "@/components/ThemeToggle";
 import { FamilyRosterCard } from "@/components/family/FamilyRosterCard";
-import { useRecomputeTiming } from "@/hooks/useHSAEligibility";
 import { SubscriptionManagement } from "@/components/settings/SubscriptionManagement";
 import { useSetOnboardingComplete } from "@/hooks/useOnboardingStatus";
 import {
@@ -58,9 +57,13 @@ import { logError } from "@/utils/errorHandler";
 
 // ── Schemas ──────────────────────────────────────────────────────────────────
 
+// No HSA date here. This form used to carry one with no field on screen (the
+// field was removed in March 2026) and wrote the value it loaded back on every
+// save. Under L2 the HSA-account form on the Household tab moves that date, so
+// adding an account and then saving a display name put the old date -- or a
+// blank one -- straight back, and re-ran the timing rule against it.
 const profileSchema = z.object({
   displayName: z.string().max(100),
-  hsaOpenedDate: z.string(),
   reimbursementStrategy: z.enum(["regular", "shoebox"]),
 });
 
@@ -143,9 +146,6 @@ const Settings = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteConfirmationText, setDeleteConfirmationText] = useState("");
   const [deleting, setDeleting] = useState(false);
-  // Workstream D2: the establishment-date cliff is recomputed in the database,
-  // in both directions, whenever the HSA date changes.
-  const recomputeTiming = useRecomputeTiming();
 
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedSection = searchParams.get("section");
@@ -166,7 +166,6 @@ const Settings = () => {
     resolver: zodResolver(profileSchema),
     defaultValues: {
       displayName: "",
-      hsaOpenedDate: "",
       reimbursementStrategy: "regular",
     },
   });
@@ -276,14 +275,13 @@ const Settings = () => {
 
       const { data: profile } = await supabase
         .from("profiles")
-        .select("full_name, hsa_opened_date, reimbursement_strategy_preference")
+        .select("full_name, reimbursement_strategy_preference")
         .eq("id", user.id)
         .single();
 
       if (profile) {
         profileForm.reset({
           displayName: profile.full_name || "",
-          hsaOpenedDate: profile.hsa_opened_date || "",
           reimbursementStrategy:
             profile.reimbursement_strategy_preference === "shoebox"
               ? "shoebox"
@@ -306,20 +304,10 @@ const Settings = () => {
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
-      const { data: oldProfile } = await supabase
-        .from("profiles")
-        .select("hsa_opened_date")
-        .eq("id", user.id)
-        .single();
-
-      const oldHsaDate = oldProfile?.hsa_opened_date;
-      const hsaDateChanged = oldHsaDate !== values.hsaOpenedDate;
-
       const { error: upsertError } = await supabase.from("profiles").upsert(
         {
           id: user.id,
           full_name: values.displayName,
-          hsa_opened_date: values.hsaOpenedDate || null,
           reimbursement_strategy_preference: values.reimbursementStrategy,
         },
         { onConflict: "id" },
@@ -335,33 +323,7 @@ const Settings = () => {
       });
       await queryClient.invalidateQueries({ queryKey: ["attention-items"] });
 
-      if (hsaDateChanged) {
-        // Workstream D2. Was two hand-written bulk updates, both filtered on
-        // `is_hsa_eligible = true` — a generated column meaning
-        // eligibility_state is 'eligible'. Expenses default to 'unknown', so
-        // the filter matched almost nothing and the cliff had stopped firing.
-        // Neither update ever restored anything either, so a corrected date
-        // could not give back what a wrong one took away.
-        const { blocked, restored } = await recomputeTiming.mutateAsync();
-
-        if (restored > 0) {
-          toast.success(
-            `Profile updated. ${restored} expense${restored === 1 ? "" : "s"} ${
-              restored === 1 ? "is" : "are"
-            } claimable again now that your HSA date is corrected.`,
-          );
-        } else if (blocked > 0) {
-          toast.success(
-            `Profile updated. ${blocked} expense${blocked === 1 ? "" : "s"} predate${
-              blocked === 1 ? "s" : ""
-            } your HSA and can't be reimbursed.`,
-          );
-        } else {
-          toast.success("Profile updated successfully");
-        }
-      } else {
-        toast.success("Profile updated successfully");
-      }
+      toast.success("Profile updated successfully");
     } catch (error) {
       logError("Error updating profile", error);
       toast.error("Failed to update profile");

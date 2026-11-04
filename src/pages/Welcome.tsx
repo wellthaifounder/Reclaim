@@ -29,6 +29,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { FocusedLayout } from "@/components/FocusedLayout";
 import { PlaidLink } from "@/components/PlaidLink";
 import { FamilyRosterCard } from "@/components/family/FamilyRosterCard";
+import { useFamilyRoster } from "@/hooks/useFamilyRoster";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { DateField } from "@/components/ui/date-field";
@@ -276,6 +277,9 @@ function Point({
 // ── Step 2: household ───────────────────────────────────────────────────────
 
 function HouseholdStep({ onNext }: { onNext: () => void }) {
+  const { members } = useFamilyRoster();
+  const addedSomeone = members.some((m) => m.relationship !== "self");
+
   return (
     <div className="space-y-6">
       <div className="text-center space-y-3">
@@ -297,13 +301,15 @@ function HouseholdStep({ onNext }: { onNext: () => void }) {
 
       <FamilyRosterCard />
 
+      {/* One button (V1 launch plan, Batch 1). There were two -- "Continue"
+          and "It's just me" -- and both did exactly the same thing, which
+          left people wondering what the difference was. The wording now
+          follows what is on the roster: nobody added yet reads as the answer
+          "it's just me"; once someone is added, it is "Continue". */}
       <div className="flex flex-col gap-2">
         <Button size="lg" onClick={onNext}>
-          Continue
+          {addedSomeone ? "Continue" : "It's just me"}
           <ArrowRight className="ml-2 h-4 w-4" />
-        </Button>
-        <Button variant="ghost" onClick={onNext}>
-          It's just me
         </Button>
       </div>
     </div>

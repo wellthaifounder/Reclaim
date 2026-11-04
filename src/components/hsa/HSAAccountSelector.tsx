@@ -7,6 +7,7 @@ import {
 } from "@/components/ui/select";
 import { useHSAAccounts } from "@/hooks/useHSAAccounts";
 import { formatHSAAccountDateRange } from "@/lib/hsaAccountUtils";
+import { parseDateOnly } from "@/lib/dates";
 import { Calendar } from "lucide-react";
 
 type HSAAccountSelectorProps = {
@@ -33,16 +34,20 @@ export function HSAAccountSelector({
     (acc) => acc.is_active && !acc.closed_date,
   );
 
-  if (filterByDate) {
-    const expenseDate = new Date(filterByDate);
+  // All three are calendar days. parseDateOnly reads each as local midnight;
+  // `new Date("2022-03-15")` read them as UTC midnight, the evening before in
+  // US time zones, and a full timestamp passed as filterByDate was then
+  // compared against those shifted days (V1 launch plan, Batch 1).
+  const expenseDate = parseDateOnly(filterByDate);
+  if (expenseDate) {
     filteredAccounts = filteredAccounts.filter((account) => {
-      const openedDate = new Date(account.opened_date);
-      const closedDate = account.closed_date
-        ? new Date(account.closed_date)
-        : null;
+      const openedDate = parseDateOnly(account.opened_date);
+      const closedDate = parseDateOnly(account.closed_date);
 
       return (
-        expenseDate >= openedDate && (!closedDate || expenseDate <= closedDate)
+        !!openedDate &&
+        expenseDate >= openedDate &&
+        (!closedDate || expenseDate <= closedDate)
       );
     });
   }

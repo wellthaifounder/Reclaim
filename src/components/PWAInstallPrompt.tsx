@@ -22,12 +22,18 @@ interface BeforeInstallPromptEvent extends Event {
 // decided to use the app yet, and /install already has its own full install
 // walkthrough, so the card would just repeat it. Mounted once at the App
 // root, this component sees every route, so it has to rule these out itself.
+//
+// The two setup routes are on the list too (V1 launch plan, Batch 1): the
+// card used to slide in over the middle of first-run setup, on screens built
+// to have exactly one thing to do.
 const SUPPRESSED_ROUTES = new Set([
   "/",
   "/auth",
   "/install",
   "/privacy",
   "/terms",
+  "/welcome",
+  "/onboarding/import",
 ]);
 
 export const PWAInstallPrompt = () => {

@@ -4,11 +4,20 @@ import { toast } from "sonner";
 import type { HSAAccount } from "@/lib/hsaAccountUtils";
 import { logError } from "@/utils/errorHandler";
 import { useAuthUser } from "@/hooks/useAuthUser";
+import {
+  describeTimingRecompute,
+  useRecomputeTiming,
+} from "@/hooks/useHSAEligibility";
+
+// Every column of HSAAccount, named rather than `*` (CLAUDE.md).
+const COLUMNS =
+  "id, user_id, account_name, opened_date, closed_date, is_active, created_at, updated_at, eligibility_start_date, qle_type, notes";
 
 export function useHSAAccounts() {
   const queryClient = useQueryClient();
   const { user } = useAuthUser();
   const userId = user?.id;
+  const recomputeTiming = useRecomputeTiming();
 
   // Fetch all HSA accounts for the current user
   const {
@@ -21,7 +30,7 @@ export function useHSAAccounts() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("hsa_accounts")
-        .select("*")
+        .select(COLUMNS)
         .eq("user_id", userId!)
         .order("opened_date", { ascending: false });
 
@@ -29,6 +38,28 @@ export function useHSAAccounts() {
       return data as HSAAccount[];
     },
   });
+
+  // L2: one HSA opening date. Adding, editing or deleting an account moves
+  // profiles.hsa_opened_date to the earliest date across the user's accounts
+  // -- a database trigger does that in the same write
+  // (20261104085017_one_hsa_opening_date.sql). What the trigger cannot do is
+  // re-run the timing rule over the user's expenses, because that function
+  // only accepts the signed-in owner; so it happens here, exactly as it does
+  // after onboarding or the HSA-date dialog saves a date.
+  const afterSave = async (lead: string) => {
+    queryClient.invalidateQueries({ queryKey: ["hsa-accounts"] });
+    try {
+      // Also refreshes the establishment date and the setup checklist.
+      const result = await recomputeTiming.mutateAsync();
+      toast.success(describeTimingRecompute(lead, result));
+    } catch {
+      // Logged inside the hook. The account and the date both saved; the
+      // recompute runs again on the next date change.
+      queryClient.invalidateQueries({ queryKey: ["hsa-establishment-date"] });
+      queryClient.invalidateQueries({ queryKey: ["onboarding-status"] });
+      toast.success(`${lead}.`);
+    }
+  };
 
   // Create a new HSA account
   const createAccount = useMutation({
@@ -46,16 +77,13 @@ export function useHSAAccounts() {
           ...account,
           user_id: user.id,
         })
-        .select()
+        .select(COLUMNS)
         .single();
 
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["hsa-accounts"] });
-      toast.success("HSA account created successfully");
-    },
+    onSuccess: () => afterSave("HSA account created"),
     onError: (error) => {
       logError("Error creating HSA account", error);
       toast.error("Failed to create HSA account");
@@ -75,16 +103,13 @@ export function useHSAAccounts() {
         .from("hsa_accounts")
         .update(updates)
         .eq("id", id)
-        .select()
+        .select(COLUMNS)
         .single();
 
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["hsa-accounts"] });
-      toast.success("HSA account updated successfully");
-    },
+    onSuccess: () => afterSave("HSA account updated"),
     onError: (error) => {
       logError("Error updating HSA account", error);
       toast.error("Failed to update HSA account");
@@ -101,10 +126,7 @@ export function useHSAAccounts() {
 
       if (error) throw error;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["hsa-accounts"] });
-      toast.success("HSA account deleted successfully");
-    },
+    onSuccess: () => afterSave("HSA account deleted"),
     onError: (error) => {
       logError("Error deleting HSA account", error);
       toast.error("Failed to delete HSA account");

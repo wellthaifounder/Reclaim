@@ -1,4 +1,5 @@
 import { isAfter, isBefore, isSameDay, parseISO } from "date-fns";
+import { formatDateOnly } from "./dates.ts";
 
 export type HSAAccount = {
   id: string;
@@ -26,10 +27,11 @@ export function getActiveHSAAccount(accounts: HSAAccount[]): HSAAccount | null {
 
   if (activeAccounts.length === 0) return null;
 
-  // Sort by opened_date descending and return the most recent
-  return activeAccounts.sort(
-    (a, b) =>
-      new Date(b.opened_date).getTime() - new Date(a.opened_date).getTime(),
+  // Most recently opened first. opened_date is a plain "YYYY-MM-DD" calendar
+  // day, so the strings already sort correctly; turning them into Date
+  // objects is what read them as UTC midnight elsewhere in this file.
+  return [...activeAccounts].sort((a, b) =>
+    b.opened_date.localeCompare(a.opened_date),
   )[0];
 }
 
@@ -71,16 +73,21 @@ export function isDateInHSAPeriod(date: Date, account: HSAAccount): boolean {
 }
 
 /**
- * Format HSA account date range for display
+ * Format HSA account date range for display.
+ *
+ * Through formatDateOnly, so the day shown is the day stored. This used
+ * `new Date("2022-03-15")`, which is UTC midnight -- the evening of March 14
+ * in every US time zone -- so an account opened on the 15th was listed as
+ * opened on the 14th (V1 launch plan, Batch 1).
  */
 export function formatHSAAccountDateRange(account: HSAAccount): string {
-  const openedDate = new Date(account.opened_date).toLocaleDateString();
+  const openedDate = formatDateOnly(account.opened_date);
 
   if (!account.closed_date) {
     return `${openedDate} - Present`;
   }
 
-  const closedDate = new Date(account.closed_date).toLocaleDateString();
+  const closedDate = formatDateOnly(account.closed_date);
   return `${openedDate} - ${closedDate}`;
 }
 
