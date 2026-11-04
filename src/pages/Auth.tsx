@@ -17,6 +17,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ReclaimLogo } from "@/components/ReclaimLogo";
 import { toast } from "sonner";
 import { z } from "zod";
+import { Controller, useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { CheckYourEmail } from "@/components/auth/CheckYourEmail";
+import { describeSignupError, EMAIL_TAKEN_MESSAGE } from "@/lib/signupErrors";
 
 const PRIVACY_POLICY_VERSION = "2026-04-24";
 
@@ -56,13 +60,29 @@ const OrDivider = () => (
 );
 
 const signUpSchema = z.object({
-  fullName: z.string().trim().min(1, "Name is required").max(100),
-  email: z.string().trim().email("Invalid email address").max(255),
+  fullName: z
+    .string()
+    .trim()
+    .min(1, "Name is required")
+    .max(100, "Name can be at most 100 characters."),
+  email: z
+    .string()
+    .trim()
+    .min(1, "Email is required")
+    .email("Enter a valid email address.")
+    .max(255, "Email can be at most 255 characters."),
   password: z
     .string()
     .min(8, "Password must be at least 8 characters")
-    .max(100),
+    .max(100, "Password can be at most 100 characters."),
+  termsAccepted: z
+    .boolean()
+    .refine(
+      (accepted) => accepted,
+      "Agree to the Terms of Service and Privacy Policy to continue.",
+    ),
 });
+type SignUpValues = z.infer<typeof signUpSchema>;
 
 const signInSchema = z.object({
   email: z.string().trim().email("Invalid email address").max(255),
@@ -85,7 +105,14 @@ const Auth = () => {
       : "signin";
   const [loading, setLoading] = useState(false);
   const [showReset, setShowReset] = useState(false);
-  const [termsAccepted, setTermsAccepted] = useState(false);
+  // Controlled so that coming back from the "Check your email" screen lands on
+  // the tab the person was on, not on whichever one the URL defaults to.
+  const [tab, setTab] = useState(initialTab);
+  // The address a confirmation link was just sent to. While set, the "Check
+  // your email" screen replaces the form.
+  const [awaitingConfirmation, setAwaitingConfirmation] = useState<
+    string | null
+  >(null);
   // Both auth paths are shown at once (2026-08-27), email/password first.
   //
   // Google used to be the only visible option, with email/password collapsed
@@ -104,13 +131,24 @@ const Auth = () => {
   const [unconfirmedEmail, setUnconfirmedEmail] = useState<string | null>(null);
   const [resending, setResending] = useState(false);
 
-  // Sign up form
-  const [signUpData, setSignUpData] = useState({
-    fullName: "",
-    email: "",
-    password: "",
+  // Sign up form. Errors are shown beside the field they concern: once a field
+  // has been left, then on every change; all of them on submit. A rejection
+  // from the server (address taken, password too weak) is written onto the
+  // same field, so it is never only a pop-up that disappears.
+  const signUpForm = useForm<SignUpValues>({
+    resolver: zodResolver(signUpSchema),
+    mode: "onTouched",
+    defaultValues: {
+      fullName: "",
+      email: "",
+      password: "",
+      termsAccepted: false,
+    },
   });
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const signUpErrors = signUpForm.formState.errors;
+  const signUpPassword = signUpForm.watch("password");
+  // A failure that belongs to no single field (too many attempts, offline).
+  const [signUpFormError, setSignUpFormError] = useState<string | null>(null);
 
   // Sign in form
   const [signInData, setSignInData] = useState({
@@ -120,29 +158,6 @@ const Auth = () => {
 
   // Reset password
   const [resetEmail, setResetEmail] = useState("");
-
-  const validateSignUpField = (field: string, value: string) => {
-    const partial = { ...signUpData, [field]: value };
-    const result = signUpSchema.safeParse(partial);
-    if (result.success) {
-      setFieldErrors((prev) => {
-        const next = { ...prev };
-        delete next[field];
-        return next;
-      });
-    } else {
-      const fieldError = result.error.issues.find((i) => i.path[0] === field);
-      if (fieldError) {
-        setFieldErrors((prev) => ({ ...prev, [field]: fieldError.message }));
-      } else {
-        setFieldErrors((prev) => {
-          const next = { ...prev };
-          delete next[field];
-          return next;
-        });
-      }
-    }
-  };
 
   useEffect(() => {
     // Wave 5 (2026-05-06): UserIntentDialog deleted. Everyone defaults to
@@ -184,16 +199,10 @@ const Auth = () => {
     return () => subscription.unsubscribe();
   }, [navigate]);
 
-  const handleSignUp = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!termsAccepted) {
-      toast.error("Please agree to the Privacy Policy to continue.");
-      return;
-    }
+  const handleSignUp = async (validated: SignUpValues) => {
+    setSignUpFormError(null);
 
     try {
-      const validated = signUpSchema.parse(signUpData);
       setLoading(true);
 
       const acceptedAt = new Date().toISOString();
@@ -211,6 +220,18 @@ const Auth = () => {
       });
 
       if (error) throw error;
+
+      // With email enumeration protection on, signing up with an address that
+      // already has a confirmed account is not an error: the server answers as
+      // if it had worked, but returns a user with no identities. Treating that
+      // as success would tell the person to look for an email that never comes.
+      if (signUpResult.user && signUpResult.user.identities?.length === 0) {
+        signUpForm.setError("email", {
+          type: "server",
+          message: EMAIL_TAKEN_MESSAGE,
+        });
+        return;
+      }
 
       // `session` is null exactly when the project requires email confirmation.
       // That single fact decides everything below, so read it once.
@@ -248,20 +269,25 @@ const Auth = () => {
       // confirmation required, signing in immediately fails with "Email not
       // confirmed", which reads as the account not having been created at all.
       if (needsConfirmation) {
-        toast.success(
-          `Check ${validated.email} for a confirmation link. You'll be able to sign in once you've opened it.`,
-          { duration: 10000 },
-        );
+        // The password is not kept: if they come back to correct the address
+        // they type it again, and it is not left sitting in memory meanwhile.
+        signUpForm.setValue("password", "");
+        setAwaitingConfirmation(validated.email);
       } else {
         toast.success("Account created! You can now sign in.");
+        signUpForm.reset();
       }
-      setSignUpData({ fullName: "", email: "", password: "" });
-      setTermsAccepted(false);
     } catch (error) {
-      if (error instanceof z.ZodError) {
-        toast.error(error.errors[0].message);
-      } else if (error instanceof Error) {
-        toast.error(error.message);
+      // Nothing from the server's own message is shown: it is written for
+      // developers, and some of it repeats the address back.
+      const problem = describeSignupError(error);
+      if (problem.field) {
+        signUpForm.setError(problem.field, {
+          type: "server",
+          message: problem.message,
+        });
+      } else {
+        setSignUpFormError(problem.message);
       }
     } finally {
       setLoading(false);
@@ -396,8 +422,12 @@ const Auth = () => {
   };
 
   const handleGoogleSignUp = async () => {
-    if (!termsAccepted) {
-      toast.error("Please agree to the Privacy Policy to continue.");
+    if (!signUpForm.getValues("termsAccepted")) {
+      signUpForm.setError("termsAccepted", {
+        type: "manual",
+        message:
+          "Agree to the Terms of Service and Privacy Policy to continue.",
+      });
       return;
     }
     sessionStorage.setItem(
@@ -467,250 +497,253 @@ const Auth = () => {
           </div>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue={initialTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="signin">Sign In</TabsTrigger>
-              <TabsTrigger value="signup">Sign Up</TabsTrigger>
-            </TabsList>
+          {awaitingConfirmation ? (
+            <CheckYourEmail
+              email={awaitingConfirmation}
+              onUseDifferentEmail={() => {
+                setAwaitingConfirmation(null);
+                setTab("signup");
+              }}
+            />
+          ) : (
+            <Tabs value={tab} onValueChange={setTab} className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="signin">Sign In</TabsTrigger>
+                <TabsTrigger value="signup">Sign Up</TabsTrigger>
+              </TabsList>
 
-            <TabsContent value="signin" className="space-y-4">
-              <form onSubmit={handleSignIn} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="signin-email">Email</Label>
-                  <Input
-                    id="signin-email"
-                    type="email"
-                    autoComplete="email"
-                    placeholder="name@example.com"
-                    value={signInData.email}
-                    onChange={(e) => {
-                      setSignInData({
-                        ...signInData,
-                        email: e.target.value,
-                      });
-                      // The resend offer names a specific address. Once the
-                      // field no longer matches it, the offer is misleading.
-                      if (unconfirmedEmail) setUnconfirmedEmail(null);
-                    }}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="signin-password">Password</Label>
-                  <Input
-                    id="signin-password"
-                    type="password"
-                    autoComplete="current-password"
-                    value={signInData.password}
-                    onChange={(e) =>
-                      setSignInData({
-                        ...signInData,
-                        password: e.target.value,
-                      })
-                    }
-                    required
-                  />
-                </div>
-                <Button type="submit" className="w-full" disabled={loading}>
-                  {loading ? "Signing in..." : "Sign In"}
-                </Button>
+              <TabsContent value="signin" className="space-y-4">
+                <form onSubmit={handleSignIn} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="signin-email">Email</Label>
+                    <Input
+                      id="signin-email"
+                      type="email"
+                      autoComplete="email"
+                      placeholder="name@example.com"
+                      value={signInData.email}
+                      onChange={(e) => {
+                        setSignInData({
+                          ...signInData,
+                          email: e.target.value,
+                        });
+                        // The resend offer names a specific address. Once the
+                        // field no longer matches it, the offer is misleading.
+                        if (unconfirmedEmail) setUnconfirmedEmail(null);
+                      }}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="signin-password">Password</Label>
+                    <Input
+                      id="signin-password"
+                      type="password"
+                      autoComplete="current-password"
+                      value={signInData.password}
+                      onChange={(e) =>
+                        setSignInData({
+                          ...signInData,
+                          password: e.target.value,
+                        })
+                      }
+                      required
+                    />
+                  </div>
+                  <Button type="submit" className="w-full" disabled={loading}>
+                    {loading ? "Signing in..." : "Sign In"}
+                  </Button>
 
-                {/* Shown only after a sign-in fails for an unconfirmed
+                  {/* Shown only after a sign-in fails for an unconfirmed
                     address. Anything else and this is noise on a screen where
                     noise costs signups. */}
-                {unconfirmedEmail && (
-                  <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 space-y-2">
-                    <p className="text-xs text-muted-foreground">
-                      <strong className="text-foreground">
-                        This address hasn't been confirmed yet.
-                      </strong>{" "}
-                      The link was emailed to {unconfirmedEmail} when the
-                      account was created — it's often in spam.
-                    </p>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="w-full"
-                      disabled={resending}
-                      onClick={handleResendConfirmation}
-                    >
-                      {resending ? "Sending…" : "Send the link again"}
-                    </Button>
-                  </div>
-                )}
+                  {unconfirmedEmail && (
+                    <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 space-y-2">
+                      <p className="text-xs text-muted-foreground">
+                        <strong className="text-foreground">
+                          This address hasn't been confirmed yet.
+                        </strong>{" "}
+                        The link was emailed to {unconfirmedEmail} when the
+                        account was created — it's often in spam.
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        disabled={resending}
+                        onClick={handleResendConfirmation}
+                      >
+                        {resending ? "Sending…" : "Send the link again"}
+                      </Button>
+                    </div>
+                  )}
+
+                  <Button
+                    type="button"
+                    variant="link"
+                    className="w-full"
+                    onClick={() => setShowReset(true)}
+                  >
+                    Forgot password?
+                  </Button>
+                </form>
+
+                <OrDivider />
 
                 <Button
                   type="button"
-                  variant="link"
+                  variant="outline"
+                  size="lg"
                   className="w-full"
-                  onClick={() => setShowReset(true)}
+                  onClick={handleGoogleSignIn}
+                  disabled={loading}
                 >
-                  Forgot password?
+                  <GoogleIcon className="mr-2 h-4 w-4" />
+                  Continue with Google
                 </Button>
-              </form>
+              </TabsContent>
 
-              <OrDivider />
-
-              <Button
-                type="button"
-                variant="outline"
-                size="lg"
-                className="w-full"
-                onClick={handleGoogleSignIn}
-                disabled={loading}
-              >
-                <GoogleIcon className="mr-2 h-4 w-4" />
-                Continue with Google
-              </Button>
-            </TabsContent>
-
-            <TabsContent value="signup" className="space-y-4">
-              <form onSubmit={handleSignUp} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="signup-name">Full Name</Label>
-                  <Input
-                    id="signup-name"
-                    type="text"
-                    placeholder="John Doe"
-                    value={signUpData.fullName}
-                    onChange={(e) =>
-                      setSignUpData({
-                        ...signUpData,
-                        fullName: e.target.value,
-                      })
-                    }
-                    onBlur={(e) =>
-                      validateSignUpField("fullName", e.target.value)
-                    }
-                    required
-                  />
-                  {fieldErrors.fullName && (
-                    <p className="text-sm text-destructive">
-                      {fieldErrors.fullName}
-                    </p>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="signup-email">Email</Label>
-                  <Input
-                    id="signup-email"
-                    type="email"
-                    placeholder="name@example.com"
-                    value={signUpData.email}
-                    onChange={(e) =>
-                      setSignUpData({
-                        ...signUpData,
-                        email: e.target.value,
-                      })
-                    }
-                    onBlur={(e) => validateSignUpField("email", e.target.value)}
-                    required
-                  />
-                  {fieldErrors.email && (
-                    <p className="text-sm text-destructive">
-                      {fieldErrors.email}
-                    </p>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="signup-password">Password</Label>
-                  <Input
-                    id="signup-password"
-                    type="password"
-                    placeholder="Min. 8 characters"
-                    value={signUpData.password}
-                    onChange={(e) =>
-                      setSignUpData({
-                        ...signUpData,
-                        password: e.target.value,
-                      })
-                    }
-                    onBlur={(e) =>
-                      validateSignUpField("password", e.target.value)
-                    }
-                    required
-                  />
-                  {fieldErrors.password && (
-                    <p className="text-sm text-destructive">
-                      {fieldErrors.password}
-                    </p>
-                  )}
-                  {!fieldErrors.password &&
-                    signUpData.password.length > 0 &&
-                    signUpData.password.length >= 8 && (
+              <TabsContent value="signup" className="space-y-4">
+                {/* noValidate: the browser's own pop-up for a malformed address
+                  or an empty field would pre-empt the messages shown beside
+                  the fields, so those do the telling. */}
+                <form
+                  onSubmit={signUpForm.handleSubmit(handleSignUp)}
+                  noValidate
+                  className="space-y-4"
+                >
+                  <div className="space-y-2">
+                    <Label htmlFor="signup-name">Full Name</Label>
+                    <Input
+                      id="signup-name"
+                      type="text"
+                      autoComplete="name"
+                      placeholder="John Doe"
+                      aria-invalid={!!signUpErrors.fullName}
+                      {...signUpForm.register("fullName")}
+                    />
+                    {signUpErrors.fullName && (
+                      <p className="text-sm text-destructive">
+                        {signUpErrors.fullName.message}
+                      </p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="signup-email">Email</Label>
+                    <Input
+                      id="signup-email"
+                      type="email"
+                      autoComplete="email"
+                      placeholder="name@example.com"
+                      aria-invalid={!!signUpErrors.email}
+                      {...signUpForm.register("email")}
+                    />
+                    {signUpErrors.email && (
+                      <p className="text-sm text-destructive">
+                        {signUpErrors.email.message}
+                      </p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="signup-password">Password</Label>
+                    <Input
+                      id="signup-password"
+                      type="password"
+                      autoComplete="new-password"
+                      placeholder="Min. 8 characters"
+                      aria-invalid={!!signUpErrors.password}
+                      {...signUpForm.register("password")}
+                    />
+                    {signUpErrors.password && (
+                      <p className="text-sm text-destructive">
+                        {signUpErrors.password.message}
+                      </p>
+                    )}
+                    {!signUpErrors.password && signUpPassword.length >= 8 && (
                       <p className="text-sm text-green-600">
                         Password strength: OK
                       </p>
                     )}
-                </div>
-                {/* Terms gate BOTH paths, so this sits above the two buttons
+                  </div>
+                  {/* Terms gate BOTH paths, so this sits above the two buttons
                     rather than inside either one. */}
-                <div className="flex items-start space-x-2 pt-1">
-                  <Checkbox
-                    id="terms-accepted"
-                    checked={termsAccepted}
-                    onCheckedChange={(checked) =>
-                      setTermsAccepted(checked === true)
-                    }
-                    className="mt-0.5"
-                  />
-                  <Label
-                    htmlFor="terms-accepted"
-                    className="text-xs font-normal leading-relaxed text-muted-foreground"
-                  >
-                    I agree to Reclaim's{" "}
-                    <a
-                      href="/terms"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary underline"
-                    >
-                      Terms of Service
-                    </a>{" "}
-                    and{" "}
-                    <a
-                      href="/privacy"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary underline"
-                    >
-                      Privacy Policy
-                    </a>{" "}
-                    and consent to the collection, processing, and storage of my
-                    data as described therein.
-                  </Label>
-                </div>
+                  <div className="space-y-2">
+                    <div className="flex items-start space-x-2 pt-1">
+                      <Controller
+                        name="termsAccepted"
+                        control={signUpForm.control}
+                        render={({ field }) => (
+                          <Checkbox
+                            id="terms-accepted"
+                            checked={field.value}
+                            onCheckedChange={(checked) =>
+                              field.onChange(checked === true)
+                            }
+                            className="mt-0.5"
+                          />
+                        )}
+                      />
+                      <Label
+                        htmlFor="terms-accepted"
+                        className="text-xs font-normal leading-relaxed text-muted-foreground"
+                      >
+                        I agree to Reclaim's{" "}
+                        <a
+                          href="/terms"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary underline"
+                        >
+                          Terms of Service
+                        </a>{" "}
+                        and{" "}
+                        <a
+                          href="/privacy"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary underline"
+                        >
+                          Privacy Policy
+                        </a>{" "}
+                        and consent to the collection, processing, and storage
+                        of my data as described therein.
+                      </Label>
+                    </div>
+                    {signUpErrors.termsAccepted && (
+                      <p className="text-sm text-destructive">
+                        {signUpErrors.termsAccepted.message}
+                      </p>
+                    )}
+                  </div>
+
+                  {signUpFormError && (
+                    <p role="alert" className="text-sm text-destructive">
+                      {signUpFormError}
+                    </p>
+                  )}
+
+                  <Button type="submit" className="w-full" disabled={loading}>
+                    {loading ? "Creating account..." : "Create Account"}
+                  </Button>
+                </form>
+
+                <OrDivider />
 
                 <Button
-                  type="submit"
+                  type="button"
+                  variant="outline"
+                  size="lg"
                   className="w-full"
-                  disabled={loading || !termsAccepted}
+                  onClick={handleGoogleSignUp}
+                  disabled={loading}
                 >
-                  {loading ? "Creating account..." : "Create Account"}
+                  <GoogleIcon className="mr-2 h-4 w-4" />
+                  Continue with Google
                 </Button>
-              </form>
-
-              <OrDivider />
-
-              <Button
-                type="button"
-                variant="outline"
-                size="lg"
-                className="w-full"
-                onClick={handleGoogleSignUp}
-                disabled={loading || !termsAccepted}
-              >
-                <GoogleIcon className="mr-2 h-4 w-4" />
-                Continue with Google
-              </Button>
-              {!termsAccepted && (
-                <p className="text-center text-xs text-muted-foreground">
-                  Accept the terms above to continue with either option.
-                </p>
-              )}
-            </TabsContent>
-          </Tabs>
+              </TabsContent>
+            </Tabs>
+          )}
         </CardContent>
       </Card>
     </div>

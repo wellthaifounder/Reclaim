@@ -15,6 +15,7 @@ import {
   Building2,
   HelpCircle,
   Camera,
+  Sparkles,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
@@ -28,6 +29,7 @@ import {
 import { cn } from "@/lib/utils";
 import { OnboardingProgressBar } from "@/components/onboarding/OnboardingProgressBar";
 import { FF } from "@/lib/featureFlags";
+import { useSubscription } from "@/contexts/SubscriptionContext";
 
 interface AuthenticatedNavProps {
   unreviewedTransactions?: number;
@@ -51,6 +53,7 @@ export const AuthenticatedNav = ({
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { tier } = useSubscription();
   const handleSignOut = async () => {
     const { error } = await supabase.auth.signOut();
     if (error) {
@@ -212,7 +215,7 @@ export const AuthenticatedNav = ({
                 </SheetTrigger>
                 <SheetContent
                   side="right"
-                  className="w-[300px] sm:w-[400px] bg-background z-[70]"
+                  className="w-[300px] sm:w-[400px] bg-background z-[70] overflow-y-auto"
                 >
                   <SheetHeader className="border-b pb-4 mb-4">
                     <SheetTitle>Menu</SheetTitle>
@@ -267,6 +270,23 @@ export const AuthenticatedNav = ({
                       <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide px-2">
                         Account
                       </h3>
+                      {/* The desktop sidebar's footer offers this to free
+                          accounts; the sidebar does not exist on a phone, so
+                          without this row there was no Upgrade entry at all. */}
+                      {tier === "free" && (
+                        <Button
+                          variant="ghost"
+                          className="justify-start w-full"
+                          onClick={() => handleNavigation("/settings#plan")}
+                          aria-label="Upgrade your plan"
+                        >
+                          <Sparkles
+                            className="h-5 w-5 mr-3"
+                            aria-hidden="true"
+                          />
+                          Upgrade
+                        </Button>
+                      )}
                       <Button
                         variant="ghost"
                         className="justify-start w-full"
