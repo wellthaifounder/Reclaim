@@ -5,8 +5,10 @@ import assert from "node:assert/strict";
 import {
   describeExpenseSaveError,
   GENERIC_SAVE_FAILURE,
+  isConnectionProblem,
 } from "./expenseSaveErrors.ts";
 import {
+  isRateLimited,
   describeResendError,
   describeSignupError,
   EMAIL_TAKEN_MESSAGE,
@@ -140,4 +142,30 @@ test("resend failures name the wait for a rate limit and nothing else", () => {
       message: "smtp host mail.internal refused",
     }).includes("smtp"),
   );
+});
+
+// ── Round 1 ─────────────────────────────────────────────────────────────────
+
+test("a dropped network is a connection problem, an expired session is not", () => {
+  assert.equal(
+    isConnectionProblem({ name: "AuthRetryableFetchError", message: "x" }),
+    true,
+  );
+  assert.equal(isConnectionProblem(new TypeError("Failed to fetch")), true);
+  assert.equal(
+    isConnectionProblem({
+      name: "AuthSessionMissingError",
+      message: "Auth session missing!",
+    }),
+    false,
+  );
+  assert.equal(isConnectionProblem(null), false);
+  assert.equal(isConnectionProblem("boom"), false);
+});
+
+test("rate limiting is recognised by code or status", () => {
+  assert.equal(isRateLimited({ code: "over_email_send_rate_limit" }), true);
+  assert.equal(isRateLimited({ status: 429 }), true);
+  assert.equal(isRateLimited({ code: "weak_password" }), false);
+  assert.equal(isRateLimited(undefined), false);
 });

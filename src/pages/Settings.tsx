@@ -192,7 +192,10 @@ const Settings = () => {
   const [pendingAnchor, setPendingAnchor] = useState<string | null>(null);
   useEffect(() => {
     if (location.hash) setPendingAnchor(location.hash.slice(1));
-  }, [location.hash]);
+    // `key` as well as `hash`: following a link to the hash the URL already
+    // has (Upgrade while standing on /settings#plan, after scrolling away) is
+    // a new navigation with the same hash, and must scroll again.
+  }, [location.hash, location.key]);
 
   // Then land on it, in two steps if the anchor belongs to another tab.
   // Nothing mounts until loading clears (see the `if (loading)` early return

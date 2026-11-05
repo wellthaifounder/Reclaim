@@ -91,15 +91,20 @@ export function describeSignupError(error: unknown): SignupProblem {
   return { field: null, message: GENERIC_SIGNUP_FAILURE };
 }
 
-/** The same mapping for a failed "send it again", which has no field. */
-export function describeResendError(error: unknown): string {
+/** True when the server refused because too many requests came too soon. */
+export function isRateLimited(error: unknown): boolean {
   const e: ErrorLike =
     typeof error === "object" && error !== null ? (error as ErrorLike) : {};
-  if (
+  return (
     e.code === "over_email_send_rate_limit" ||
     e.code === "over_request_rate_limit" ||
     e.status === 429
-  ) {
+  );
+}
+
+/** The same mapping for a failed "send it again", which has no field. */
+export function describeResendError(error: unknown): string {
+  if (isRateLimited(error)) {
     return "You can ask for another email in a minute.";
   }
   return "We couldn't send that. Try again in a minute.";

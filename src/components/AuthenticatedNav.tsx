@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -53,7 +53,9 @@ export const AuthenticatedNav = ({
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const { tier } = useSubscription();
+  // `tier` reads "free" while the plan is still loading (or if the check
+  // failed), so the Upgrade row waits for `loading` to clear.
+  const { tier, loading: subscriptionLoading } = useSubscription();
   const handleSignOut = async () => {
     const { error } = await supabase.auth.signOut();
     if (error) {
@@ -63,8 +65,15 @@ export const AuthenticatedNav = ({
     }
   };
 
+  // Where the phone menu is heading, held until the menu has finished closing.
+  // Navigating first made a same-page jump (/settings -> /settings#plan) land
+  // and then get undone: when the sheet finished closing, the page went back to
+  // the top. Closing first and navigating from the sheet's own "closed" hook
+  // means the scroll to the target happens after that reset, not before it.
+  const pendingMenuPath = useRef<string | null>(null);
+
   const handleNavigation = (path: string) => {
-    navigate(path);
+    pendingMenuPath.current = path;
     setMobileMenuOpen(false);
   };
 
@@ -216,6 +225,15 @@ export const AuthenticatedNav = ({
                 <SheetContent
                   side="right"
                   className="w-[300px] sm:w-[400px] bg-background z-[70] overflow-y-auto"
+                  onCloseAutoFocus={(event) => {
+                    const path = pendingMenuPath.current;
+                    if (!path) return;
+                    pendingMenuPath.current = null;
+                    // Focus would otherwise go back to the menu button; the
+                    // page being opened sets its own focus.
+                    event.preventDefault();
+                    navigate(path);
+                  }}
                 >
                   <SheetHeader className="border-b pb-4 mb-4">
                     <SheetTitle>Menu</SheetTitle>
@@ -262,7 +280,7 @@ export const AuthenticatedNav = ({
                         Appearance
                       </h3>
                       <div className="px-2 pb-2">
-                        <ThemeToggleGroup />
+                        <ThemeToggleGroup fill />
                       </div>
                     </div>
 
@@ -273,7 +291,7 @@ export const AuthenticatedNav = ({
                       {/* The desktop sidebar's footer offers this to free
                           accounts; the sidebar does not exist on a phone, so
                           without this row there was no Upgrade entry at all. */}
-                      {tier === "free" && (
+                      {!subscriptionLoading && tier === "free" && (
                         <Button
                           variant="ghost"
                           className="justify-start w-full"

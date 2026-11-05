@@ -32,6 +32,24 @@ interface ErrorLike {
 const asLike = (error: unknown): ErrorLike =>
   typeof error === "object" && error !== null ? (error as ErrorLike) : {};
 
+/**
+ * True when a request failed to reach the server at all (dropped network, the
+ * auth server unreachable), as opposed to the server answering "no".
+ * `auth.getUser()` reports both as "no user + an error"; only the second means
+ * the session is really gone.
+ */
+export function isConnectionProblem(error: unknown): boolean {
+  const e = error as { name?: unknown; message?: unknown } | null;
+  if (typeof e !== "object" || e === null) return false;
+  if (e.name === "AuthRetryableFetchError") return true;
+  return (
+    typeof e.message === "string" &&
+    /failed to fetch|networkerror|load failed|network request failed/i.test(
+      e.message,
+    )
+  );
+}
+
 export function describeExpenseSaveError(error: unknown): ExpenseSaveProblem {
   const { code, message, status } = asLike(error);
   const text = typeof message === "string" ? message : "";
@@ -75,11 +93,7 @@ export function describeExpenseSaveError(error: unknown): ExpenseSaveProblem {
     };
   }
 
-  if (
-    /failed to fetch|networkerror|load failed|network request failed/i.test(
-      text,
-    )
-  ) {
+  if (isConnectionProblem(error)) {
     return {
       field: null,
       message:

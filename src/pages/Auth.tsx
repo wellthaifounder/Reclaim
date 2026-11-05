@@ -677,9 +677,15 @@ const Auth = () => {
                           <Checkbox
                             id="terms-accepted"
                             checked={field.value}
-                            onCheckedChange={(checked) =>
-                              field.onChange(checked === true)
-                            }
+                            onCheckedChange={(checked) => {
+                              field.onChange(checked === true);
+                              // The error can come from the Google button,
+                              // which sets it by hand and is not re-checked
+                              // on change.
+                              if (checked === true) {
+                                signUpForm.clearErrors("termsAccepted");
+                              }
+                            }}
                             className="mt-0.5"
                           />
                         )}

@@ -95,7 +95,7 @@ const moreMenuItems: MenuItem[] = [
 export function AppSidebar({ unreviewedTransactions = 0 }: AppSidebarProps) {
   const { open } = useSidebar();
   const { hasHSA, userIntent } = useHSA();
-  const { tier } = useSubscription();
+  const { tier, loading: subscriptionLoading } = useSubscription();
   const navigate = useNavigate();
 
   // Show HSA features if user selected HSA intent or actually has an HSA
@@ -174,7 +174,7 @@ export function AppSidebar({ unreviewedTransactions = 0 }: AppSidebarProps) {
         </SidebarGroup>
       </SidebarContent>
 
-      {tier === "free" && open && (
+      {!subscriptionLoading && tier === "free" && open && (
         <SidebarFooter className="border-t border-sidebar-border px-4 py-3">
           {/* Sends people to the plan choice in Settings rather than straight
               into a Plus checkout. This button used to call

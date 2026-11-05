@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Mail } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { describeResendError } from "@/lib/signupErrors";
+import { describeResendError, isRateLimited } from "@/lib/signupErrors";
 
 // How long the resend button rests after a send. The auth server refuses a
 // second email to the same address inside its own window (60 seconds by
@@ -24,7 +24,9 @@ export function CheckYourEmail({
   onUseDifferentEmail: () => void;
 }) {
   const [resending, setResending] = useState(false);
-  const [cooldown, setCooldown] = useState(0);
+  // Starts resting: the signup that brought them here just sent an email, and
+  // the server refuses a second one to the same address inside its window.
+  const [cooldown, setCooldown] = useState(RESEND_COOLDOWN_SECONDS);
   const [sentAgain, setSentAgain] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,6 +51,9 @@ export function CheckYourEmail({
       setCooldown(RESEND_COOLDOWN_SECONDS);
     } catch (err) {
       setError(describeResendError(err));
+      // Refused for sending too soon: rest the button rather than invite
+      // another press that will be refused the same way.
+      if (isRateLimited(err)) setCooldown(RESEND_COOLDOWN_SECONDS);
     } finally {
       setResending(false);
     }

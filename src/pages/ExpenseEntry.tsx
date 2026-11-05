@@ -73,6 +73,7 @@ import {
 import { logError } from "@/utils/errorHandler";
 import {
   describeExpenseSaveError,
+  isConnectionProblem,
   MAX_EXPENSE_AMOUNT,
 } from "@/lib/expenseSaveErrors";
 import {
@@ -207,7 +208,9 @@ export default function ExpenseEntry() {
   const patientId = watch("patientId");
   useEffect(() => {
     if (rosterSelf && !getValues("patientId")) {
-      setValue("patientId", rosterSelf.id);
+      // Validate too, so a "Choose who this was for." left by pressing Save
+      // before the roster arrived clears as soon as "You" fills in.
+      setValue("patientId", rosterSelf.id, { shouldValidate: true });
     }
   }, [rosterSelf, getValues, setValue]);
   // What the save could not be pinned on a single field (signed out, offline,
@@ -315,7 +318,12 @@ export default function ExpenseEntry() {
     try {
       const {
         data: { user },
+        error: userError,
       } = await supabase.auth.getUser();
+      // getUser() also returns no user when the request itself failed (the
+      // network dropped). That is not an expired session, and telling someone
+      // to sign in again would cost them what they have typed.
+      if (userError && !user && isConnectionProblem(userError)) throw userError;
       if (!user) {
         setFormError(
           "Your session has expired. Sign in again to save this expense.",
