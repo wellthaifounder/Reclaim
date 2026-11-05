@@ -98,6 +98,12 @@ export function PatientPicker({
             setDialogOpen(true);
             return;
           }
+          // Radix reports "" when `value` changes to an id whose <option> has
+          // not mounted yet -- which is exactly what happens when the roster
+          // arrives after the first render and the account holder is
+          // preselected. Taking that as a choice blanked the picker and sent
+          // patient_id "" to the database, which rejected the save.
+          if (!v) return;
           onChange(v);
         }}
       >

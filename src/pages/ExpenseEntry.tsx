@@ -34,7 +34,7 @@
 //     no lifecycle/patient fields, and navigated to a non-existent route
 //     on success).
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -72,6 +72,11 @@ import {
 } from "lucide-react";
 import { logError } from "@/utils/errorHandler";
 import {
+  describeExpenseSaveError,
+  isConnectionProblem,
+  MAX_EXPENSE_AMOUNT,
+} from "@/lib/expenseSaveErrors";
+import {
   validateFileSize,
   validateFileType,
   FILE_ACCEPT_ATTRIBUTE,
@@ -107,12 +112,23 @@ const HSA_ELIGIBLE_CATEGORIES = new Set([
 ]);
 
 const expenseSchema = z.object({
-  date: z.string().min(1, "Date is required"),
-  vendor: z.string().trim().min(1, "Vendor is required").max(100),
+  date: z
+    .string()
+    .min(1, "Date is required")
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Enter a valid date."),
+  vendor: z
+    .string()
+    .trim()
+    .min(1, "Vendor is required")
+    .max(100, "Vendor can be at most 100 characters."),
   amount: z
     .number({ invalid_type_error: "Amount is required" })
-    .positive("Amount must be greater than 0"),
+    .positive("Amount must be greater than 0")
+    .max(MAX_EXPENSE_AMOUNT, "That amount is too large to save."),
   category: z.string().min(1, "Category is required"),
+  // The roster member the expense was for. Preselected with the account holder
+  // as soon as the roster arrives; empty only if there is nobody on the list.
+  patientId: z.string().min(1, "Choose who this was for."),
   notes: z.string().max(500).optional(),
 });
 type ExpenseFormValues = z.infer<typeof expenseSchema>;
@@ -171,6 +187,8 @@ export default function ExpenseEntry() {
     watch,
     control,
     setValue,
+    getValues,
+    setError,
     formState: { errors },
   } = useForm<ExpenseFormValues>({
     resolver: zodResolver(expenseSchema),
@@ -179,6 +197,7 @@ export default function ExpenseEntry() {
       vendor: "",
       amount: decisionAmount as number | undefined,
       category: decisionCategory,
+      patientId: "",
       notes: "",
     },
   });
@@ -186,8 +205,17 @@ export default function ExpenseEntry() {
   // Workstream D1: the patient is a roster member, not a typed string. The
   // account holder is preselected because it is by far the commonest case.
   const { self: rosterSelf } = useFamilyRoster();
-  const [patientId, setPatientId] = useState<string | null>(null);
-  const effectivePatientId = patientId ?? rosterSelf?.id ?? null;
+  const patientId = watch("patientId");
+  useEffect(() => {
+    if (rosterSelf && !getValues("patientId")) {
+      // Validate too, so a "Choose who this was for." left by pressing Save
+      // before the roster arrived clears as soon as "You" fills in.
+      setValue("patientId", rosterSelf.id, { shouldValidate: true });
+    }
+  }, [rosterSelf, getValues, setValue]);
+  // What the save could not be pinned on a single field (signed out, offline,
+  // or something we cannot name). Shown above the buttons, not as a pop-up.
+  const [formError, setFormError] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
@@ -286,11 +314,22 @@ export default function ExpenseEntry() {
 
   const onSubmit = async (data: ExpenseFormValues) => {
     setSubmitting(true);
+    setFormError(null);
     try {
       const {
         data: { user },
+        error: userError,
       } = await supabase.auth.getUser();
-      if (!user) throw new Error("Please sign in to add an expense.");
+      // getUser() also returns no user when the request itself failed (the
+      // network dropped). That is not an expired session, and telling someone
+      // to sign in again would cost them what they have typed.
+      if (userError && !user && isConnectionProblem(userError)) throw userError;
+      if (!user) {
+        setFormError(
+          "Your session has expired. Sign in again to save this expense.",
+        );
+        return;
+      }
 
       const { data: invoice, error: invErr } = await supabase
         .from("invoices")
@@ -321,7 +360,7 @@ export default function ExpenseEntry() {
           reimbursable_amount: data.amount,
           // patient_name is kept in step by a database trigger, so the ten
           // surfaces still reading it keep working while they migrate.
-          patient_id: effectivePatientId,
+          patient_id: data.patientId,
         })
         .select("id")
         .single();
@@ -394,8 +433,17 @@ export default function ExpenseEntry() {
       // transaction behind it at all.
       navigate("/substantiate");
     } catch (error) {
-      logError("ExpenseEntry submit", error);
-      toast.error("Failed to save expense. Please try again.");
+      // Only the code is logged: the database's own message can echo back what
+      // was typed (a provider name, a note), which may be health information.
+      logError("ExpenseEntry submit", undefined, {
+        code: (error as { code?: unknown } | null)?.code,
+      });
+      const problem = describeExpenseSaveError(error);
+      if (problem.field) {
+        setError(problem.field, { type: "server", message: problem.message });
+      } else {
+        setFormError(problem.message);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -523,9 +571,16 @@ export default function ExpenseEntry() {
                 <Label htmlFor="patient">Patient</Label>
                 <PatientPicker
                   id="patient"
-                  value={effectivePatientId}
-                  onChange={setPatientId}
+                  value={patientId || null}
+                  onChange={(id) =>
+                    setValue("patientId", id, { shouldValidate: true })
+                  }
                 />
+                {errors.patientId && (
+                  <p className="text-xs text-destructive">
+                    {errors.patientId.message}
+                  </p>
+                )}
               </div>
 
               <div className="space-y-1.5">
@@ -694,6 +749,12 @@ export default function ExpenseEntry() {
                   automatically. You can also skip this and attach it later.
                 </p>
               </div>
+
+              {formError && (
+                <p role="alert" className="text-sm text-destructive">
+                  {formError}
+                </p>
+              )}
 
               <div className="flex gap-2 pt-2">
                 <Button
