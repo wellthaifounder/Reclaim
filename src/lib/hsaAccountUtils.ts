@@ -91,6 +91,77 @@ export function formatHSAAccountDateRange(account: HSAAccount): string {
   return `${openedDate} - ${closedDate}`;
 }
 
+type StartFields = Pick<
+  HSAAccount,
+  "id" | "opened_date" | "eligibility_start_date"
+>;
+
+/**
+ * The HSA start a set of accounts implies: the earliest of each account's
+ * eligibility start, else its opened date. Mirrors the database trigger
+ * sync_profile_hsa_opened_date (L2, 20261104085017_one_hsa_opening_date.sql),
+ * which writes this into profiles.hsa_opened_date -- keep the two in step.
+ * Dates are "YYYY-MM-DD", so comparing the strings compares the days.
+ */
+export function earliestHSAStart(
+  accounts: Pick<HSAAccount, "opened_date" | "eligibility_start_date">[],
+): string | null {
+  let earliest: string | null = null;
+  for (const a of accounts) {
+    const start = a.eligibility_start_date || a.opened_date;
+    if (start && (earliest === null || start < earliest)) earliest = start;
+  }
+  return earliest;
+}
+
+export type HSAAccountChange =
+  | {
+      kind: "save";
+      /** Absent for a new account. */
+      id?: string;
+      opened_date: string;
+      eligibility_start_date: string | null;
+    }
+  | { kind: "delete"; id: string };
+
+/**
+ * The HSA start once an account is added, edited or deleted. Deleting the
+ * last account keeps the current date, as the trigger does.
+ */
+export function hsaStartAfterChange(
+  current: string | null,
+  accounts: StartFields[],
+  change: HSAAccountChange,
+): string | null {
+  const others = accounts.filter((a) => a.id !== change.id);
+  const after = change.kind === "save" ? [...others, change] : others;
+  return earliestHSAStart(after) ?? current;
+}
+
+/**
+ * Founder decision, 2026-11-04: a change that moves the HSA start LATER gets a
+ * problem line before it is saved, because every expense before the new start
+ * stops being claimable. From no date at all is not "later".
+ */
+export function startMovesLater(
+  current: string | null,
+  next: string | null,
+): boolean {
+  return !!current && !!next && next > current;
+}
+
+/** The problem line itself. `count` is null while it is still being counted. */
+export function hsaStartMoveMessage(
+  from: string,
+  to: string,
+  count: number | null,
+): string {
+  const lost = count
+    ? ` — ${count} expense${count === 1 ? "" : "s"} would no longer be claimable`
+    : "";
+  return `This moves your HSA start from ${formatDateOnly(from)} to ${formatDateOnly(to)}${lost}.`;
+}
+
 /**
  * Validate that closed date is after opened date
  */

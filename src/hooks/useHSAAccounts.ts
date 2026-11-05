@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import type { HSAAccount } from "@/lib/hsaAccountUtils";
 import { logError } from "@/utils/errorHandler";
 import { useAuthUser } from "@/hooks/useAuthUser";
+import { useHSA } from "@/contexts/HSAContext";
 import {
   describeTimingRecompute,
   useRecomputeTiming,
@@ -18,6 +19,7 @@ export function useHSAAccounts() {
   const { user } = useAuthUser();
   const userId = user?.id;
   const recomputeTiming = useRecomputeTiming();
+  const { refreshHSAStatus } = useHSA();
 
   // Fetch all HSA accounts for the current user
   const {
@@ -48,6 +50,10 @@ export function useHSAAccounts() {
   // after onboarding or the HSA-date dialog saves a date.
   const afterSave = async (lead: string) => {
     queryClient.invalidateQueries({ queryKey: ["hsa-accounts"] });
+    // HSAContext reads the profile's date once per sign-in; without this a
+    // first HSA date added here left "has an HSA" false on BillDetail and in
+    // the sidebar until a reload.
+    void refreshHSAStatus();
     try {
       // Also refreshes the establishment date and the setup checklist.
       const result = await recomputeTiming.mutateAsync();
