@@ -30,8 +30,9 @@
 // is locked into "owns" the back-link; a later one referencing the same
 // invoice via substantiation_record_items won't overwrite it.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import { AuthenticatedLayout } from "@/components/AuthenticatedLayout";
@@ -91,6 +92,13 @@ import {
 import { buildClaimPacket, type ClaimPacketReport } from "@/lib/claimPacket";
 import { useReimbursementStrategy } from "@/hooks/useReimbursementStrategy";
 import { HSA_CUSTODIANS } from "@/lib/custodianInstructions";
+import {
+  checkAmountReceived,
+  explainCloseFailure,
+  notClaimableBreakdown,
+  shortfallByExpense,
+  type ClaimLine,
+} from "@/lib/claimClose";
 
 interface EligibleExpense {
   id: string;
@@ -144,6 +152,12 @@ interface PastRecord {
    * apart in the "Sent to X" / "Drafted for X, never sent" subtext.
    */
   sent_at: string | null;
+  /**
+   * L3: what the user said arrived when they closed this claim by hand. Null
+   * when closed by a matched deposit, or not closed. Less than total_amount
+   * means paid short.
+   */
+  amount_received: number | null;
   /** A document kept as evidence, or a request filed with a custodian. */
   purpose: "record" | "claim";
   custodian: string | null;
@@ -272,6 +286,14 @@ function recordBadge(r: PastRecord): { label: string; className: string } {
  */
 function custodianLine(r: PastRecord): string {
   if (r.purpose === "record") return "Kept as evidence — nothing claimed";
+  // L3: a claim closed by hand says what arrived, and when it was short, how
+  // short -- the remainder is back in "ready to claim" and this is the trail.
+  if (r.status === "reimbursed" && r.amount_received !== null) {
+    const short = r.total_amount - r.amount_received;
+    return short > 0.005
+      ? `Paid ${formatCurrency(r.amount_received)} of ${formatCurrency(r.total_amount)} — ${formatCurrency(short)} went back to ready to claim`
+      : `Paid ${formatCurrency(r.amount_received)} in full`;
+  }
   if (r.sent_at) {
     return r.custodian
       ? `Sent to ${r.custodian}`
@@ -356,7 +378,34 @@ function explainSendFailure(err: unknown): string {
   if (/SEND_WRONG_STATUS/.test(message)) {
     return "That record has already moved on since this page loaded. We've refreshed the list.";
   }
+  // L3: one of its expenses was paid, claimed elsewhere, or lowered since the
+  // draft was built, so the draft no longer asks for the right amount.
+  if (/SEND_STALE_DRAFT/.test(message)) {
+    return "Something in this draft changed since you built it. Rebuild it to claim what's still owed.";
+  }
   return explainClaimFailure(err);
+}
+
+/**
+ * Everything outside this page that shows where a claim stands.
+ *
+ * Batch 2: the menu badge (attention-items) caches for five minutes and the
+ * Expenses lists for the same, and nothing told them a claim had been sent or
+ * paid -- so the badge kept saying "ready" about expenses already in a claim.
+ * The dashboard reloads on every visit and needs nothing here.
+ */
+function refreshClaimViews(queryClient: QueryClient) {
+  for (const key of [
+    ["attention-items"],
+    ["all-expenses"],
+    ["substantiate-queue"],
+    ["substantiate-expense"],
+    ["bills"],
+    ["bill"],
+    ["invoices"],
+  ]) {
+    void queryClient.invalidateQueries({ queryKey: key });
+  }
 }
 
 /**
@@ -513,6 +562,18 @@ export default function Substantiation() {
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [rebuildingId, setRebuildingId] = useState<string | null>(null);
 
+  // L3 — "I got paid". `paidManual` is false while a matched deposit is being
+  // offered first; choosing to type the amount flips it.
+  const queryClient = useQueryClient();
+  const [paidTarget, setPaidTarget] = useState<PastRecord | null>(null);
+  const [paidAmount, setPaidAmount] = useState("");
+  const [paidManual, setPaidManual] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const [paidLines, setPaidLines] = useState<ClaimLine[]>([]);
+  // The #sent-claims scroll is for arriving from the dashboard, once -- not
+  // after every reload the page does while the user works.
+  const scrolledToSent = useRef(false);
+
   const load = async () => {
     setLoading(true);
     try {
@@ -537,7 +598,7 @@ export default function Substantiation() {
         supabase
           .from("substantiation_records")
           .select(
-            "id, record_number, tax_year, generated_at, total_amount, expense_count, formats_generated, status, sent_at, purpose, custodian, attested_no_double_benefit, attested_at",
+            "id, record_number, tax_year, generated_at, total_amount, expense_count, formats_generated, status, sent_at, amount_received, purpose, custodian, attested_no_double_benefit, attested_at",
           )
           .eq("user_id", user.id)
           .order("generated_at", { ascending: false })
@@ -588,6 +649,10 @@ export default function Substantiation() {
           formats_generated: (r.formats_generated as string[]) ?? [],
           status: r.status as "generated" | "sent" | "reimbursed" | "voided",
           sent_at: (r.sent_at as string | null) ?? null,
+          amount_received:
+            r.amount_received === null || r.amount_received === undefined
+              ? null
+              : Number(r.amount_received),
           // Every record written before the column existed was a claim, which
           // is what the database default says too -- so the fallback here
           // agrees with it rather than inventing a third answer.
@@ -777,8 +842,11 @@ export default function Substantiation() {
           closedIds.has(r.id) ? { ...r, status: "reimbursed" as const } : r,
         ),
       );
-      // The claimable list needs no pruning: these expenses were already
-      // locked into the record, so claimable_expenses() never returned them.
+      // Reload, as closeByHand does: the database decides what the records
+      // and the claimable list now say. Other screens still show these
+      // expenses "in a claim" until told otherwise.
+      await load();
+      refreshClaimViews(queryClient);
 
       toast.success(
         closed.length > 1
@@ -787,7 +855,21 @@ export default function Substantiation() {
       );
     } catch (err) {
       logError("Substantiation.confirmMatch", err);
-      toast.error("Couldn't close that record. Please try again.");
+      const message =
+        err instanceof Error
+          ? err.message
+          : typeof err === "object" && err && "message" in err
+            ? String((err as { message: unknown }).message)
+            : "";
+      // L3: the claim was closed by hand (or withdrawn) a moment ago.
+      if (/MATCH_RECORD_CLOSED|MATCH_RESOLVED/.test(message)) {
+        toast.error(
+          "That claim is no longer waiting for payment. We've refreshed the list.",
+        );
+        await load();
+      } else {
+        toast.error("Couldn't close that record. Please try again.");
+      }
     } finally {
       setMatchActingId(null);
     }
@@ -859,6 +941,7 @@ export default function Substantiation() {
       // decides what is claimable, and guessing here is how the screen and the
       // lock drift apart.
       await load();
+      refreshClaimViews(queryClient);
 
       toast.success(
         released > 0
@@ -914,6 +997,9 @@ export default function Substantiation() {
       // Locking these expenses removes them from claimable_expenses(); the
       // page's own idea of what is claimable was built before that happened.
       await load();
+      // Batch 2: and so was every other screen's -- the menu badge kept
+      // counting these as ready to claim for up to five minutes.
+      refreshClaimViews(queryClient);
 
       toast.success(
         `${result?.record_number ?? record.record_number} sent. ${
@@ -926,6 +1012,112 @@ export default function Substantiation() {
       await load();
     } finally {
       setSendingId(null);
+    }
+  }
+
+  // ── "I got paid" (L3) ────────────────────────────────────────────────────
+
+  /** Open the dialog, pre-filled with the claim total (L3). */
+  function openPaid(record: PastRecord) {
+    setPaidTarget(record);
+    setPaidAmount(record.total_amount.toFixed(2));
+    setPaidManual(false);
+    setPaidLines([]);
+    // The claim's expenses, for the "goes back to ready to claim: …" preview
+    // of a short payment. Best effort: the database does the real split, so
+    // a failed read only costs the preview line, never the close.
+    void supabase
+      .from("substantiation_record_items")
+      .select(
+        "invoice_id, amount_at_submission, vendor_at_submission, invoice:invoices ( title, effective_service_date, created_at )",
+      )
+      .eq("substantiation_record_id", record.id)
+      .then(({ data, error }) => {
+        if (error) {
+          logError("Substantiation.openPaid lines", error);
+          return;
+        }
+        setPaidLines(
+          (data ?? []).map((row) => {
+            const inv = Array.isArray(row.invoice)
+              ? row.invoice[0]
+              : row.invoice;
+            return {
+              invoiceId: row.invoice_id,
+              label: inv?.title || row.vendor_at_submission,
+              claimed: Number(row.amount_at_submission),
+              serviceDate: inv?.effective_service_date ?? null,
+              createdAt: inv?.created_at ?? "",
+            };
+          }),
+        );
+      });
+  }
+
+  /** Switch from the offered deposit to typing the amount (L3). */
+  function enterAmountByHand(match: PendingMatch | undefined) {
+    setPaidManual(true);
+    // A deposit smaller than the claim is the likeliest true amount, so the
+    // field starts there rather than at the claim total.
+    if (
+      match &&
+      !match.group_id &&
+      paidTarget &&
+      match.transaction_amount < paidTarget.total_amount
+    ) {
+      setPaidAmount(match.transaction_amount.toFixed(2));
+    }
+  }
+
+  /**
+   * Close a sent claim by hand: the custodian paid, and there is no matched
+   * deposit to confirm (no bank connected, or it was not recognised).
+   *
+   * One database call, one transaction (close_claim_by_hand) -- the money is
+   * applied to each expense the way a confirmed deposit applies it, and any
+   * shortfall goes back to "ready to claim".
+   */
+  async function closeByHand(record: PastRecord, amount: number) {
+    setClosing(true);
+    try {
+      const { data, error } = await supabase.rpc("close_claim_by_hand", {
+        p_record_id: record.id,
+        // Left at the pre-filled total: send nothing, so the database uses
+        // its own line-item total rather than a figure rounded on screen.
+        p_amount_received:
+          paidAmount === record.total_amount.toFixed(2) ? undefined : amount,
+      });
+      if (error) throw error;
+
+      const [result] = data ?? [];
+      // Reload rather than reconstruct: a short payment puts the remainder
+      // back into the claimable set, and the database decides what that is.
+      await load();
+      refreshClaimViews(queryClient);
+      setPaidTarget(null);
+
+      const shortfall = Number(result?.shortfall ?? 0);
+      toast.success(
+        shortfall > 0
+          ? `${record.record_number} closed. ${formatCurrency(Number(result?.received ?? amount))} received — the other ${formatCurrency(shortfall)} is back in ready to claim.`
+          : `${record.record_number} closed. ${result?.expenses_paid ?? record.expense_count} expense${(result?.expenses_paid ?? record.expense_count) === 1 ? "" : "s"} marked reimbursed.`,
+        { duration: 9000 },
+      );
+    } catch (err) {
+      logError("Substantiation.closeByHand", err);
+      const message =
+        err instanceof Error
+          ? err.message
+          : typeof err === "object" && err && "message" in err
+            ? String((err as { message: unknown }).message)
+            : "";
+      toast.error(explainCloseFailure(message), { duration: 10000 });
+      if (/CLOSE_WRONG_STATUS|CLOSE_NOT_FOUND/.test(message)) {
+        setPaidTarget(null);
+        await load();
+      }
+    } finally {
+      setClosing(false);
     }
   }
 
@@ -1063,6 +1255,16 @@ export default function Substantiation() {
   useEffect(() => {
     load();
   }, []);
+
+  // The dashboard's "Track" button lands here, on the sent claims (Batch 2).
+  useEffect(() => {
+    if (scrolledToSent.current) return;
+    if (loading || phase !== "list" || location.hash !== "#sent-claims") return;
+    scrolledToSent.current = true;
+    document
+      .getElementById("sent-claims")
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [loading, phase, location.hash]);
 
   const selectedTotals = useMemo(() => {
     const selected = eligible.filter((e) => selectedIds.has(e.id));
@@ -1645,6 +1847,156 @@ export default function Substantiation() {
   const recordableNow = eligible.filter(
     (e) => taxYearOf(e.date) === CURRENT_TAX_YEAR,
   );
+  const notClaimableNow = notClaimableBreakdown(recordableNow);
+  // L3: claims the custodian has and has not paid yet get their own list, so
+  // "I got paid" is easy to find and the dashboard's Track button lands on it.
+  const sentClaims = pastRecords.filter(
+    (r) => r.purpose === "claim" && r.status === "sent",
+  );
+  const otherRecords = pastRecords.filter(
+    (r) => !(r.purpose === "claim" && r.status === "sent"),
+  );
+  const paidMatch = paidTarget
+    ? pendingMatches.find((m) => m.record_id === paidTarget.id)
+    : undefined;
+  const paidCheck = paidTarget
+    ? checkAmountReceived(paidAmount, paidTarget.total_amount)
+    : null;
+  // Oldest first (L3, founder 2026-11-04): which expenses a short payment
+  // leaves owing, and how much goes back on each.
+  const paidOwing =
+    paidCheck?.ok && paidCheck.shortfall > 0
+      ? shortfallByExpense(paidLines, paidCheck.amount)
+      : [];
+  // What the offered deposit is, against what was claimed. A batch is
+  // compared with the sum of its claims.
+  const paidMatchClaimed = paidMatch
+    ? paidMatch.group_id
+      ? pendingMatches
+          .filter((m) => m.group_id === paidMatch.group_id)
+          .reduce((s, m) => s + m.record_total, 0)
+      : paidMatch.record_total
+    : 0;
+  const paidMatchLess = paidMatch
+    ? Math.max(paidMatchClaimed - paidMatch.transaction_amount, 0)
+    : 0;
+
+  /** One row in the sent-claims list or the past-records list. */
+  const renderRecord = (r: PastRecord) => (
+    <Card key={r.id}>
+      {/* Stacks below sm, side by side above it.
+          `flex-wrap` alone never wrapped: the text block was
+          `flex-1 min-w-0` (basis 0, free to shrink below its content)
+          next to a `shrink-0` button group, so at 390px it took
+          whatever the ~180px of buttons left it and squeezed the
+          record number down three lines rather than moving the
+          buttons to their own row. */}
+      <CardContent className="p-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+        <div className="min-w-0 sm:flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="font-semibold tabular-nums">{r.record_number}</p>
+            <Badge variant="outline" className={recordBadge(r).className}>
+              {recordBadge(r).label}
+            </Badge>
+          </div>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Tax year {r.tax_year} ·{" "}
+            {new Date(r.generated_at).toLocaleDateString()} · {r.expense_count}{" "}
+            expense
+            {r.expense_count === 1 ? "" : "s"} · ${r.total_amount.toFixed(2)}
+          </p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {custodianLine(r)}
+            {r.attested_no_double_benefit ? " · attested" : ""}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          {/* Workstream E3: the page has always said records can be
+              re-downloaded at any time. This is the button that
+              makes that true. */}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => redownloadPacket(r)}
+            disabled={redownloadingId !== null}
+          >
+            {redownloadingId === r.id ? (
+              <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+            ) : (
+              <FileArchive className="h-3.5 w-3.5 mr-1.5" />
+            )}
+            Packet
+          </Button>
+
+          {/* Spec D31/D32: a draft claim's primary action is
+              committing it, and its secondary action is a
+              one-click rebuild -- not a confirm-and-discard
+              dialog, because nothing is locked yet to warn about. */}
+          {r.purpose === "claim" && r.status === "generated" && (
+            <>
+              <Button
+                size="sm"
+                onClick={() => markSent(r)}
+                disabled={sendingId !== null || rebuildingId !== null}
+              >
+                {sendingId === r.id ? (
+                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
+                )}
+                Send to custodian
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => rebuildDraft(r)}
+                disabled={sendingId !== null || rebuildingId !== null}
+              >
+                {rebuildingId === r.id ? (
+                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                ) : (
+                  <Undo2 className="h-3.5 w-3.5 mr-1.5" />
+                )}
+                Rebuild this record
+              </Button>
+            </>
+          )}
+
+          {/* L3: the custodian paid. Works with or without a bank; a
+              matched deposit, when there is one, is offered first inside
+              the dialog. */}
+          {r.purpose === "claim" && r.status === "sent" && (
+            <Button size="sm" onClick={() => openPaid(r)} disabled={closing}>
+              <Banknote className="h-3.5 w-3.5 mr-1.5" />I got paid
+            </Button>
+          )}
+
+          {/* Workstream E5: only a real commitment can be
+              withdrawn -- a paid claim would put money back into
+              the claimable pool that has already arrived, and a
+              voided one is already withdrawn. A saved record can
+              be discarded the same way: nothing was locked, so
+              voiding one releases nothing and simply retires the
+              document. */}
+          {((r.purpose === "claim" && r.status === "sent") ||
+            (r.purpose === "record" && r.status === "generated")) && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-muted-foreground hover:text-destructive"
+              onClick={() => {
+                setVoidTarget(r);
+                setVoidReason("");
+              }}
+            >
+              <Undo2 className="h-3.5 w-3.5 mr-1.5" />
+              {r.purpose === "record" ? "Discard" : "Withdraw"}
+            </Button>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
 
   return (
     <AuthenticatedLayout>
@@ -1836,11 +2188,24 @@ export default function Substantiation() {
                   is the whole point of the wider record: this spend is a
                   distribution that already happened and still needs evidence,
                   and nothing else on the page would tell the user it exists. */}
-              {recordableNow.length > claimableNow.length && (
+              {/* Batch 2: this used to call every one of them "already paid
+                  from the HSA", including expenses sitting in a claim the user
+                  had just sent -- money still on its way, not money spent. */}
+              {notClaimableNow.inSentClaim > 0 && (
                 <p className="text-sm text-muted-foreground mt-1">
-                  {recordableNow.length - claimableNow.length} more already paid
-                  from the HSA — nothing left to claim, but they still belong in
-                  this year's record.
+                  {notClaimableNow.inSentClaim} more in a claim you've sent —
+                  waiting on your custodian.
+                </p>
+              )}
+              {notClaimableNow.paidByHsaCard > 0 && (
+                <p className="text-sm text-muted-foreground mt-1">
+                  {notClaimableNow.paidByHsaCard} paid with the HSA card —
+                  nothing to claim, but they still belong in this year's record.
+                </p>
+              )}
+              {notClaimableNow.reimbursed > 0 && (
+                <p className="text-sm text-muted-foreground mt-1">
+                  {notClaimableNow.reimbursed} already reimbursed.
                 </p>
               )}
               {isShoebox && (
@@ -1885,6 +2250,17 @@ export default function Substantiation() {
           </CardContent>
         </Card>
 
+        {/* L3: sent claims get their own list. This is where the dashboard's
+            "Track" button lands, and where "I got paid" lives. */}
+        {sentClaims.length > 0 && (
+          <section id="sent-claims" className="mb-6 scroll-mt-20">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+              Sent — waiting for payment
+            </h2>
+            <div className="space-y-2">{sentClaims.map(renderRecord)}</div>
+          </section>
+        )}
+
         {/* Past records */}
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-2">
           Past records
@@ -1899,121 +2275,12 @@ export default function Substantiation() {
               </p>
             </CardContent>
           </Card>
+        ) : otherRecords.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Nothing else yet — every claim so far is waiting for payment.
+          </p>
         ) : (
-          <div className="space-y-2">
-            {pastRecords.map((r) => (
-              <Card key={r.id}>
-                {/* Stacks below sm, side by side above it.
-                    `flex-wrap` alone never wrapped: the text block was
-                    `flex-1 min-w-0` (basis 0, free to shrink below its content)
-                    next to a `shrink-0` button group, so at 390px it took
-                    whatever the ~180px of buttons left it and squeezed the
-                    record number down three lines rather than moving the
-                    buttons to their own row. */}
-                <CardContent className="p-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-                  <div className="min-w-0 sm:flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-semibold tabular-nums">
-                        {r.record_number}
-                      </p>
-                      <Badge
-                        variant="outline"
-                        className={recordBadge(r).className}
-                      >
-                        {recordBadge(r).label}
-                      </Badge>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Tax year {r.tax_year} ·{" "}
-                      {new Date(r.generated_at).toLocaleDateString()} ·{" "}
-                      {r.expense_count} expense
-                      {r.expense_count === 1 ? "" : "s"} · $
-                      {r.total_amount.toFixed(2)}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {custodianLine(r)}
-                      {r.attested_no_double_benefit ? " · attested" : ""}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2 shrink-0">
-                    {/* Workstream E3: the page has always said records can be
-                        re-downloaded at any time. This is the button that
-                        makes that true. */}
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => redownloadPacket(r)}
-                      disabled={redownloadingId !== null}
-                    >
-                      {redownloadingId === r.id ? (
-                        <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                      ) : (
-                        <FileArchive className="h-3.5 w-3.5 mr-1.5" />
-                      )}
-                      Packet
-                    </Button>
-
-                    {/* Spec D31/D32: a draft claim's primary action is
-                        committing it, and its secondary action is a
-                        one-click rebuild -- not a confirm-and-discard
-                        dialog, because nothing is locked yet to warn about. */}
-                    {r.purpose === "claim" && r.status === "generated" && (
-                      <>
-                        <Button
-                          size="sm"
-                          onClick={() => markSent(r)}
-                          disabled={sendingId !== null || rebuildingId !== null}
-                        >
-                          {sendingId === r.id ? (
-                            <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                          ) : (
-                            <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
-                          )}
-                          Send to custodian
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => rebuildDraft(r)}
-                          disabled={sendingId !== null || rebuildingId !== null}
-                        >
-                          {rebuildingId === r.id ? (
-                            <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                          ) : (
-                            <Undo2 className="h-3.5 w-3.5 mr-1.5" />
-                          )}
-                          Rebuild this record
-                        </Button>
-                      </>
-                    )}
-
-                    {/* Workstream E5: only a real commitment can be
-                        withdrawn -- a paid claim would put money back into
-                        the claimable pool that has already arrived, and a
-                        voided one is already withdrawn. A saved record can
-                        be discarded the same way: nothing was locked, so
-                        voiding one releases nothing and simply retires the
-                        document. */}
-                    {((r.purpose === "claim" && r.status === "sent") ||
-                      (r.purpose === "record" && r.status === "generated")) && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="text-muted-foreground hover:text-destructive"
-                        onClick={() => {
-                          setVoidTarget(r);
-                          setVoidReason("");
-                        }}
-                      >
-                        <Undo2 className="h-3.5 w-3.5 mr-1.5" />
-                        {r.purpose === "record" ? "Discard" : "Withdraw"}
-                      </Button>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+          <div className="space-y-2">{otherRecords.map(renderRecord)}</div>
         )}
 
         {/* The "Tax export" section stood here until 2026-09-09. It rendered a
@@ -2109,6 +2376,160 @@ export default function Substantiation() {
                 ? "Discard record"
                 : "Withdraw claim"}
             </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* L3 — "I got paid". A matched deposit, when one is waiting, is offered
+          first: it is evidence from the bank rather than the user's memory.
+          Otherwise the amount is pre-filled with the claim total and
+          editable; less than the total sends the rest back to ready to
+          claim. */}
+      <AlertDialog
+        open={paidTarget !== null}
+        onOpenChange={(open) => {
+          if (!open && !closing && matchActingId === null) setPaidTarget(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Close {paidTarget?.record_number} as paid
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              {paidMatch && !paidManual ? (
+                <div className="space-y-2">
+                  <p>
+                    We found a deposit that looks like this payment:{" "}
+                    {formatCurrency(paidMatch.transaction_amount)} from{" "}
+                    {paidMatch.transaction_vendor} on{" "}
+                    {new Date(
+                      paidMatch.transaction_date + "T00:00:00",
+                    ).toLocaleDateString()}
+                    .
+                  </p>
+                  {/* The gap is shown, never rounded away: "$2.00 less" is
+                      either a fee or a partly denied claim, and only the
+                      user knows which. */}
+                  <p className="text-foreground tabular-nums">
+                    Claimed {formatCurrency(paidMatchClaimed)} · deposit{" "}
+                    {formatCurrency(paidMatch.transaction_amount)}
+                    {paidMatchLess > 0.005 &&
+                      ` (${formatCurrency(paidMatchLess)} less)`}
+                  </p>
+                  <p>
+                    Confirming it treats the claim as paid in full
+                    {paidMatchLess > 0.005 ? ", including the difference" : ""}.
+                  </p>
+                  {paidMatch.group_id && (
+                    <p>
+                      It looks like it paid{" "}
+                      {
+                        pendingMatches.filter(
+                          (m) => m.group_id === paidMatch.group_id,
+                        ).length
+                      }{" "}
+                      claims together, so confirming it closes all of them.
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <p>
+                    {paidTarget?.expense_count} expense
+                    {paidTarget?.expense_count === 1 ? "" : "s"}, claimed at{" "}
+                    {formatCurrency(paidTarget?.total_amount ?? 0)}.
+                  </p>
+                  <div className="space-y-1.5">
+                    <Label
+                      htmlFor="amount-received"
+                      className="text-foreground"
+                    >
+                      Amount received
+                    </Label>
+                    <Input
+                      id="amount-received"
+                      inputMode="decimal"
+                      value={paidAmount}
+                      onChange={(e) => setPaidAmount(e.target.value)}
+                      disabled={closing}
+                      aria-invalid={paidCheck !== null && !paidCheck.ok}
+                    />
+                    {paidCheck && !paidCheck.ok && (
+                      <p className="text-xs text-destructive">
+                        {paidCheck.problem}
+                      </p>
+                    )}
+                    {/* Oldest first (founder 2026-11-04): name what goes
+                        back, and how much on each. */}
+                    {paidCheck?.ok &&
+                      paidCheck.shortfall > 0 &&
+                      (paidOwing.length > 0 ? (
+                        paidOwing.map((o) => (
+                          <p
+                            key={o.invoiceId}
+                            className="text-xs text-foreground"
+                          >
+                            {formatCurrency(o.backToClaim)} goes back to ready
+                            to claim: {o.label}
+                          </p>
+                        ))
+                      ) : (
+                        <p className="text-xs text-foreground">
+                          {formatCurrency(paidCheck.shortfall)} goes back to
+                          ready to claim.
+                        </p>
+                      ))}
+                  </div>
+                </div>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            {paidMatch && !paidManual ? (
+              <>
+                <AlertDialogCancel
+                  disabled={matchActingId !== null}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    enterAmountByHand(paidMatch);
+                  }}
+                >
+                  No, enter the amount
+                </AlertDialogCancel>
+                <AlertDialogAction
+                  disabled={matchActingId !== null}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    void confirmMatch(paidMatch).then(() =>
+                      setPaidTarget(null),
+                    );
+                  }}
+                >
+                  {matchActingId !== null && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  Yes — paid in full
+                </AlertDialogAction>
+              </>
+            ) : (
+              <>
+                <AlertDialogCancel disabled={closing}>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  disabled={closing || !paidCheck?.ok}
+                  onClick={(e) => {
+                    // Held open until the database answers, like withdrawing.
+                    e.preventDefault();
+                    if (paidTarget && paidCheck?.ok) {
+                      void closeByHand(paidTarget, paidCheck.amount);
+                    }
+                  }}
+                >
+                  {closing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Close the claim
+                </AlertDialogAction>
+              </>
+            )}
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

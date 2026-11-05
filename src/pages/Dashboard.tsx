@@ -47,6 +47,7 @@ import {
 } from "lucide-react";
 import { logError } from "@/utils/errorHandler";
 import { formatCurrency } from "@/lib/utils";
+import { remainingOf } from "@/lib/claimClose";
 
 interface BucketCounts {
   count: number;
@@ -135,12 +136,37 @@ export default function Dashboard() {
         // Workstream E6: the strategy is no longer fetched here. It lives in
         // useReimbursementStrategy, so this page, the attention banner and the
         // claim screen cannot disagree about which one the user chose.
-        const { data: invoiceRows } = await supabase
-          .from("invoices")
-          .select("lifecycle_status, amount, date, reimbursed_at")
-          .eq("user_id", user.id);
+        const [{ data: invoiceRows }, { data: paidClaims }] = await Promise.all(
+          [
+            supabase
+              .from("invoices")
+              .select(
+                "lifecycle_status, claim_state, amount, amount_paid, reimbursable_amount, reimbursed_amount, date, reimbursed_at",
+              )
+              .eq("user_id", user.id),
+            // Reclaimed this year comes from the CLAIMS that were paid this
+            // year, at what actually arrived (L3: amount_received for a claim
+            // closed by hand). Summed from expenses instead, a claim paid $80 in
+            // December and its $20 remainder in January would count $100 in the
+            // second year as well as $80 in the first.
+            supabase
+              .from("substantiation_records")
+              .select("total_amount, amount_received, reimbursed_at")
+              .eq("user_id", user.id)
+              .eq("purpose", "claim")
+              .eq("status", "reimbursed")
+              .gte("reimbursed_at", `${CURRENT_YEAR}-01-01`)
+              .lt("reimbursed_at", `${CURRENT_YEAR + 1}-01-01`),
+          ],
+        );
 
         const fresh: DashboardData = emptyDashboardData();
+
+        for (const claim of paidClaims ?? []) {
+          fresh.reclaimedYtd += Number(
+            claim.amount_received ?? claim.total_amount ?? 0,
+          );
+        }
 
         for (const row of invoiceRows ?? []) {
           const amount = Number(row.amount) || 0;
@@ -151,10 +177,14 @@ export default function Dashboard() {
             // the dashboard report "You're all caught up" and $0.00 over a
             // Substantiate queue holding twenty expenses -- the same omission
             // that hid six real ones worth $2,642.13.
+            //
+            // Each money bucket totals what is still owed (remainingOf), the
+            // figure the Reimburse page and the menu badge use, so after a
+            // short payment (L3) every screen shows the same remainder.
             case "captured":
             case "needs_receipt":
               fresh.needsReceipt.count++;
-              fresh.needsReceipt.total += amount;
+              fresh.needsReceipt.total += remainingOf(row);
               break;
             case "pending_review":
               fresh.pendingReview.count++;
@@ -162,15 +192,23 @@ export default function Dashboard() {
               break;
             case "eligible":
               fresh.eligible.count++;
-              fresh.eligible.total += amount;
+              fresh.eligible.total += remainingOf(row);
               break;
             case "submitted":
               fresh.submitted.count++;
-              fresh.submitted.total += amount;
+              fresh.submitted.total += remainingOf(row);
               break;
             case "reimbursed": {
+              // Claim-paid expenses are counted through their claims above.
+              // What stays here is spend that settled without a claim -- paid
+              // on the HSA card, or reimbursed outside Reclaim -- which the
+              // figure has always included.
               const ts = row.reimbursed_at;
-              if (ts && new Date(ts as string).getFullYear() === CURRENT_YEAR) {
+              if (
+                row.claim_state !== "reimbursed" &&
+                ts &&
+                new Date(ts as string).getFullYear() === CURRENT_YEAR
+              ) {
                 fresh.reclaimedYtd += amount;
               }
               break;
@@ -359,7 +397,8 @@ export default function Dashboard() {
               total={data.submitted.total}
               copy="Waiting for HSA deposit"
               ctaLabel="Track"
-              onClick={() => navigate("/substantiation")}
+              // Lands on the sent claims, where "I got paid" is (L3).
+              onClick={() => navigate("/substantiation#sent-claims")}
             />
 
             {/* Reclaimed YTD footer */}

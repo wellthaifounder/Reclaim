@@ -1193,6 +1193,7 @@ export type Database = {
       }
       substantiation_records: {
         Row: {
+          amount_received: number | null
           attested_at: string | null
           attested_no_double_benefit: boolean
           created_at: string
@@ -1218,6 +1219,7 @@ export type Database = {
           voided_at: string | null
         }
         Insert: {
+          amount_received?: number | null
           attested_at?: string | null
           attested_no_double_benefit?: boolean
           created_at?: string
@@ -1243,6 +1245,7 @@ export type Database = {
           voided_at?: string | null
         }
         Update: {
+          amount_received?: number | null
           attested_at?: string | null
           attested_no_double_benefit?: boolean
           created_at?: string
@@ -1574,6 +1577,17 @@ export type Database = {
       classify_patient_name: {
         Args: { p_name: string }
         Returns: Database["public"]["Enums"]["family_relationship"]
+      }
+      close_claim_by_hand: {
+        Args: { p_amount_received?: number; p_record_id: string }
+        Returns: {
+          claim_total: number
+          expenses_paid: number
+          expenses_reopened: number
+          received: number
+          record_number: string
+          shortfall: number
+        }[]
       }
       confirm_deposit_match: {
         Args: { p_candidate_id: string }
