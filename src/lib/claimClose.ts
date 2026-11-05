@@ -44,7 +44,6 @@ export type AmountCheck =
 export function checkAmountReceived(
   input: string,
   claimTotal: number,
-  expenseCount: number,
 ): AmountCheck {
   const cleaned = input.replace(/[$,\s]/g, "");
   if (cleaned === "") return { ok: false, problem: "Enter the amount." };
@@ -66,17 +65,50 @@ export function checkAmountReceived(
       problem: `That's more than the ${formatUsd(total)} you claimed.`,
     };
   }
-  const shortfall = cents(total - amount);
-  // L3 open decision: how a short payment splits across several expenses.
-  // Until it is made, the database refuses it, so say so here first.
-  if (shortfall > 0 && expenseCount > 1) {
-    return {
-      ok: false,
-      problem:
-        "Short payments on claims with more than one expense aren't supported yet. If you were paid in full, leave the full amount.",
-    };
+  return { ok: true, amount, shortfall: cents(total - amount) };
+}
+
+export interface ClaimLine {
+  invoiceId: string;
+  label: string;
+  /** What this claim asked for on this expense (amount_at_submission). */
+  claimed: number;
+  /** Date of care, YYYY-MM-DD; null sorts last, as in the database. */
+  serviceDate: string | null;
+  createdAt: string;
+}
+
+/**
+ * Where a short payment lands -- L3, founder 2026-11-04: OLDEST FIRST.
+ *
+ * Mirrors close_claim_by_hand: the money pays the oldest expenses (by date of
+ * care, then created_at, then id) in full first; the shortfall lands on the
+ * newest. Returns only the expenses left owing, with what goes back to "ready
+ * to claim" on each. The database does the real allocation; this is the
+ * preview the dialog shows beside the amount.
+ */
+export function shortfallByExpense(
+  lines: ClaimLine[],
+  received: number,
+): { invoiceId: string; label: string; backToClaim: number }[] {
+  const ordered = [...lines].sort(
+    (a, b) =>
+      (a.serviceDate === null ? 1 : 0) - (b.serviceDate === null ? 1 : 0) ||
+      (a.serviceDate ?? "").localeCompare(b.serviceDate ?? "") ||
+      a.createdAt.localeCompare(b.createdAt) ||
+      a.invoiceId.localeCompare(b.invoiceId),
+  );
+  let left = cents(received);
+  const owing: { invoiceId: string; label: string; backToClaim: number }[] = [];
+  for (const l of ordered) {
+    const applied = Math.min(l.claimed, Math.max(left, 0));
+    left = cents(left - applied);
+    const back = cents(l.claimed - applied);
+    if (back > 0) {
+      owing.push({ invoiceId: l.invoiceId, label: l.label, backToClaim: back });
+    }
   }
-  return { ok: true, amount, shortfall };
+  return owing;
 }
 
 /** Turn a close_claim_by_hand refusal into something a person can act on. */
@@ -92,9 +124,6 @@ export function explainCloseFailure(message: string): string {
   }
   if (/CLOSE_TOO_MUCH/.test(message)) {
     return "That's more than the claim total.";
-  }
-  if (/CLOSE_SHORT_SPLIT_UNDECIDED/.test(message)) {
-    return "Short payments on claims with more than one expense aren't supported yet.";
   }
   return "Couldn't close that claim. Please try again.";
 }

@@ -63,6 +63,10 @@ export interface LedgerExpense {
    * claim is paid short (L3), when only the remainder is ready to claim.
    */
   remaining: number;
+  /** What has come back so far, including part of a claim paid short (L3). */
+  reimbursed_amount: number;
+  /** eligibility_state = 'eligible' -- documented or not. */
+  eligible: boolean;
   date: string;
   patient_id: string | null;
   patient_name: string | null;
@@ -205,12 +209,21 @@ export function ExpenseLedger({
     let reimbursed = 0;
     for (const e of visible) {
       total += e.amount;
-      if (e.lifecycle_status === "eligible" && e.claim_state === "unclaimed") {
+      // The Reimburse page's own rule: eligible, unclaimed, something still
+      // owed -- whether or not a document is attached yet. It used to count
+      // only the 'eligible' stage, which leaves out an eligible expense with
+      // no document, so the two pages disagreed about the same money.
+      if (e.eligible && e.claim_state === "unclaimed" && e.remaining > 0) {
         // What is still owed, not the billed amount: after a short payment
-        // (L3) only the remainder is ready, and the Reimburse page says so.
+        // (L3) only the remainder is ready.
         ready += e.remaining;
       }
-      if (
+      // What actually came back, so part of a claim paid short counts too.
+      // Older reimbursed rows written before the amount was recorded fall
+      // back to the billed amount, as this total always did.
+      if (e.reimbursed_amount > 0) {
+        reimbursed += e.reimbursed_amount;
+      } else if (
         e.claim_state === "reimbursed" ||
         e.claim_state === "reimbursed_externally"
       ) {

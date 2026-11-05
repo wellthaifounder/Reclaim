@@ -175,7 +175,9 @@ BEGIN
     INTO v_rec
     FROM substantiation_records sr
    WHERE sr.id = p_record_id
-     AND sr.user_id = v_user;
+     AND sr.user_id = v_user
+     -- Two tabs sending (or one sending while another closes) take turns.
+     FOR UPDATE;
 
   IF v_rec IS NULL THEN
     RAISE EXCEPTION 'SEND_NOT_FOUND: that record does not exist';
@@ -210,22 +212,28 @@ BEGIN
       AND i.user_id = v_user
       FOR UPDATE OF i;
 
-  SELECT i.vendor, i.claim_state::TEXT AS claim_state
+  -- A claim generated before 2026-09-16 (lock-on-generate) and never sent is
+  -- still a draft whose expenses are already locked_in_request with this
+  -- draft as their back-link. That lock is this draft's own, not a sign the
+  -- expense moved on, so it is exempt -- the amount condition still applies.
+  SELECT i.id
     INTO v_stale
     FROM substantiation_record_items sri
     JOIN invoices i ON i.id = sri.invoice_id
    WHERE sri.substantiation_record_id = p_record_id
-     AND (i.claim_state <> 'unclaimed'
+     AND ((i.claim_state <> 'unclaimed'
+           AND NOT (i.claim_state = 'locked_in_request'
+                    AND i.submitted_record_id = p_record_id))
           OR sri.amount_at_submission
              > GREATEST(COALESCE(i.reimbursable_amount, i.amount_paid, i.amount)
                         - COALESCE(i.reimbursed_amount, 0), 0) + 0.005)
-   ORDER BY i.vendor
    LIMIT 1;
 
+  -- No provider or health detail in the message: errors travel to logs.
   IF FOUND THEN
     RAISE EXCEPTION
-      'SEND_STALE_DRAFT: % in % is no longer claimable for the amount in this draft (%)',
-      v_stale.vendor, v_rec.record_number, v_stale.claim_state;
+      'SEND_STALE_DRAFT: something in % changed since this draft was built',
+      v_rec.record_number;
   END IF;
 
   WITH locked AS (
@@ -361,18 +369,6 @@ BEGIN
 
   v_short := v_total - v_amount;
 
-  -- OPEN DECISION (L3 does not say, and confirm_deposit_match does not settle
-  -- it -- it absorbs any gap). When a claim of several expenses is paid short,
-  -- which expenses were short is something only the custodian's statement
-  -- knows. Proportionally or oldest-first are both defensible and move the
-  -- user's money differently, so this refuses rather than guesses. A claim of
-  -- one expense has only one place the shortfall can go.
-  IF v_short > 0 AND v_items > 1 THEN
-    RAISE EXCEPTION
-      'CLOSE_SHORT_SPLIT_UNDECIDED: % has % expenses; a short payment cannot yet be split between them',
-      v_rec.record_number, v_items;
-  END IF;
-
   -- Lock the expenses before reading their money, same reason as above.
   PERFORM 1
      FROM invoices i
@@ -382,17 +378,36 @@ BEGIN
       FOR UPDATE OF i;
 
   -- What arrived, per expense. Paid in full: each expense gets its own
-  -- claimed amount, exactly as confirm_deposit_match applies it. Paid short:
-  -- the single expense gets what arrived. The split decision above lands in
-  -- this one CTE when it is made.
-  WITH alloc AS (
+  -- claimed amount, exactly as confirm_deposit_match applies it.
+  --
+  -- Paid short -- L3, founder 2026-11-04: OLDEST FIRST. The money that arrived
+  -- pays the oldest expenses in full first, ordered by date of care, then
+  -- created_at, then id (so the order is total and repeatable). The shortfall
+  -- lands on the newest expense or expenses, and each one left owing goes
+  -- back to "ready to claim" with its remainder.
+  WITH ordered AS (
     SELECT sri.invoice_id,
            sri.amount_at_submission AS claimed,
-           CASE WHEN v_short = 0 THEN sri.amount_at_submission
-                ELSE v_amount
-           END AS applied
+           SUM(sri.amount_at_submission) OVER (
+             ORDER BY i.effective_service_date ASC NULLS LAST,
+                      i.created_at ASC, i.id ASC
+             ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+           ) AS running
       FROM substantiation_record_items sri
+      JOIN invoices i ON i.id = sri.invoice_id
      WHERE sri.substantiation_record_id = p_record_id
+       AND i.user_id = v_user
+  ),
+  alloc AS (
+    SELECT o.invoice_id,
+           o.claimed,
+           -- What is left of the received money once every older expense has
+           -- been paid, capped at this expense's claim and floored at zero.
+           CASE WHEN v_short = 0 THEN o.claimed
+                ELSE LEAST(o.claimed,
+                           GREATEST(v_amount - (o.running - o.claimed), 0))
+           END AS applied
+      FROM ordered o
   ),
   money AS (
     SELECT i.id,
@@ -432,8 +447,10 @@ BEGIN
                THEN i.submitted_at
              ELSE NULL
            END,
-           -- When money last arrived, partial or not.
-           reimbursed_at = v_now,
+           -- When money last arrived, partial or not. An expense this payment
+           -- did not reach at all keeps whatever it had.
+           reimbursed_at = CASE WHEN m.applied > 0 THEN v_now
+                                ELSE i.reimbursed_at END,
            updated_at    = v_now
       FROM money m
      WHERE i.id = m.id
@@ -456,12 +473,23 @@ BEGIN
    WHERE id = p_record_id
      AND user_id = v_user;
 
-  -- A deposit prompt still pending against this claim is now answered.
-  UPDATE reimbursement_match_candidates
+  -- A deposit prompt still pending against this claim is now answered. So is
+  -- any batch reading it belongs to: a batch is one claim about one deposit,
+  -- and rejecting it rejects the whole reading (dismiss_deposit_match's rule)
+  -- -- otherwise its other members would go on offering a deposit whose sum
+  -- no longer adds up.
+  UPDATE reimbursement_match_candidates c
      SET status = 'dismissed', resolved_at = v_now
-   WHERE user_id = v_user
-     AND substantiation_record_id = p_record_id
-     AND status = 'pending';
+   WHERE c.user_id = v_user
+     AND c.status = 'pending'
+     AND (c.substantiation_record_id = p_record_id
+          OR c.match_group_id IN (
+               SELECT g.match_group_id
+                 FROM reimbursement_match_candidates g
+                WHERE g.user_id = v_user
+                  AND g.substantiation_record_id = p_record_id
+                  AND g.status = 'pending'
+                  AND g.match_group_id IS NOT NULL));
 
   record_number := v_rec.record_number;
   claim_total   := v_total;
@@ -474,11 +502,176 @@ $$;
 COMMENT ON FUNCTION public.close_claim_by_hand(UUID, NUMERIC) IS
   'L3: "I got paid". Closes a SENT claim owned by the caller in one
    transaction. No amount, or the claim total, applies the money the same way
-   confirm_deposit_match does. Less than the total returns the shortfall to
-   claimable (single-expense claims only, until the split rule is decided).
-   Refuses zero, negative, more than the total, and any claim not sent.';
+   confirm_deposit_match does. Less than the total pays the oldest expenses
+   first (founder 2026-11-04) and returns the shortfall on the newest to
+   claimable. Refuses zero, negative, more than the total, and any claim not
+   sent.';
 
 REVOKE ALL ON FUNCTION public.close_claim_by_hand(UUID, NUMERIC) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.close_claim_by_hand(UUID, NUMERIC) FROM anon;
 GRANT EXECUTE ON FUNCTION public.close_claim_by_hand(UUID, NUMERIC)
   TO authenticated;
+
+-- ── 6. Confirming a deposit cannot pay a claim twice ─────────────────────
+-- The live definition (20260817180000, not redefined since) with one block
+-- added: every claim the deposit would close is locked and must still be
+-- SENT. Now that a claim can also be closed by hand, a confirm racing a hand
+-- close on the same claim would otherwise add the money to its expenses a
+-- second time. The gap-absorbing rule is unchanged.
+
+CREATE OR REPLACE FUNCTION public.confirm_deposit_match(p_candidate_id UUID)
+RETURNS TABLE (
+  record_id        UUID,
+  record_number    TEXT,
+  expenses_closed  INTEGER,
+  amount_applied   NUMERIC
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_user   UUID := auth.uid();
+  v_now    TIMESTAMPTZ := now();
+  v_cand   RECORD;
+  v_member RECORD;
+BEGIN
+  IF v_user IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+
+  SELECT c.id, c.transaction_id, c.match_group_id, c.status
+    INTO v_cand
+    FROM reimbursement_match_candidates c
+   WHERE c.id = p_candidate_id
+     AND c.user_id = v_user;
+
+  IF v_cand IS NULL THEN
+    RAISE EXCEPTION 'MATCH_NOT_FOUND: that deposit match no longer exists';
+  END IF;
+  IF v_cand.status <> 'pending' THEN
+    RAISE EXCEPTION 'MATCH_RESOLVED: that deposit match was already %',
+      v_cand.status;
+  END IF;
+
+  -- L3. Lock every claim this confirmation would close, in a fixed order so
+  -- two confirmations cannot deadlock, then refuse if any is no longer sent
+  -- (closed by hand, or withdrawn, a moment ago). One refusal refuses the
+  -- whole batch: its amounts only add up together.
+  PERFORM 1
+     FROM substantiation_records sr
+    WHERE sr.user_id = v_user
+      AND sr.id IN (
+            SELECT c.substantiation_record_id
+              FROM reimbursement_match_candidates c
+             WHERE c.user_id = v_user
+               AND c.status = 'pending'
+               AND (c.id = p_candidate_id
+                    OR (v_cand.match_group_id IS NOT NULL
+                        AND c.match_group_id = v_cand.match_group_id)))
+    ORDER BY sr.id
+      FOR UPDATE;
+
+  IF EXISTS (
+    SELECT 1
+      FROM substantiation_records sr
+      JOIN reimbursement_match_candidates c
+        ON c.substantiation_record_id = sr.id
+     WHERE c.user_id = v_user
+       AND (c.id = p_candidate_id
+            OR (v_cand.match_group_id IS NOT NULL
+                AND c.match_group_id = v_cand.match_group_id))
+       AND sr.status <> 'sent'
+  ) THEN
+    RAISE EXCEPTION 'MATCH_RECORD_CLOSED: a claim this deposit would pay is no longer waiting for payment';
+  END IF;
+
+  -- A batched deposit is only true as a set: the amounts add up to the deposit
+  -- together and to nothing apart. Confirming one member confirms the group.
+  FOR v_member IN
+    SELECT c.id, c.substantiation_record_id AS rec_id
+      FROM reimbursement_match_candidates c
+     WHERE c.user_id = v_user
+       AND c.status = 'pending'
+       AND (c.id = p_candidate_id
+            OR (v_cand.match_group_id IS NOT NULL
+                AND c.match_group_id = v_cand.match_group_id))
+  LOOP
+    UPDATE reimbursement_match_candidates
+       SET status = 'confirmed', resolved_at = v_now
+     WHERE id = v_member.id;
+
+    -- The money lands in the ledger, not just in a status. Capped at what the
+    -- expense could ever ask for, and accumulated rather than assigned, so a
+    -- second reimbursement against a partly paid expense cannot exceed it.
+    --
+    -- A rounding shortfall is absorbed here rather than left behind: the user
+    -- has just said this deposit closed the claim, and leaving $1.40 of
+    -- "remaining" on an expense would put unclaimable dust back into the
+    -- claimable set for ever.
+    WITH closed AS (
+      UPDATE invoices i
+         SET reimbursed_amount = LEAST(
+               COALESCE(i.reimbursable_amount, i.amount_paid, i.amount),
+               COALESCE(i.reimbursed_amount, 0) + sri.amount_at_submission),
+             claim_state   = 'reimbursed',
+             reimbursed_at = v_now,
+             updated_at    = v_now
+        FROM substantiation_record_items sri
+       WHERE sri.substantiation_record_id = v_member.rec_id
+         AND sri.invoice_id = i.id
+         AND i.user_id = v_user
+      RETURNING sri.amount_at_submission AS applied
+    )
+    SELECT v_member.rec_id,
+           (SELECT sr.record_number FROM substantiation_records sr
+             WHERE sr.id = v_member.rec_id),
+           COUNT(*)::INTEGER,
+           COALESCE(SUM(applied), 0)
+      INTO record_id, record_number, expenses_closed, amount_applied
+      FROM closed;
+
+    -- Setting the status fires trg_records_propagate_status, which moves the
+    -- mirrored record_status the claim lock reads. 'reimbursed' is still not
+    -- 'voided', so the expenses stay locked -- correct: a reimbursed expense
+    -- must never become claimable again.
+    UPDATE substantiation_records
+       SET status                    = 'reimbursed',
+           reimbursed_at             = v_now,
+           reimbursed_transaction_id = v_cand.transaction_id,
+           updated_at                = v_now
+     WHERE id = v_member.rec_id
+       AND user_id = v_user;
+
+    -- Nothing else can still be pending against a record that is now closed,
+    -- nor against a deposit that has now been spent.
+    UPDATE reimbursement_match_candidates
+       SET status = 'dismissed', resolved_at = v_now
+     WHERE user_id = v_user
+       AND status = 'pending'
+       AND (substantiation_record_id = v_member.rec_id
+            OR transaction_id = v_cand.transaction_id);
+
+    RETURN NEXT;
+  END LOOP;
+
+  RETURN;
+END;
+$$;
+
+COMMENT ON FUNCTION public.confirm_deposit_match(UUID) IS
+  'Workstream E4: one atomic close-out. Applies reimbursed_amount, moves every
+   member expense to claim_state=''reimbursed'', closes the record, and clears
+   competing candidates. Confirms the whole group for a batched deposit. L3:
+   refuses if any claim it would close is no longer sent.';
+
+GRANT EXECUTE ON FUNCTION public.confirm_deposit_match(UUID) TO authenticated;
+
+-- ── 7. Comment kept true ─────────────────────────────────────────────────
+
+COMMENT ON FUNCTION public.claimable_expenses() IS
+  'Spec D30-D31, L3: eligible, unclaimed, remaining > 0, and not already inside
+   a SENT claim. A draft claim over an expense does not remove it from this
+   list, and nor does a claim paid short -- its remainder is claimable again.
+   Thin filter over substantiatable_expenses(), which is the one place the
+   predicate lives.';

@@ -30,7 +30,7 @@
 // is locked into "owns" the back-link; a later one referencing the same
 // invoice via substantiation_record_items won't overwrite it.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -96,6 +96,8 @@ import {
   checkAmountReceived,
   explainCloseFailure,
   notClaimableBreakdown,
+  shortfallByExpense,
+  type ClaimLine,
 } from "@/lib/claimClose";
 
 interface EligibleExpense {
@@ -376,10 +378,10 @@ function explainSendFailure(err: unknown): string {
   if (/SEND_WRONG_STATUS/.test(message)) {
     return "That record has already moved on since this page loaded. We've refreshed the list.";
   }
-  // L3: a draft built before one of its expenses was paid, or paid short --
-  // it would ask the custodian for money that already arrived.
+  // L3: one of its expenses was paid, claimed elsewhere, or lowered since the
+  // draft was built, so the draft no longer asks for the right amount.
   if (/SEND_STALE_DRAFT/.test(message)) {
-    return "Part of this draft has been paid since you built it, so it would ask for money you already received. Rebuild it to claim what's still owed.";
+    return "Something in this draft changed since you built it. Rebuild it to claim what's still owed.";
   }
   return explainClaimFailure(err);
 }
@@ -567,6 +569,10 @@ export default function Substantiation() {
   const [paidAmount, setPaidAmount] = useState("");
   const [paidManual, setPaidManual] = useState(false);
   const [closing, setClosing] = useState(false);
+  const [paidLines, setPaidLines] = useState<ClaimLine[]>([]);
+  // The #sent-claims scroll is for arriving from the dashboard, once -- not
+  // after every reload the page does while the user works.
+  const scrolledToSent = useRef(false);
 
   const load = async () => {
     setLoading(true);
@@ -836,9 +842,10 @@ export default function Substantiation() {
           closedIds.has(r.id) ? { ...r, status: "reimbursed" as const } : r,
         ),
       );
-      // The claimable list needs no pruning: these expenses were already
-      // locked into the record, so claimable_expenses() never returned them.
-      // Other screens still show them "in a claim" until told otherwise.
+      // Reload, as closeByHand does: the database decides what the records
+      // and the claimable list now say. Other screens still show these
+      // expenses "in a claim" until told otherwise.
+      await load();
       refreshClaimViews(queryClient);
 
       toast.success(
@@ -848,7 +855,21 @@ export default function Substantiation() {
       );
     } catch (err) {
       logError("Substantiation.confirmMatch", err);
-      toast.error("Couldn't close that record. Please try again.");
+      const message =
+        err instanceof Error
+          ? err.message
+          : typeof err === "object" && err && "message" in err
+            ? String((err as { message: unknown }).message)
+            : "";
+      // L3: the claim was closed by hand (or withdrawn) a moment ago.
+      if (/MATCH_RECORD_CLOSED|MATCH_RESOLVED/.test(message)) {
+        toast.error(
+          "That claim is no longer waiting for payment. We've refreshed the list.",
+        );
+        await load();
+      } else {
+        toast.error("Couldn't close that record. Please try again.");
+      }
     } finally {
       setMatchActingId(null);
     }
@@ -1001,6 +1022,51 @@ export default function Substantiation() {
     setPaidTarget(record);
     setPaidAmount(record.total_amount.toFixed(2));
     setPaidManual(false);
+    setPaidLines([]);
+    // The claim's expenses, for the "goes back to ready to claim: …" preview
+    // of a short payment. Best effort: the database does the real split, so
+    // a failed read only costs the preview line, never the close.
+    void supabase
+      .from("substantiation_record_items")
+      .select(
+        "invoice_id, amount_at_submission, vendor_at_submission, invoice:invoices ( title, effective_service_date, created_at )",
+      )
+      .eq("substantiation_record_id", record.id)
+      .then(({ data, error }) => {
+        if (error) {
+          logError("Substantiation.openPaid lines", error);
+          return;
+        }
+        setPaidLines(
+          (data ?? []).map((row) => {
+            const inv = Array.isArray(row.invoice)
+              ? row.invoice[0]
+              : row.invoice;
+            return {
+              invoiceId: row.invoice_id,
+              label: inv?.title || row.vendor_at_submission,
+              claimed: Number(row.amount_at_submission),
+              serviceDate: inv?.effective_service_date ?? null,
+              createdAt: inv?.created_at ?? "",
+            };
+          }),
+        );
+      });
+  }
+
+  /** Switch from the offered deposit to typing the amount (L3). */
+  function enterAmountByHand(match: PendingMatch | undefined) {
+    setPaidManual(true);
+    // A deposit smaller than the claim is the likeliest true amount, so the
+    // field starts there rather than at the claim total.
+    if (
+      match &&
+      !match.group_id &&
+      paidTarget &&
+      match.transaction_amount < paidTarget.total_amount
+    ) {
+      setPaidAmount(match.transaction_amount.toFixed(2));
+    }
   }
 
   /**
@@ -1016,7 +1082,10 @@ export default function Substantiation() {
     try {
       const { data, error } = await supabase.rpc("close_claim_by_hand", {
         p_record_id: record.id,
-        p_amount_received: amount,
+        // Left at the pre-filled total: send nothing, so the database uses
+        // its own line-item total rather than a figure rounded on screen.
+        p_amount_received:
+          paidAmount === record.total_amount.toFixed(2) ? undefined : amount,
       });
       if (error) throw error;
 
@@ -1189,7 +1258,9 @@ export default function Substantiation() {
 
   // The dashboard's "Track" button lands here, on the sent claims (Batch 2).
   useEffect(() => {
+    if (scrolledToSent.current) return;
     if (loading || phase !== "list" || location.hash !== "#sent-claims") return;
+    scrolledToSent.current = true;
     document
       .getElementById("sent-claims")
       ?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1789,12 +1860,26 @@ export default function Substantiation() {
     ? pendingMatches.find((m) => m.record_id === paidTarget.id)
     : undefined;
   const paidCheck = paidTarget
-    ? checkAmountReceived(
-        paidAmount,
-        paidTarget.total_amount,
-        paidTarget.expense_count,
-      )
+    ? checkAmountReceived(paidAmount, paidTarget.total_amount)
     : null;
+  // Oldest first (L3, founder 2026-11-04): which expenses a short payment
+  // leaves owing, and how much goes back on each.
+  const paidOwing =
+    paidCheck?.ok && paidCheck.shortfall > 0
+      ? shortfallByExpense(paidLines, paidCheck.amount)
+      : [];
+  // What the offered deposit is, against what was claimed. A batch is
+  // compared with the sum of its claims.
+  const paidMatchClaimed = paidMatch
+    ? paidMatch.group_id
+      ? pendingMatches
+          .filter((m) => m.group_id === paidMatch.group_id)
+          .reduce((s, m) => s + m.record_total, 0)
+      : paidMatch.record_total
+    : 0;
+  const paidMatchLess = paidMatch
+    ? Math.max(paidMatchClaimed - paidMatch.transaction_amount, 0)
+    : 0;
 
   /** One row in the sent-claims list or the past-records list. */
   const renderRecord = (r: PastRecord) => (
@@ -2323,6 +2408,19 @@ export default function Substantiation() {
                     ).toLocaleDateString()}
                     .
                   </p>
+                  {/* The gap is shown, never rounded away: "$2.00 less" is
+                      either a fee or a partly denied claim, and only the
+                      user knows which. */}
+                  <p className="text-foreground tabular-nums">
+                    Claimed {formatCurrency(paidMatchClaimed)} · deposit{" "}
+                    {formatCurrency(paidMatch.transaction_amount)}
+                    {paidMatchLess > 0.005 &&
+                      ` (${formatCurrency(paidMatchLess)} less)`}
+                  </p>
+                  <p>
+                    Confirming it treats the claim as paid in full
+                    {paidMatchLess > 0.005 ? ", including the difference" : ""}.
+                  </p>
                   {paidMatch.group_id && (
                     <p>
                       It looks like it paid{" "}
@@ -2362,12 +2460,26 @@ export default function Substantiation() {
                         {paidCheck.problem}
                       </p>
                     )}
-                    {paidCheck?.ok && paidCheck.shortfall > 0 && (
-                      <p className="text-xs text-foreground">
-                        {formatCurrency(paidCheck.shortfall)} short — that goes
-                        back to ready to claim.
-                      </p>
-                    )}
+                    {/* Oldest first (founder 2026-11-04): name what goes
+                        back, and how much on each. */}
+                    {paidCheck?.ok &&
+                      paidCheck.shortfall > 0 &&
+                      (paidOwing.length > 0 ? (
+                        paidOwing.map((o) => (
+                          <p
+                            key={o.invoiceId}
+                            className="text-xs text-foreground"
+                          >
+                            {formatCurrency(o.backToClaim)} goes back to ready
+                            to claim: {o.label}
+                          </p>
+                        ))
+                      ) : (
+                        <p className="text-xs text-foreground">
+                          {formatCurrency(paidCheck.shortfall)} goes back to
+                          ready to claim.
+                        </p>
+                      ))}
                   </div>
                 </div>
               )}
@@ -2380,7 +2492,7 @@ export default function Substantiation() {
                   disabled={matchActingId !== null}
                   onClick={(e) => {
                     e.preventDefault();
-                    setPaidManual(true);
+                    enterAmountByHand(paidMatch);
                   }}
                 >
                   No, enter the amount
@@ -2397,7 +2509,7 @@ export default function Substantiation() {
                   {matchActingId !== null && (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   )}
-                  Yes, that's the payment
+                  Yes — paid in full
                 </AlertDialogAction>
               </>
             ) : (

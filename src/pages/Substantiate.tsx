@@ -195,8 +195,8 @@ export default function Substantiate() {
         .select(
           `id, title, vendor, category, amount, amount_paid,
            reimbursable_amount, reimbursed_amount, date, patient_id,
-           patient_name, lifecycle_status, claim_state, reimbursed_at,
-           receipt_invoices ( receipt_id )`,
+           patient_name, lifecycle_status, eligibility_state, claim_state,
+           reimbursed_at, receipt_invoices ( receipt_id )`,
         )
         .eq("user_id", userId!)
         .order("date", { ascending: false })
@@ -213,6 +213,8 @@ export default function Substantiate() {
         // L3: after a claim is paid short, only the remainder is ready to
         // claim. Same arithmetic as the Reimburse page (remainingOf).
         remaining: remainingOf(r),
+        reimbursed_amount: Number(r.reimbursed_amount ?? 0),
+        eligible: r.eligibility_state === "eligible",
         date: r.date,
         patient_id: r.patient_id,
         patient_name: r.patient_name,
