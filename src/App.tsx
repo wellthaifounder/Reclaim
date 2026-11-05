@@ -24,6 +24,7 @@ import { HSAProvider } from "@/contexts/HSAContext";
 // profile row — see useOnboardingStatus.
 import { DashboardLayoutProvider } from "@/contexts/DashboardLayoutContext";
 import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
+import { bindAuthUserCache } from "@/hooks/useAuthUser";
 // PWAUpdatePrompt removed 2026-09-14 with the service worker. It existed only
 // to tell a user that a cached bundle was out of date; without a cache there is
 // nothing to be out of date, and a reload always gets the current app.
@@ -118,6 +119,10 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+// Sign-in and sign-out update the shared signed-in user at once, rather than
+// after its five-minute cache runs out. See bindAuthUserCache.
+bindAuthUserCache(queryClient);
 
 /**
  * Redirect to /transactions keeping the query string and hash.

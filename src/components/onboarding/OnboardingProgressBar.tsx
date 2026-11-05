@@ -22,7 +22,9 @@ interface OnboardingProgressBarProps {
 
 const STEP_ROUTES: Record<string, string> = {
   bank: "/bank-accounts",
-  hsaDate: "/settings",
+  // The HSA-account form, which now satisfies this step (L2). Plain
+  // "/settings" opened the Account tab, where there is no HSA date at all.
+  hsaDate: "/settings#hsa-accounts",
 };
 
 export function OnboardingProgressBar({

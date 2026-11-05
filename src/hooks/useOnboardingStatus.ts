@@ -15,6 +15,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { logError } from "@/utils/errorHandler";
 import { useAuthUser } from "@/hooks/useAuthUser";
+import {
+  onboardingStatusKey,
+  recordOnboardingCompletion,
+  type OnboardingStatusData,
+} from "@/lib/onboardingStatusCache";
 
 export interface OnboardingStatus {
   /** Setup finished or dismissed. Null while we do not know yet. */
@@ -33,12 +38,12 @@ export function useOnboardingStatus(): OnboardingStatus {
   const userId = user?.id;
 
   const { data, isLoading } = useQuery({
-    queryKey: ["onboarding-status", userId],
+    queryKey: onboardingStatusKey(userId),
     enabled: !!userId,
     // Short, because completing a step should visibly change the app rather
     // than waiting out a five-minute cache.
     staleTime: 30 * 1000,
-    queryFn: async () => {
+    queryFn: async (): Promise<OnboardingStatusData> => {
       const [profileRes, bankRes] = await Promise.all([
         supabase
           .from("profiles")
@@ -103,18 +108,23 @@ export function useSetOnboardingComplete() {
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Please sign in.");
 
+      const completedAt = complete ? new Date().toISOString() : null;
       const { error } = await supabase.from("profiles").upsert(
         {
           id: user.id,
-          onboarding_completed_at: complete ? new Date().toISOString() : null,
+          onboarding_completed_at: completedAt,
         },
         { onConflict: "id" },
       );
       if (error) throw error;
+      return { userId: user.id, completedAt };
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["onboarding-status"] });
-    },
+    // Writes the answer into the cache rather than only marking it stale, and
+    // is awaited by mutateAsync -- so by the time Welcome navigates to the
+    // dashboard, the dashboard already reads "finished". Invalidating alone
+    // caused the setup loop; see recordOnboardingCompletion.
+    onSuccess: ({ userId, completedAt }) =>
+      recordOnboardingCompletion(queryClient, userId, completedAt),
     onError: (error) => logError("Saving onboarding state failed", error),
   });
 }

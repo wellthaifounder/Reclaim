@@ -134,6 +134,29 @@ export function useHSAEligibility(serviceDate: string | Date | null): {
 }
 
 /**
+ * The toast after an HSA-date change: what was saved, then what moved.
+ * Restoring is said first -- it is the surprising outcome, and what happens
+ * when someone corrects a year they mistyped.
+ */
+export function describeTimingRecompute(
+  lead: string,
+  { blocked, restored }: { blocked: number; restored: number },
+): string {
+  const parts = [`${lead}.`];
+  if (restored > 0) {
+    parts.push(
+      `${restored} expense${restored === 1 ? " is" : "s are"} claimable again.`,
+    );
+  }
+  if (blocked > 0) {
+    parts.push(
+      `${blocked} expense${blocked === 1 ? " predates" : "s predate"} your HSA and can't be reimbursed.`,
+    );
+  }
+  return parts.join(" ");
+}
+
+/**
  * Re-apply the cliff across every expense. Run whenever the HSA date changes.
  *
  * Replaces two hand-written bulk updates that were both filtered on
@@ -168,6 +191,10 @@ export function useRecomputeTiming() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["hsa-establishment-date"] });
+      // Every HSA-date writer runs this afterwards, so this is the one place
+      // that keeps the setup checklist's "HSA opened date" step current
+      // whichever screen the date was entered on (L2).
+      queryClient.invalidateQueries({ queryKey: ["onboarding-status"] });
       queryClient.invalidateQueries({ queryKey: ["timing-gate"] });
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
       queryClient.invalidateQueries({ queryKey: ["expenses"] });

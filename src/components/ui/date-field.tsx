@@ -11,12 +11,19 @@
 // several common shapes are accepted, but a date outside [fromDate, toDate] is
 // rejected and says why, because the alternative is silently storing a date
 // that fails a gate much later with no explanation.
+//
+// The date is taken as soon as the typed text is a complete, valid date (V1
+// launch plan, Batch 1). It used to be taken only on blur, so after the
+// browser autofilled the box -- which fires no blur -- the Continue button
+// next to it stayed greyed out under a perfectly good date, and the box read
+// as broken. Parsing rules live in src/lib/dateInput.ts.
 
 import * as React from "react";
-import { format, isValid, parse, startOfDay } from "date-fns";
+import { format, startOfDay } from "date-fns";
 import { CalendarIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { parseCompleteDate, parseTypedDate } from "@/lib/dateInput";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Calendar } from "@/components/ui/calendar";
@@ -26,40 +33,10 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 
-// Ordered most-specific first. Four-digit years are tried before two-digit
-// ones so "3/4/2009" is never read as the year 20.
-const ACCEPTED_FORMATS = [
-  "MM/dd/yyyy",
-  "M/d/yyyy",
-  "MM-dd-yyyy",
-  "M-d-yyyy",
-  "yyyy-MM-dd",
-  "yyyy/MM/dd",
-  "MMMM d, yyyy",
-  "MMMM d yyyy",
-  "MMM d, yyyy",
-  "MMM d yyyy",
-  "MMddyyyy",
-  "MM/dd/yy",
-  "M/d/yy",
-];
+const DISPLAY_FORMAT = "MM/dd/yyyy";
 
-/** Parse a typed date string, or return null. */
-function parseTypedDate(input: string): Date | null {
-  const raw = input.trim();
-  if (!raw) return null;
-  for (const fmt of ACCEPTED_FORMATS) {
-    const parsed = parse(raw, fmt, new Date());
-    if (isValid(parsed)) {
-      // date-fns `parse` accepts a partial match ("3/4/2009xyz" parses), so
-      // re-format and compare to be sure the whole string was consumed.
-      if (format(parsed, fmt).toLowerCase() === raw.toLowerCase()) {
-        return startOfDay(parsed);
-      }
-    }
-  }
-  return null;
-}
+const sameDate = (a: Date | undefined, b: Date | undefined) =>
+  a === b || (!!a && !!b && a.getTime() === b.getTime());
 
 export interface DateFieldProps {
   value?: Date;
@@ -90,16 +67,28 @@ export function DateField({
   "aria-label": ariaLabel,
 }: DateFieldProps) {
   const [text, setText] = React.useState(
-    value ? format(value, "MM/dd/yyyy") : "",
+    value ? format(value, DISPLAY_FORMAT) : "",
   );
   const [error, setError] = React.useState<string | null>(null);
   const [open, setOpen] = React.useState(false);
 
-  // Keep the box in step when the date is changed from outside (the calendar,
-  // a form reset), without fighting the user mid-keystroke.
+  // The last date this box itself reported. A `value` equal to it is our own
+  // keystroke coming back round, and must not rewrite the text: doing so
+  // would reformat "3/4/2009" to "03/04/2009" under the user's cursor.
+  const reported = React.useRef<Date | undefined>(value);
+
+  const report = (d: Date | undefined) => {
+    if (sameDate(d, reported.current)) return;
+    reported.current = d;
+    onChange(d);
+  };
+
+  // Keep the box in step when the date is changed from outside (a form
+  // reset, a parent pre-filling it).
   React.useEffect(() => {
-    if (value) setText(format(value, "MM/dd/yyyy"));
-    else setText("");
+    if (sameDate(value, reported.current)) return;
+    reported.current = value;
+    setText(value ? format(value, DISPLAY_FORMAT) : "");
     setError(null);
   }, [value]);
 
@@ -107,28 +96,57 @@ export function DateField({
     (fromDate && d < startOfDay(fromDate)) ||
     (toDate && d > startOfDay(toDate));
 
+  const rangeError = () =>
+    outOfRangeMessage ??
+    `Pick a date between ${fromDate ? format(fromDate, "MMM d, yyyy") : "—"} and ${
+      toDate ? format(toDate, "MMM d, yyyy") : "—"
+    }.`;
+
+  // Every keystroke, and autofill. Takes the date the moment the text is a
+  // whole one; anything short of that clears it, so the date the page holds
+  // is always the one the box shows. A problem with an unfinished date waits
+  // for blur -- telling someone "3/4/2" is wrong while they type it is noise.
+  const handleTyping = (raw: string) => {
+    setText(raw);
+    const parsed = parseCompleteDate(raw);
+    if (!parsed) {
+      setError(null);
+      report(undefined);
+      return;
+    }
+    if (outOfRange(parsed)) {
+      // Finished, and wrong: say so now. Continue stays disabled, and an
+      // unexplained disabled button is the complaint this rewrite answers.
+      setError(rangeError());
+      report(undefined);
+      return;
+    }
+    setError(null);
+    report(parsed);
+  };
+
+  // Blur and Enter: the user is done, so accept every format (including
+  // two-digit years), tidy the text, and explain anything still wrong.
   const commit = (raw: string) => {
     if (!raw.trim()) {
       setError(null);
-      onChange(undefined);
+      report(undefined);
       return;
     }
     const parsed = parseTypedDate(raw);
     if (!parsed) {
       setError("Try a date like 03/14/2009.");
+      report(undefined);
       return;
     }
     if (outOfRange(parsed)) {
-      setError(
-        outOfRangeMessage ??
-          `Pick a date between ${fromDate ? format(fromDate, "MMM d, yyyy") : "—"} and ${
-            toDate ? format(toDate, "MMM d, yyyy") : "—"
-          }.`,
-      );
+      setError(rangeError());
+      report(undefined);
       return;
     }
     setError(null);
-    onChange(parsed);
+    setText(format(parsed, DISPLAY_FORMAT));
+    report(parsed);
   };
 
   return (
@@ -143,10 +161,7 @@ export function DateField({
           disabled={disabled}
           placeholder={placeholder}
           value={text}
-          onChange={(e) => {
-            setText(e.target.value);
-            if (error) setError(null);
-          }}
+          onChange={(e) => handleTyping(e.target.value)}
           onBlur={(e) => commit(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
@@ -179,7 +194,10 @@ export function DateField({
               // a bounded picker doesn't start on a month it cannot select.
               defaultMonth={value ?? toDate}
               onSelect={(d) => {
-                onChange(d ? startOfDay(d) : undefined);
+                const picked = d ? startOfDay(d) : undefined;
+                setText(picked ? format(picked, DISPLAY_FORMAT) : "");
+                setError(null);
+                report(picked);
                 setOpen(false);
               }}
               fromDate={fromDate}

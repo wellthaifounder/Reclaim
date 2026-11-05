@@ -41,8 +41,15 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useHSAAccounts } from "@/hooks/useHSAAccounts";
+import { useHSAEstablishmentDate } from "@/hooks/useHSAEligibility";
+import {
+  useHSAStartImpact,
+  type HSAStartMove,
+} from "@/hooks/useHSAStartImpact";
 import {
   formatHSAAccountDateRange,
+  hsaStartAfterChange,
+  hsaStartMoveMessage,
   validateHSAAccountDates,
 } from "@/lib/hsaAccountUtils";
 import type { HSAAccount } from "@/lib/hsaAccountUtils";
@@ -70,6 +77,31 @@ export function HSAAccountManager() {
     notes: "",
   });
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Founder decision, 2026-11-04 (L2): saving or deleting an account moves the
+  // HSA start to the earliest account date. When that moves it LATER, every
+  // expense before the new start stops being claimable, so say so beside the
+  // date (or in the delete confirmation) before it happens. Saving stays
+  // allowed -- a later start is sometimes simply correct.
+  const { establishmentDate: currentStart } = useHSAEstablishmentDate();
+  const startAfterSave =
+    dialogOpen && formData.opened_date
+      ? hsaStartAfterChange(currentStart, accounts, {
+          kind: "save",
+          id: editingAccount?.id,
+          opened_date: formData.opened_date,
+          eligibility_start_date: formData.eligibility_start_date || null,
+        })
+      : null;
+  const saveMove = useHSAStartImpact(currentStart, startAfterSave);
+  const startAfterDelete =
+    deleteDialogOpen && deletingAccountId
+      ? hsaStartAfterChange(currentStart, accounts, {
+          kind: "delete",
+          id: deletingAccountId,
+        })
+      : null;
+  const deleteMove = useHSAStartImpact(currentStart, startAfterDelete);
 
   const resetForm = () => {
     setFormData({
@@ -203,6 +235,10 @@ export function HSAAccountManager() {
           }
           required
         />
+        {/* Beside whichever date sets this account's start. */}
+        {!formData.eligibility_start_date && (
+          <StartMoveProblem move={saveMove} />
+        )}
       </div>
       <div className="space-y-2">
         <Label htmlFor="eligibility_start_date">
@@ -222,6 +258,9 @@ export function HSAAccountManager() {
             })
           }
         />
+        {formData.eligibility_start_date && (
+          <StartMoveProblem move={saveMove} />
+        )}
         <p className="text-xs text-muted-foreground">
           If your HSA eligibility began before you opened the account (e.g.
           retroactive election after a qualifying life event), enter that
@@ -452,6 +491,8 @@ export function HSAAccountManager() {
               cannot be undone. Historical reimbursement requests will still
               show which account was used.
             </AlertDialogDescription>
+            {/* Deleting has no date field, so the problem sits here. */}
+            <StartMoveProblem move={deleteMove} />
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => setDeletingAccountId(null)}>
@@ -464,5 +505,15 @@ export function HSAAccountManager() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+/** The founder's style: the problem only, beside its field, no help text. */
+function StartMoveProblem({ move }: { move: HSAStartMove | null }) {
+  if (!move) return null;
+  return (
+    <p role="status" className="text-sm text-amber-700 dark:text-amber-500">
+      {hsaStartMoveMessage(move.from, move.to, move.count)}
+    </p>
   );
 }
